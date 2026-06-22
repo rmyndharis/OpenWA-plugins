@@ -76,3 +76,6 @@ docs/
 docs/plans/
 CLAUDE.md
 _docs/
+
+# Packaged plugins
+*.zip
