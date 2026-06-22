@@ -1,0 +1,25 @@
+{
+  "id": "gsheets-logger",
+  "name": "Google Sheets Logger",
+  "version": "0.1.0",
+  "type": "extension",
+  "main": "dist/index.js",
+  "description": "Logs WhatsApp message events to a Google Sheet via a service account.",
+  "author": "Yudhi Armyndharis & OpenWA Contributors",
+  "license": "MIT",
+  "permissions": [],
+  "sessions": ["*"],
+  "hooks": ["message:received", "message:sent", "message:failed", "message:ack"],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "serviceAccountJson": { "type": "string", "secret": true, "required": true, "title": "Service Account JSON",
+        "description": "Full service-account key JSON. Share the target sheet with this account's client_email (Editor)." },
+      "spreadsheetId": { "type": "string", "required": true, "title": "Spreadsheet ID",
+        "description": "The ID from the sheet URL: /spreadsheets/d/<ID>/edit" },
+      "sheetTab": { "type": "string", "default": "Logs", "title": "Sheet tab name" },
+      "flushIntervalSec": { "type": "number", "default": 5, "title": "Flush interval (seconds)" },
+      "flushBatchSize": { "type": "number", "default": 20, "title": "Flush when buffered rows reach" }
+    }
+  }
+}
