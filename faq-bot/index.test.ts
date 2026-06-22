@@ -36,3 +36,16 @@ test('allowFallback enforces the per-chat cooldown window', () => {
   assert.equal(allowFallback(map, 'c2', 0, 0), true); // cooldown 0 => always
   assert.equal(allowFallback(map, 'c2', 0, 0), true);
 });
+
+test('parseConfig falls back to 600 when fallbackCooldownSec is not a finite number', () => {
+  const rules = JSON.stringify([{ mode: 'contains', pattern: 'hi', reply: 'hello' }]);
+  assert.equal(parseConfig({ rules, fallbackCooldownSec: 'abc' }).config.fallbackCooldownSec, 600);
+});
+
+test('allowFallback caps the map at 5000 entries, dropping the oldest', () => {
+  const map = new Map<string, number>();
+  for (let i = 0; i < 5001; i++) allowFallback(map, `chat-${i}`, i, 60000);
+  assert.equal(map.size, 5000);
+  assert.equal(map.has('chat-0'), false); // oldest evicted
+  assert.equal(map.has('chat-5000'), true); // newest kept
+});

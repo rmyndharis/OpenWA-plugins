@@ -25,12 +25,13 @@ export function parseConfig(raw: Record<string, unknown>): {
     throw new Error(`faq-bot: invalid rules — ${err instanceof Error ? err.message : String(err)}`);
   }
 
+  const cooldown = Number(raw.fallbackCooldownSec ?? 600);
   return {
     rules: parsed.rules,
     skipped: parsed.skipped,
     config: {
       fallbackReply: String(raw.fallbackReply ?? ''),
-      fallbackCooldownSec: Number(raw.fallbackCooldownSec ?? 600),
+      fallbackCooldownSec: Number.isFinite(cooldown) ? cooldown : 600,
       respondInGroups: raw.respondInGroups === true,
     },
   };
