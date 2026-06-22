@@ -1,0 +1,71 @@
+name: release
+
+# Tag a plugin release as `<plugin-id>-vX.Y.Z` (e.g. gsheets-logger-v0.2.0). This builds the plugin,
+# attaches the .zip + .sha256 to a GitHub Release, and uses the matching CHANGELOG section as notes.
+on:
+  push:
+    tags:
+      - '*-v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # Parse + validate id/version from the tag. The tag is the only external input, so validate its
+      # shape strictly and pass the parts through $GITHUB_ENV (referenced as quoted env vars below).
+      - name: Resolve plugin id + version from tag
+        run: |
+          TAG="$GITHUB_REF_NAME"
+          if ! printf '%s' "$TAG" | grep -Eq '^[a-z0-9][a-z0-9._-]*-v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Tag '$TAG' must be '<plugin-id>-vMAJOR.MINOR.PATCH'"; exit 1
+          fi
+          ID="${TAG%-v*}"
+          VERSION="${TAG##*-v}"
+          case "$ID" in *..*) echo "invalid id"; exit 1;; esac
+          if [ ! -f "$ID/manifest.json" ]; then echo "no plugin '$ID'"; exit 1; fi
+          echo "PLUGIN_ID=$ID" >> "$GITHUB_ENV"
+          echo "PLUGIN_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Assert tag version matches the manifest
+        run: |
+          MV=$(node -p "require('./'+process.env.PLUGIN_ID+'/manifest.json').version")
+          if [ "$MV" != "$PLUGIN_VERSION" ]; then
+            echo "tag version $PLUGIN_VERSION != manifest version $MV"; exit 1
+          fi
+
+      - name: Build & package (validates version↔changelog and size)
+        run: node package.mjs "$PLUGIN_ID"
+
+      - name: Checksum + release notes
+        run: |
+          sha256sum "$PLUGIN_ID.zip" > "$PLUGIN_ID.zip.sha256"
+          awk -v v="$PLUGIN_VERSION" '
+            $0 ~ ("^## \\[" v "\\]") { f=1; next }
+            f && /^## \[/ { exit }
+            f { print }
+          ' "$PLUGIN_ID/CHANGELOG.md" > notes.md
+          {
+            echo ""
+            echo "**Install:** download \`$PLUGIN_ID.zip\` below and upload it in the OpenWA dashboard (Plugins → Install)."
+            echo ""
+            echo "SHA-256: \`$(cut -d' ' -f1 "$PLUGIN_ID.zip.sha256")\`"
+          } >> notes.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "$PLUGIN_ID.zip" "$PLUGIN_ID.zip.sha256" \
+            --title "$PLUGIN_ID v$PLUGIN_VERSION" \
+            --notes-file notes.md

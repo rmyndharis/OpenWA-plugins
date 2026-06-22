@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Type-check
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+      - name: Catalog up to date (plugins.json, READMEs, version↔changelog)
+        run: npm run catalog:check
+      - name: Build & package every plugin
+        run: |
+          for d in */; do
+            if [ -f "${d}manifest.json" ]; then
+              echo "::group::build ${d%/}"
+              node package.mjs "${d%/}"
+              echo "::endgroup::"
+            fi
+          done

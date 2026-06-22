@@ -1,0 +1,27 @@
+[
+  {
+    "id": "gsheets-logger",
+    "name": "Google Sheets Logger",
+    "version": "0.2.0",
+    "type": "extension",
+    "status": "stable",
+    "description": "Logs WhatsApp message events to a Google Sheet via a service account.",
+    "author": "Yudhi Armyndharis <yudhi@rmyndharis.com>",
+    "license": "MIT",
+    "keywords": [
+      "google-sheets",
+      "logging",
+      "audit",
+      "crm",
+      "whatsapp",
+      "openwa"
+    ],
+    "minOpenWAVersion": "0.6.1",
+    "testedOpenWAVersion": "0.6.1",
+    "releasedAt": "2026-06-22",
+    "repoPath": "gsheets-logger",
+    "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
+    "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/gsheets-logger-v0.2.0/gsheets-logger.zip"
+  }
+]

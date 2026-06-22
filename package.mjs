@@ -1,7 +1,9 @@
 import { build } from 'esbuild';
-import { readFile, writeFile, rm, mkdir } from 'node:fs/promises';
+import { readFileSync, existsSync } from 'node:fs';
+import { rm, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 const plugin = process.argv[2];
 if (!plugin) {
@@ -11,11 +13,29 @@ if (!plugin) {
 
 const root = process.cwd();
 const dir = join(root, plugin);
-const manifest = JSON.parse(await readFile(join(dir, 'manifest.json'), 'utf8'));
 
+const fail = (msg) => {
+  console.error(`✗ ${plugin}: ${msg}`);
+  process.exit(1);
+};
+
+// ── Validate manifest ──────────────────────────────────────────────────────
+if (!existsSync(join(dir, 'manifest.json'))) fail('no manifest.json');
+const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'));
+
+const missing = ['id', 'name', 'version', 'type', 'main'].filter((f) => !manifest[f]);
+if (missing.length) fail(`manifest.json missing required field(s): ${missing.join(', ')}`);
+if (manifest.type !== 'extension') fail(`type must be "extension" to be installable (got "${manifest.type}")`);
+
+// version must match the top released CHANGELOG heading (single source of release truth)
+if (!existsSync(join(dir, 'CHANGELOG.md'))) fail('missing CHANGELOG.md');
+const top = readFileSync(join(dir, 'CHANGELOG.md'), 'utf8').match(/^##\s*\[(\d+\.\d+\.\d+)\]\s*[—–-]\s*\d{4}-\d{2}-\d{2}/m);
+if (!top) fail('CHANGELOG.md has no released "## [x.y.z] — YYYY-MM-DD" heading');
+if (top[1] !== manifest.version) fail(`version drift: manifest is ${manifest.version} but CHANGELOG top is ${top[1]}`);
+
+// ── Build ───────────────────────────────────────────────────────────────────
 await mkdir(join(dir, 'dist'), { recursive: true });
-// Write a package.json into dist/ so Node.js treats the CJS bundle as CommonJS
-// even when the repo root has "type": "module".
+// A package.json in dist/ pins CommonJS so Node loads the CJS bundle even when the repo root is ESM.
 await writeFile(join(dir, 'dist', 'package.json'), JSON.stringify({ type: 'commonjs' }));
 await build({
   entryPoints: [join(dir, 'index.ts')],
@@ -29,14 +49,20 @@ await build({
   define: { __PLUGIN_VERSION__: JSON.stringify(manifest.version) },
 });
 
+// ── Package ───────────────────────────────────────────────────────────────────
 const zipName = `${plugin}.zip`;
-await rm(join(root, zipName), { force: true });
-const result = spawnSync('zip', ['-r', join(root, zipName), 'manifest.json', 'dist/index.js', 'dist/package.json'], {
+const zipPath = join(root, zipName);
+await rm(zipPath, { force: true });
+const result = spawnSync('zip', ['-r', zipPath, 'manifest.json', 'dist/index.js', 'dist/package.json'], {
   cwd: dir,
   stdio: 'inherit',
 });
-if (result.status !== 0) {
-  console.error('zip failed (is the `zip` CLI installed?)');
-  process.exit(result.status ?? 1);
-}
-console.log(`Packaged ${plugin} v${manifest.version} -> ${zipName}`);
+if (result.status !== 0) fail('zip failed (is the `zip` CLI installed?)');
+
+// ── Report size + sha256 (release artifacts — surfaced here and in the GitHub Release) ──
+const buf = readFileSync(zipPath);
+const sha256 = createHash('sha256').update(buf).digest('hex');
+const kb = (buf.length / 1024).toFixed(1);
+if (buf.length > 5 * 1024 * 1024) fail(`package is ${kb} KB, over the 5 MB install limit`);
+console.log(`✓ Packaged ${plugin} v${manifest.version} → ${zipName}  (${kb} KB)`);
+console.log(`  sha256: ${sha256}`);

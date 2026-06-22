@@ -7,6 +7,8 @@
   "license": "MIT",
   "scripts": {
     "build": "node package.mjs gsheets-logger",
+    "catalog": "node scripts/catalog.mjs",
+    "catalog:check": "node scripts/catalog.mjs --check",
     "test": "node --import tsx --test \"gsheets-logger/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },

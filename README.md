@@ -31,9 +31,15 @@ This repository provides:
 
 ## Plugin catalog
 
-| Plugin | What it does | Type | Status |
-| ------ | ------------ | ---- | ------ |
-| [`gsheets-logger`](./gsheets-logger) | Logs every WhatsApp message event (received, sent, failed, ack) to a Google Sheet via a service account, with buffered batch writes. | `extension` | 🚧 In development |
+<!-- BEGIN PLUGIN CATALOG -->
+| Plugin | Description | Version | Status |
+| ------ | ----------- | ------- | ------ |
+| [`gsheets-logger`](./gsheets-logger) | Logs WhatsApp message events to a Google Sheet via a service account. | 0.2.0 | stable |
+<!-- END PLUGIN CATALOG -->
+
+The table above is generated from each plugin's `manifest.json` + `CHANGELOG.md` by `npm run catalog`
+(and mirrored in [`plugins.json`](./plugins.json)). See [PLUGIN-STANDARD.md](./PLUGIN-STANDARD.md) for the
+metadata standard every plugin follows.
 
 **On the roadmap:** an FAQ / auto-reply bot and an automatic closing-greeting plugin for new leads. Want something else? [Open an issue](https://github.com/rmyndharis/OpenWA-plugins/issues) or [contribute one](#contributing).
 
