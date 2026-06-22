@@ -49,9 +49,13 @@ curl -X POST "https://your-openwa-host/plugins/gsheets-logger/enable" \
 
 ## Security
 
-Message content is treated as untrusted. Cells are neutralized against CSV/Sheets formula injection: any
-value whose first character is `=`, `-`, `+`, or `@` is prefixed with a single quote (`'`) so Google
-Sheets renders it as plain text rather than evaluating it as a formula.
+Message content is treated as untrusted. Writes use `valueInputOption=RAW`, so Google Sheets never
+evaluates a cell as a formula. As defense-in-depth for CSV export/re-import, cells are also prefixed with
+a single quote (`'`) when they start with a formula trigger:
+
+- **ID / enum fields** (chatId, from, to, messageId, status, type): full guard — `=` `+` `-` `@` `\t` `\r`.
+- **Free-text fields** (body, senderName, error): guard `=` `@` `\t` `\r` only. `+` and `-` are left intact
+  so legitimate content like a phone number (`+62812…`) or `-5` is not corrupted with a leading quote.
 
 ## Notes
 

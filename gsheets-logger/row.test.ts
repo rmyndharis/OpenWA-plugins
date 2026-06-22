@@ -60,3 +60,16 @@ test('sanitizes formula-injection in attacker-controlled cells', () => {
   assert.equal(row[7], `'=1+1`);                            // senderName neutralized
   assert.equal(row[5], '62811@c.us');                       // benign value untouched
 });
+
+test('free-text fields keep a leading + or -; id fields stay fully guarded', () => {
+  const row = buildRow({
+    event: 'message:received', sessionId: 's1', timestamp: T, source: 'Engine',
+    data: { id: 'M9', from: '+62811@c.us', to: 'me', chatId: '62811@c.us',
+            body: '+62812 call me', type: 'text', fromMe: false, isGroup: false,
+            contact: { pushName: '-Boss' } },
+  });
+  assert.equal(row[10], '+62812 call me'); // body: '+' NOT quoted (free text)
+  assert.equal(row[7], '-Boss');           // senderName: '-' NOT quoted (free text)
+  assert.equal(row[5], `'+62811@c.us`);    // from: id field, '+' STILL quoted (full guard)
+  assert.equal(row[6], 'me');              // benign id untouched
+});
