@@ -43,7 +43,10 @@ export class SheetsClient {
       body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion }),
     });
     if (!res.ok) throw new Error(`Token request failed: ${res.status} ${await res.text()}`);
-    const json = (await res.json()) as { access_token: string; expires_in: number };
+    const json = (await res.json()) as { access_token?: unknown; expires_in?: unknown };
+    if (typeof json.access_token !== 'string' || typeof json.expires_in !== 'number') {
+      throw new Error('Token response missing access_token/expires_in');
+    }
     this.token = json.access_token;
     this.tokenExp = now + json.expires_in;
     return this.token;
