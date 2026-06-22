@@ -20,6 +20,7 @@ export function buildRow(ctx: HookContext): string[] {
 
   if (event === 'message:failed') {
     const p = (ctx.data ?? {}) as FailedPayload;
+    // A failed send carries no recipient field, so the destination (to) mirrors chatId; from is unknown.
     return [timestamp, sessionId, event, direction, str(p.input?.chatId), '', str(p.input?.chatId),
             '', '', 'text', str(p.input?.text), '', '', str(p.error)];
   }

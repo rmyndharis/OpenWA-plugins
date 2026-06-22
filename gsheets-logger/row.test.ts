@@ -36,6 +36,7 @@ test('failed maps error and input fields, no message id', () => {
   });
   assert.equal(row[3], 'out');
   assert.equal(row[4], '62811@c.us'); // chatId from input
+  assert.equal(row[6], '62811@c.us'); // to mirrors chatId for a failed send
   assert.equal(row[10], 'bye');        // body from input.text
   assert.equal(row[13], 'boom');       // error
   assert.equal(row[11], '');           // no messageId
