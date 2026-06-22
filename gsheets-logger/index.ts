@@ -41,13 +41,18 @@ export function parseConfig(raw: Record<string, unknown>): { config: LoggerConfi
   };
 }
 
-// Flush every row currently buffered. `append` throws on failure, leaving the buffer untouched so the
-// rows are retried next tick; on success the flushed rows are spliced out in place.
+// Take ownership of the current rows BEFORE awaiting so a concurrent enqueue/cap-drop on `buffer`
+// cannot shift the front out from under us. On failure, restore the batch ahead of rows that
+// arrived during the append, preserving order (retain-on-failure).
 export async function flushBuffer(buffer: string[][], append: (rows: string[][]) => Promise<void>): Promise<void> {
   if (buffer.length === 0) return;
-  const count = buffer.length;
-  await append(buffer.slice(0, count));
-  buffer.splice(0, count);
+  const batch = buffer.splice(0, buffer.length);
+  try {
+    await append(batch);
+  } catch (err) {
+    buffer.unshift(...batch);
+    throw err;
+  }
 }
 
 export default class GSheetsLogger implements IPlugin {

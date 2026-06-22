@@ -34,3 +34,15 @@ test('flushBuffer retains rows when append fails', async () => {
   await assert.rejects(flushBuffer(buffer, async () => { throw new Error('sheets down'); }));
   assert.equal(buffer.length, 2);
 });
+
+test('flushBuffer keeps rows that arrive during the append', async () => {
+  const buffer = [['a'], ['b']];
+  await flushBuffer(buffer, async () => { buffer.push(['c']); }); // a row enqueued mid-flush
+  assert.deepEqual(buffer, [['c']]);                              // a,b flushed; c retained
+});
+
+test('flushBuffer restores the batch ahead of newer rows on failure', async () => {
+  const buffer = [['a'], ['b']];
+  await assert.rejects(flushBuffer(buffer, async () => { buffer.push(['c']); throw new Error('down'); }));
+  assert.deepEqual(buffer, [['a'], ['b'], ['c']]);               // batch restored to front, newer row after
+});
