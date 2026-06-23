@@ -34,7 +34,7 @@ export function parseConfig(raw: Record<string, unknown>): ChatFlowConfig {
   if (!greeting) throw new Error('chat-flow: greeting is required');
   const options = toFlowNodes(raw.options);
   if (!options) throw new Error('chat-flow: at least one menu option is required');
-  const trigger = String(raw.trigger ?? '');
+  const trigger = String(raw.trigger ?? '').trim();
   return { flow: { trigger, greeting, options }, respondInGroups: raw.respondInGroups === true };
 }
 
@@ -48,7 +48,9 @@ export default class ChatFlow implements IPlugin {
     );
   }
 
-  async onConfigChange(ctx: PluginContext): Promise<void> {
+  // The platform passes the new config as the 2nd arg, but for a sessionScoped plugin ctx.config is already
+  // the resolved per-session slice — read that (re-parsing _newConfig would lose the per-session merge).
+  async onConfigChange(ctx: PluginContext, _newConfig: Record<string, unknown>): Promise<void> {
     this.config = parseConfig(ctx.config);
   }
 

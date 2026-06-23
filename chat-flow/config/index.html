@@ -258,6 +258,9 @@
   }
 
   // ── postMessage bridge ────────────────────────────────────────────────────
+  // The host serves this file in a sandboxed iframe it controls and is the only peer; the bridge trusts the
+  // parent by design (the iframe cannot know the dashboard's origin a priori), and never receives the API
+  // key. Config is only ever sent to the parent on an explicit Save. This matches the v0.7 configUi contract.
 
   var saveBtn = document.getElementById('saveBtn');
   var feedback = document.getElementById('feedback');
