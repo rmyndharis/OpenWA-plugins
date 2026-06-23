@@ -19,12 +19,38 @@ export interface UserState {
 export class FlowEngine {
   private static readonly TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes state expiration
   private static readonly MAX_REPROCESS = 1; // bound the invalid-path reset (no unbounded recursion)
+  /** Per (session,chat) promise chain serializing the state read→write. Self-evicts when drained. */
+  private static readonly locks = new Map<string, Promise<unknown>>();
 
   /**
    * Process an incoming message and send auto-replies according to `flow` (the resolved per-session
-   * config). Returns true if a reply was sent, false otherwise.
+   * config). Returns true if a reply was sent, false otherwise. Serializes per (session, chat) so
+   * concurrent messages for the same chat can't interleave the state read→write.
    */
   public static async processMessage(
+    context: PluginContext,
+    flow: SessionFlow,
+    sessionId: string,
+    chatId: string,
+    messageBody: string,
+    messageId: string,
+  ): Promise<boolean> {
+    // The bounded re-process inside the body calls processLocked directly (bypassing this lock) so a
+    // chat never waits on its own still-pending chain entry (self-deadlock). Store a settled tail so a
+    // rejection can't wedge the chain, and evict the key once the chain drains.
+    const lockKey = `${sessionId}__${chatId}`;
+    const prev = this.locks.get(lockKey) ?? Promise.resolve();
+    const run = prev.then(() => this.processLocked(context, flow, sessionId, chatId, messageBody, messageId, 0));
+    const tail = run.catch(() => {});
+    this.locks.set(lockKey, tail);
+    try {
+      return await run;
+    } finally {
+      if (this.locks.get(lockKey) === tail) this.locks.delete(lockKey);
+    }
+  }
+
+  private static async processLocked(
     context: PluginContext,
     flow: SessionFlow,
     sessionId: string,
@@ -86,7 +112,9 @@ export class FlowEngine {
           context.logger.debug('[FlowEngine] Max reprocess depth reached; not recursing.', { depth });
           return false;
         }
-        return this.processMessage(context, flow, sessionId, chatId, messageBody, messageId, depth + 1);
+        // Recurse on the locked body, NOT processMessage — re-entering the lock would deadlock on this
+        // chat's own still-pending chain entry.
+        return this.processLocked(context, flow, sessionId, chatId, messageBody, messageId, depth + 1);
       }
     }
 
@@ -114,6 +142,12 @@ export class FlowEngine {
         await context.storage.delete(stateKey);
       }
       return true;
+    } else if (!currentNode.options || Object.keys(currentNode.options).length === 0) {
+      // The resolved node is a leaf with no way forward (config changed under the user). End the flow
+      // instead of looping "Invalid option" forever; the next trigger starts cleanly.
+      context.logger.debug('[FlowEngine] Resolved node is a dead leaf (config changed). Ending flow.');
+      await context.storage.delete(stateKey);
+      return false;
     } else {
       context.logger.debug('[FlowEngine] Input did not match any options. Replying with fallback.');
       const invalidMsg = `Invalid option. Please choose one of the available options:\n\n${currentNode.text}`;

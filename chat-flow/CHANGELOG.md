@@ -8,6 +8,17 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.0.3] — 2026-06-23
+
+### Fixed
+
+- Messages for the same chat are now processed one at a time (per-session/chat lock), closing a race
+  where two near-simultaneous messages could read the same flow state and produce lost or duplicated
+  navigation (e.g. a double greeting or a resurrected leaf). The bounded invalid-path re-process runs
+  inside the lock to avoid self-deadlock, and the lock map self-evicts when a chat's queue drains.
+- If a config edit leaves an in-flight user parked on a node that no longer has options, the flow now
+  ends cleanly instead of replying "Invalid option" on every message until the 15-minute expiry.
+
 ## [1.0.2] — 2026-06-23
 
 ### Added

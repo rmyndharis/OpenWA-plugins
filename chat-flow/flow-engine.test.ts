@@ -132,6 +132,28 @@ test('invalid stored path with a non-trigger input resets and stops (bounded)', 
   assert.equal(storage.has(key), false);
 });
 
+test('concurrent messages for the same chat are serialized (greeting sent once)', async () => {
+  const { ctx, replies } = makeCtx();
+  // Two messages racing on a fresh chat: without serialization both read "no state" and both greet.
+  await Promise.all([
+    FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'hello', 'm1'),
+    FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'hello', 'm2'),
+  ]);
+  const greetings = replies.filter(r => r.text === xyz.greeting).length;
+  assert.equal(greetings, 1, 'the greeting must be sent once; a load/save race would send it twice');
+});
+
+test('a stored path landing on a now-leaf node ends the flow instead of looping invalid-option', async () => {
+  const { ctx, storage, replies } = makeCtx();
+  // Config changed under the user: they are parked at option "1", which is a leaf with no sub-options.
+  // The old behaviour re-saved state and replied "Invalid option" forever; it must now end cleanly.
+  storage.set('state__xyz__user1', { path: ['1'], lastActive: Date.now() });
+  const r = await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'anything', 'm1');
+  assert.equal(r, false);
+  assert.equal(storage.has('state__xyz__user1'), false);
+  assert.equal(replies.length, 0);
+});
+
 test('a prototype-property name as input is an invalid option, never a false match', async () => {
   // `abc.options` is a plain object, so a bare `options["constructor"]` would resolve to the inherited
   // Object constructor (truthy) and reply with `nextNode.text === undefined`. Object.hasOwn prevents that.
