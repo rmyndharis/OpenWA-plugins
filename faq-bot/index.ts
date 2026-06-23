@@ -38,12 +38,13 @@ export function parseConfig(raw: Record<string, unknown>): {
 }
 
 /**
- * Decide whether a fallback may be sent to `key` now. On allow, records `nowMs` and caps the map by
- * dropping the oldest entry (insertion order). A `cooldownMs` of 0 always allows.
+ * Decide whether a fallback may be sent to `key` now. On allow, records `nowMs` (re-inserting so the
+ * map evicts least-recently-used) and caps the map by dropping the LRU entry. A `cooldownMs` of 0 always allows.
  */
 export function allowFallback(map: Map<string, number>, key: string, nowMs: number, cooldownMs: number): boolean {
   const last = map.get(key);
   if (last !== undefined && nowMs - last < cooldownMs) return false;
+  map.delete(key); // re-insert so iteration order tracks recency (LRU by touch)
   map.set(key, nowMs);
   if (map.size > MAX_COOLDOWN_ENTRIES) {
     const oldest = map.keys().next().value as string | undefined;

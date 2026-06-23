@@ -8,6 +8,18 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-06-23
+
+### Changed
+
+- `regex` rules are now validated for catastrophic-backtracking risk at parse time. A pattern that
+  nests an unbounded quantifier inside another (e.g. `(a+)+`, `(\w+\s?)*`) is skipped with a warning
+  like any other unusable pattern, so a single rule can no longer stall message handling on a crafted
+  input. Ordinary patterns — including lookahead and backreferences — are unaffected.
+- The per-chat fallback cooldown now tracks usage as least-recently-used: re-inserting a chat on each
+  reply so a busy chat's cooldown is preserved when the map reaches its cap, instead of being evicted
+  by first-seen order.
+
 ## [0.1.1] — 2026-06-23
 
 ### Added

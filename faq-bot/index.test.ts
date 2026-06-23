@@ -49,3 +49,13 @@ test('allowFallback caps the map at 5000 entries, dropping the oldest', () => {
   assert.equal(map.has('chat-0'), false); // oldest evicted
   assert.equal(map.has('chat-5000'), true); // newest kept
 });
+
+test('allowFallback eviction is recency-aware: re-touching a key protects it from eviction', () => {
+  const map = new Map<string, number>();
+  for (let i = 0; i < 5000; i++) allowFallback(map, `chat-${i}`, i, 0);
+  allowFallback(map, 'chat-0', 10000, 0); // re-touch -> most recently used
+  allowFallback(map, 'chat-new', 10001, 0); // overflow -> evict genuinely-oldest
+  assert.equal(map.size, 5000);
+  assert.equal(map.has('chat-0'), true); // protected by recent touch
+  assert.equal(map.has('chat-1'), false); // now the oldest, evicted
+});
