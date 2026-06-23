@@ -24,9 +24,9 @@
 | **Repository** | [OpenWA-plugins/gsheets-logger](https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger) |
 <!-- END DETAILS -->
 
-The installed version is also visible in the OpenWA dashboard Plugins list (`v0.2.1`), via
+The installed version is also visible in the OpenWA dashboard Plugins list (`v0.2.2`), via
 `GET /plugins/gsheets-logger`, and at runtime in the enable log line and `healthCheck`
-(`GET /plugins/gsheets-logger/health` → `"v0.2.1 — N rows buffered"`).
+(`GET /plugins/gsheets-logger/health` → `"v0.2.2 — N rows buffered"`).
 
 ## Features
 
@@ -55,10 +55,63 @@ builds never emitted the hook).
 
 ## Setup
 
-1. **Create a Google Cloud project** and enable the **Google Sheets API**.
-2. **Create a service account** and download its **JSON key**.
-3. **Create your spreadsheet**, then **share it** with the service account's `client_email` as **Editor**.
-4. Note the spreadsheet **ID** from the URL: `https://docs.google.com/spreadsheets/d/<ID>/edit`.
+The plugin authenticates as a Google **service account** (no interactive Google login). Do this once:
+
+### 1. Create or pick a Google Cloud project
+Open the [Google Cloud Console](https://console.cloud.google.com), sign in, and use the project picker in
+the top bar to create a new project or select an existing one.
+
+### 2. Enable the Google Sheets API — the step most people miss
+**APIs & Services → Library → search "Google Sheets API" → Enable.**
+Direct link (select your project first): `https://console.cloud.google.com/apis/library/sheets.googleapis.com`
+
+This is **mandatory** and the API is **off by default** in a new project. If you skip it, the plugin
+authenticates fine but Google rejects every write, and you'll see this in the logs:
+
+```
+Append failed: 403 PERMISSION_DENIED (reason: SERVICE_DISABLED)
+"Google Sheets API has not been used in project <NUMBER> before or it is disabled.
+ Enable it by visiting https://console.developers.google.com/apis/api/sheets.googleapis.com/overview?project=<NUMBER> then retry."
+```
+
+The error message includes a direct link with your project number — open it and click **Enable**. Then
+allow **~1–2 minutes** to propagate. You do **not** need to disable/re-enable the plugin: it retries every
+`flushIntervalSec` (default 5s), so buffered rows flow automatically once the API is live. (Only the Sheets
+API is required — the Drive API is **not** needed to append rows.)
+
+### 3. Create a service account and a JSON key
+**APIs & Services → Credentials → Create credentials → Service account.** Name it (e.g. `openwa-logger`)
+→ **Create and continue**. A project role is **not required** — access is granted by sharing the sheet in
+step 5, not by an IAM role — so click **Done**. Then open the service account → **Keys → Add key →
+Create new key → JSON → Create**. A `.json` file downloads.
+
+> ⚠️ **Treat this file like a password.** It contains a private key. Never commit it to git or paste it
+> anywhere public. If it leaks, immediately delete that key under the service account's **Keys** tab and
+> create a new one.
+
+### 4. Create your spreadsheet
+Create the Google Sheet and, in the target tab, add a **header row of your choosing** — the plugin appends
+data rows only. Copy the spreadsheet **ID** from its URL:
+`https://docs.google.com/spreadsheets/d/`**`<ID>`**`/edit`.
+
+### 5. Share the sheet with the service account — the other common 403
+Open the downloaded JSON and find `client_email` (it looks like
+`name@project.iam.gserviceaccount.com`). In the sheet, click **Share**, paste that email, set it to
+**Editor**, and send. **Skipping this** is the other frequent cause of a `403 PERMISSION_DENIED` — the
+service account has no access to a sheet until you share it explicitly.
+
+### 6. Configure the plugin
+Paste the **entire** contents of the JSON file into `serviceAccountJson`, and the spreadsheet ID into
+`spreadsheetId` — in the dashboard (**Plugins → Configure**) or via the `PUT …/config` call below — then
+enable the plugin.
+
+### Troubleshooting a 403 / not writing
+| Symptom in the logs | Cause | Fix |
+| --- | --- | --- |
+| `SERVICE_DISABLED` · "Sheets API has not been used…" | Sheets API not enabled (step 2) | Enable it, wait 1–2 min |
+| `PERMISSION_DENIED` on the spreadsheet | Sheet not shared with `client_email` (step 5) | Share it as **Editor** |
+| `not valid JSON` / `missing client_email/private_key` on enable | Partial or blank `serviceAccountJson` | Paste the whole JSON file |
+| Rows never appear, no error | Wrong `spreadsheetId`, or the `sheetTab` doesn't exist | Recheck the ID and tab name |
 
 ## Install
 
@@ -117,7 +170,7 @@ The service-account JSON is marked `secret` in the config schema, so OpenWA mask
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md). Latest: **0.2.1** (2026-06-23) — localized dashboard text (8 locales).
+See [CHANGELOG.md](./CHANGELOG.md). Latest: **0.2.2** (2026-06-23) — clamp the flush interval / batch size to safe positive values.
 
 ## License
 
