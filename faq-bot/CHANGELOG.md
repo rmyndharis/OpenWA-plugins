@@ -8,6 +8,15 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-06-23
+
+### Fixed
+
+- The regex safety check now also rejects a nested unbounded quantifier hidden behind one or more
+  wrapping groups (e.g. `((a+))+`, `(((a+)))*`). The previous check only inspected a group that was
+  directly quantified, so an extra layer of parentheses could slip a catastrophic pattern through.
+  Patterns that carry only a single quantifier (e.g. `((ab)+)`) are still accepted.
+
 ## [0.1.2] — 2026-06-23
 
 ### Changed

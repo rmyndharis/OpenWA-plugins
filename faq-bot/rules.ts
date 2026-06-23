@@ -51,6 +51,10 @@ export function isSafeRegexPattern(p: string): boolean {
         if (group.hasUnbounded) return false; // nested unbounded quantifier -> catastrophic
         if (stack.length) stack[stack.length - 1].hasUnbounded = true; // quantified group repeats too
         i += q.len;
+      } else if (group.hasUnbounded && stack.length) {
+        // An inner unbounded quantifier propagates to the enclosing group even when this group is not
+        // itself quantified, so a wrapping group can't hide it (e.g. ((a+))+ must still be rejected).
+        stack[stack.length - 1].hasUnbounded = true;
       }
       continue;
     }
