@@ -25,6 +25,32 @@
     "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/after-hours-v0.1.0/after-hours.zip"
   },
   {
+    "id": "chat-flow",
+    "name": "Chat Flow",
+    "version": "1.0.0",
+    "type": "extension",
+    "status": "stable",
+    "description": "Interactive, stateful auto-reply: a trigger word starts a greeting + numbered menu, replies traverse a configurable menu tree, and per-chat state expires after 15 minutes.",
+    "author": "Yudhi Armyndharis <yudhi@rmyndharis.com>",
+    "license": "MIT",
+    "keywords": [
+      "menu",
+      "flow",
+      "interactive",
+      "auto-reply",
+      "chatbot",
+      "whatsapp",
+      "openwa"
+    ],
+    "minOpenWAVersion": "0.7.0",
+    "testedOpenWAVersion": "0.7.0",
+    "releasedAt": "2026-06-23",
+    "repoPath": "chat-flow",
+    "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
+    "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/chat-flow",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chat-flow-v1.0.0/chat-flow.zip"
+  },
+  {
     "id": "faq-bot",
     "name": "FAQ / Auto-Reply Bot",
     "version": "0.1.0",
@@ -48,6 +74,31 @@
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot",
     "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.1.0/faq-bot.zip"
+  },
+  {
+    "id": "group-translate",
+    "name": "Group Auto-Translation",
+    "version": "1.0.0",
+    "type": "extension",
+    "status": "stable",
+    "description": "Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled.",
+    "author": "Yudhi Armyndharis <yudhi@rmyndharis.com>",
+    "license": "MIT",
+    "keywords": [
+      "translation",
+      "libretranslate",
+      "i18n",
+      "groups",
+      "whatsapp",
+      "openwa"
+    ],
+    "minOpenWAVersion": "0.7.0",
+    "testedOpenWAVersion": "0.7.0",
+    "releasedAt": "2026-06-23",
+    "repoPath": "group-translate",
+    "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
+    "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/group-translate-v1.0.0/group-translate.zip"
   },
   {
     "id": "gsheets-logger",
