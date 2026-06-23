@@ -22,6 +22,9 @@ export interface CoordinatorOptions {
 
 const URL_OR_EMOJI_ONLY = /^(?:\s|\p{Emoji}|https?:\/\/\S+)+$/u;
 
+/** Object keys that index the prototype chain rather than an own property; never valid as a wid. */
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 const NOOP_LOGGER: TranslationLogger = { debug: () => {}, info: () => {}, warn: () => {} };
 
 /**
@@ -37,6 +40,9 @@ function widEquals(a: string, b: string): boolean {
 }
 
 export class TranslationCoordinator {
+  /** Per (session,chat) promise chain serializing the load→mutate→save cycle. Self-evicts when drained. */
+  private readonly locks = new Map<string, Promise<unknown>>();
+
   constructor(
     private readonly translator: Translator,
     private readonly store: ConfigStore,
@@ -47,7 +53,22 @@ export class TranslationCoordinator {
 
   async handleMessage(sessionId: string, msg: InboundMessage): Promise<{ swallow: boolean }> {
     if (!msg.isGroup || msg.fromMe || !msg.author) return { swallow: false };
+    // Concurrent messages for the same group must not interleave load→mutate→save (lost updates /
+    // duplicate announcements). Chain each behind the previous for the same key; store a settled tail
+    // so one rejection can't wedge the chain, and evict the entry once the chain drains.
+    const key = `${sessionId}:${msg.chatId}`;
+    const prev = this.locks.get(key) ?? Promise.resolve();
+    const run = prev.then(() => this.handleMessageLocked(sessionId, msg));
+    const tail = run.catch(() => {});
+    this.locks.set(key, tail);
+    try {
+      return await run;
+    } finally {
+      if (this.locks.get(key) === tail) this.locks.delete(key);
+    }
+  }
 
+  private async handleMessageLocked(sessionId: string, msg: InboundMessage): Promise<{ swallow: boolean }> {
     const state = await this.store.load(sessionId, msg.chatId);
 
     if (!state.announced) {
@@ -232,7 +253,12 @@ export class TranslationCoordinator {
   }
 
   private ensureParticipant(state: GroupState, wid: string): ParticipantState {
-    if (!state.participants[wid]) {
+    if (UNSAFE_KEYS.has(wid)) {
+      // A real WhatsApp id never equals a prototype key; refuse to index the map by it so a crafted
+      // author/target can't read or write Object.prototype. Return a throwaway, non-persisted state.
+      return { lang: null, source: 'learned', enabled: true, samples: 0, updatedAt: '' };
+    }
+    if (!Object.prototype.hasOwnProperty.call(state.participants, wid)) {
       state.participants[wid] = { lang: null, source: 'learned', enabled: true, samples: 0, updatedAt: '' };
     }
     return state.participants[wid];

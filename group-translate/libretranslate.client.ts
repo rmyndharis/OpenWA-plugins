@@ -43,8 +43,13 @@ export class LibreTranslateClient implements Translator {
 
   async translate(text: string, source: string, target: string): Promise<string> {
     const data = (await this.post('/translate', { q: text, source, target, format: 'text' })) as {
-      translatedText: string;
+      translatedText?: unknown;
     };
+    if (typeof data?.translatedText !== 'string') {
+      // A partial/empty body must fail (counted by the circuit breaker, excluded from the reply)
+      // rather than become the literal string 'undefined' in the group.
+      throw new Error('LibreTranslate /translate returned no translatedText');
+    }
     return data.translatedText;
   }
 

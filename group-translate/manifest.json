@@ -1,7 +1,7 @@
 {
   "id": "group-translate",
   "name": "Group Auto-Translation",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled.",
