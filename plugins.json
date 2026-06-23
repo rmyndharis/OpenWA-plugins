@@ -540,7 +540,7 @@
   {
     "id": "group-translate",
     "name": "Group Auto-Translation",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "type": "extension",
     "status": "stable",
     "description": "Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled.",
@@ -560,7 +560,7 @@
     "repoPath": "group-translate",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/group-translate-v1.0.1/group-translate.zip",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/group-translate-v1.0.2/group-translate.zip",
     "i18n": {
       "es": {
         "name": "Traducción Automática de Grupos",
@@ -702,7 +702,7 @@
         "description": "LibreTranslate బ్యాకెండ్ ద్వారా గ్రూప్ సందేశాలను పాల్గొనేవారి భాషల మధ్య స్వయంచాలకంగా అనువదిస్తుంది. /tr కమాండ్‌లతో చాట్‌లో కాన్ఫిగర్ చేయండి. అడ్మిన్-గేటెడ్; ప్రారంభించే వరకు నిష్క్రియం.",
         "config": {
           "libretranslateUrl": {
-            "title": "LibreTranslate URL"
+            "title": "LibreTranslate చిరునామా"
           },
           "libretranslateApiKey": {
             "title": "LibreTranslate API కీ"

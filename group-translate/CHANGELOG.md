@@ -8,6 +8,13 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.0.2] — 2026-06-23
+
+### Fixed
+
+- Telugu (`te`) localization: the `libretranslateUrl` field title was left in English ("LibreTranslate URL");
+  it is now localized to "LibreTranslate చిరునామా", matching the other locales.
+
 ## [1.0.1] — 2026-06-23
 
 ### Added

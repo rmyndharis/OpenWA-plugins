@@ -1,7 +1,7 @@
 {
   "id": "group-translate",
   "name": "Group Auto-Translation",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled.",
@@ -46,7 +46,7 @@
     "he": { "name": "תרגום אוטומטי לקבוצות", "description": "מתרגם אוטומטית הודעות קבוצה בין שפות המשתתפים דרך backend של LibreTranslate. הגדר בצ'אט עם פקודות /tr. מוגן בניהול; מושבת עד להפעלה.",
       "config": { "libretranslateUrl": { "title": "כתובת LibreTranslate" }, "libretranslateApiKey": { "title": "מפתח API של LibreTranslate" }, "timeoutMs": { "title": "פסק זמן לתרגום (ms)" }, "commandPrefix": { "title": "קידומת פקודה" }, "minLength": { "title": "אורך מינימלי להודעה לתרגום" }, "maxLength": { "title": "אורך מקסימלי להודעה לתרגום" }, "denyReply": { "title": "השב על פקודות שנדחו" } } },
     "te": { "name": "గ్రూప్ ఆటో-అనువాదం", "description": "LibreTranslate బ్యాకెండ్ ద్వారా గ్రూప్ సందేశాలను పాల్గొనేవారి భాషల మధ్య స్వయంచాలకంగా అనువదిస్తుంది. /tr కమాండ్‌లతో చాట్‌లో కాన్ఫిగర్ చేయండి. అడ్మిన్-గేటెడ్; ప్రారంభించే వరకు నిష్క్రియం.",
-      "config": { "libretranslateUrl": { "title": "LibreTranslate URL" }, "libretranslateApiKey": { "title": "LibreTranslate API కీ" }, "timeoutMs": { "title": "అనువాద టైమ్‌అవుట్ (ms)" }, "commandPrefix": { "title": "కమాండ్ ప్రిఫిక్స్" }, "minLength": { "title": "అనువదించే కనీస సందేశ పొడవు" }, "maxLength": { "title": "అనువదించే గరిష్ట సందేశ పొడవు" }, "denyReply": { "title": "తిరస్కరించిన కమాండ్‌లకు జవాబివ్వు" } } },
+      "config": { "libretranslateUrl": { "title": "LibreTranslate చిరునామా" }, "libretranslateApiKey": { "title": "LibreTranslate API కీ" }, "timeoutMs": { "title": "అనువాద టైమ్‌అవుట్ (ms)" }, "commandPrefix": { "title": "కమాండ్ ప్రిఫిక్స్" }, "minLength": { "title": "అనువదించే కనీస సందేశ పొడవు" }, "maxLength": { "title": "అనువదించే గరిష్ట సందేశ పొడవు" }, "denyReply": { "title": "తిరస్కరించిన కమాండ్‌లకు జవాబివ్వు" } } },
     "zh-CN": { "name": "群组自动翻译", "description": "通过 LibreTranslate 后端自动翻译群组成员之间的消息。使用 /tr 命令在聊天中配置。仅管理员可操作；启用前处于禁用状态。",
       "config": { "libretranslateUrl": { "title": "LibreTranslate 地址" }, "libretranslateApiKey": { "title": "LibreTranslate API 密钥" }, "timeoutMs": { "title": "翻译超时 (ms)" }, "commandPrefix": { "title": "命令前缀" }, "minLength": { "title": "翻译的最小消息长度" }, "maxLength": { "title": "翻译的最大消息长度" }, "denyReply": { "title": "拒绝命令时回复" } } },
     "zh-HK": { "name": "群組自動翻譯", "description": "透過 LibreTranslate 後端自動翻譯群組成員之間的訊息。使用 /tr 指令在聊天中設定。僅管理員可操作；啟用前處於停用狀態。",
