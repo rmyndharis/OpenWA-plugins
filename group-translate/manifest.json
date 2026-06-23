@@ -1,0 +1,37 @@
+{
+  "id": "group-translate",
+  "name": "Group Auto-Translation",
+  "version": "1.0.0",
+  "type": "extension",
+  "main": "dist/index.js",
+  "description": "Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled.",
+  "author": "Yudhi Armyndharis <yudhi@rmyndharis.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate",
+  "repository": "https://github.com/rmyndharis/OpenWA-plugins",
+  "keywords": ["translation", "libretranslate", "i18n", "groups", "whatsapp", "openwa"],
+  "status": "stable",
+  "minOpenWAVersion": "0.7.0",
+  "testedOpenWAVersion": "0.7.0",
+  "provides": ["translation"],
+  "permissions": ["messages:send", "engine:read", "net:fetch"],
+  "net": { "allow": ["localhost:7001"] },
+  "sessionScoped": true,
+  "sessions": ["*"],
+  "hooks": ["message:received"],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "libretranslateUrl": { "type": "string", "title": "LibreTranslate URL", "default": "http://localhost:7001", "required": true,
+        "description": "Base URL of your LibreTranslate instance. Its host:port MUST also appear in this plugin's manifest `net.allow` (the host denies outbound calls to anything not allow-listed)." },
+      "libretranslateApiKey": { "type": "string", "title": "LibreTranslate API key", "secret": true, "description": "Optional, if your instance requires one." },
+      "timeoutMs": { "type": "number", "title": "Translate timeout (ms)", "default": 4000,
+        "description": "Per-call timeout. Keep at or below the host hook budget (5000ms) so a slow backend doesn't make the host proceed un-translated." },
+      "commandPrefix": { "type": "string", "title": "Command prefix", "default": "/tr" },
+      "minLength": { "type": "number", "title": "Min message length to translate", "default": 2 },
+      "maxLength": { "type": "number", "title": "Max message length to translate", "default": 2000 },
+      "denyReply": { "type": "boolean", "title": "Reply on denied commands", "default": false,
+        "description": "If true, reply 'admins only' when a non-admin runs a restricted command." }
+    }
+  }
+}
