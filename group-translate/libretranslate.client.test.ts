@@ -36,6 +36,12 @@ test('translate posts and returns translatedText on success', async () => {
   assert.equal(calls[0], 'http://lt:7001/translate'); // trailing slash trimmed
 });
 
+test('translate throws when the response lacks a translatedText string', async () => {
+  const { net } = fakeNet([async () => res({ json: async () => ({}) })]); // partial/empty body
+  const c = new LibreTranslateClient({ url: 'http://lt:7001', timeoutMs: 4000, net });
+  await assert.rejects(c.translate('hi', 'en', 'es'), /translatedText/);
+});
+
 test('detect returns the top result', async () => {
   const { net } = fakeNet([async () => res({ json: async () => [{ language: 'en', confidence: 0.9 }] })]);
   const c = new LibreTranslateClient({ url: 'http://lt:7001', timeoutMs: 4000, net });

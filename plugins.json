@@ -2,7 +2,7 @@
   {
     "id": "after-hours",
     "name": "After-Hours Auto-Reply",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "type": "extension",
     "status": "stable",
     "description": "Auto-replies with a configurable away/closing message to messages received outside business hours.",
@@ -22,7 +22,7 @@
     "repoPath": "after-hours",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/after-hours",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/after-hours-v0.1.1/after-hours.zip",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/after-hours-v0.1.2/after-hours.zip",
     "i18n": {
       "es": {
         "name": "Respuesta Automática Fuera de Horario",
@@ -369,7 +369,7 @@
   {
     "id": "faq-bot",
     "name": "FAQ / Auto-Reply Bot",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "type": "extension",
     "status": "stable",
     "description": "Auto-replies to inbound WhatsApp messages from configurable FAQ keyword/regex rules.",
@@ -389,7 +389,7 @@
     "repoPath": "faq-bot",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.1.1/faq-bot.zip",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.1.2/faq-bot.zip",
     "i18n": {
       "es": {
         "name": "Bot de Preguntas Frecuentes / Respuesta Automática",
@@ -540,7 +540,7 @@
   {
     "id": "group-translate",
     "name": "Group Auto-Translation",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "type": "extension",
     "status": "stable",
     "description": "Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled.",
@@ -560,7 +560,7 @@
     "repoPath": "group-translate",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/group-translate-v1.0.2/group-translate.zip",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/group-translate-v1.0.3/group-translate.zip",
     "i18n": {
       "es": {
         "name": "Traducción Automática de Grupos",
@@ -783,7 +783,7 @@
   {
     "id": "gsheets-logger",
     "name": "Google Sheets Logger",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "type": "extension",
     "status": "stable",
     "description": "Logs WhatsApp message events to a Google Sheet via a service account.",
@@ -803,7 +803,7 @@
     "repoPath": "gsheets-logger",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/gsheets-logger-v0.2.1/gsheets-logger.zip",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/gsheets-logger-v0.2.2/gsheets-logger.zip",
     "i18n": {
       "es": {
         "name": "Registrador en Google Sheets",

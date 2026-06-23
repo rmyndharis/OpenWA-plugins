@@ -23,6 +23,19 @@ test('parseConfig applies defaults', () => {
   assert.equal(config.flushBatchSize, 20);
 });
 
+test('parseConfig clamps non-numeric/non-positive flush interval and batch size to safe defaults', () => {
+  const base = { spreadsheetId: 'sid', serviceAccountJson: validSa };
+  // Non-numeric / zero / negative interval must not coerce to NaN (which makes setInterval hot-loop at ~1ms).
+  assert.equal(parseConfig({ ...base, flushIntervalSec: 'abc' }).config.flushIntervalSec, 5);
+  assert.equal(parseConfig({ ...base, flushIntervalSec: 0 }).config.flushIntervalSec, 5);
+  assert.equal(parseConfig({ ...base, flushIntervalSec: -3 }).config.flushIntervalSec, 5);
+  assert.equal(parseConfig({ ...base, flushBatchSize: 'xyz' }).config.flushBatchSize, 20);
+  assert.equal(parseConfig({ ...base, flushBatchSize: 0 }).config.flushBatchSize, 20);
+  // Valid values pass through unchanged.
+  assert.equal(parseConfig({ ...base, flushIntervalSec: 10 }).config.flushIntervalSec, 10);
+  assert.equal(parseConfig({ ...base, flushBatchSize: 50 }).config.flushBatchSize, 50);
+});
+
 test('flushBuffer clears the buffer on success', async () => {
   const buffer = [['a'], ['b']];
   await flushBuffer(buffer, async () => {});
