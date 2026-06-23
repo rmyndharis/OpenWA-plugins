@@ -8,6 +8,14 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-06-23
+
+### Added
+
+- Localized dashboard text (`name`, `description`, config field titles) for es, fr, it, ar, he, te, zh-CN,
+  zh-HK via `manifest.i18n`. English remains the default + fallback. Translations are machine-generated;
+  human review recommended for ar/he/te.
+
 ## [0.2.0] — 2026-06-22
 
 First packaged release. Built and reviewed against OpenWA v0.6.1.

@@ -1,7 +1,7 @@
 {
   "id": "gsheets-logger",
   "name": "Google Sheets Logger",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Logs WhatsApp message events to a Google Sheet via a service account.",
@@ -28,5 +28,23 @@
       "flushIntervalSec": { "type": "number", "default": 5, "title": "Flush interval (seconds)" },
       "flushBatchSize": { "type": "number", "default": 20, "title": "Flush when buffered rows reach" }
     }
+  },
+  "i18n": {
+    "es": { "name": "Registrador en Google Sheets", "description": "Registra eventos de mensajes de WhatsApp en una hoja de Google Sheets mediante una cuenta de servicio.",
+      "config": { "serviceAccountJson": { "title": "JSON de cuenta de servicio" }, "spreadsheetId": { "title": "ID de hoja de cálculo" }, "sheetTab": { "title": "Nombre de la pestaña" }, "flushIntervalSec": { "title": "Intervalo de volcado (segundos)" }, "flushBatchSize": { "title": "Volcar cuando las filas en búfer lleguen a" } } },
+    "fr": { "name": "Journal Google Sheets", "description": "Enregistre les événements de messages WhatsApp dans une feuille Google Sheets via un compte de service.",
+      "config": { "serviceAccountJson": { "title": "JSON du compte de service" }, "spreadsheetId": { "title": "ID de la feuille de calcul" }, "sheetTab": { "title": "Nom de l'onglet" }, "flushIntervalSec": { "title": "Intervalle de vidage (secondes)" }, "flushBatchSize": { "title": "Vider quand les lignes en mémoire tampon atteignent" } } },
+    "it": { "name": "Logger su Google Sheets", "description": "Registra gli eventi dei messaggi WhatsApp in un foglio Google Sheets tramite un account di servizio.",
+      "config": { "serviceAccountJson": { "title": "JSON dell'account di servizio" }, "spreadsheetId": { "title": "ID del foglio di calcolo" }, "sheetTab": { "title": "Nome della scheda" }, "flushIntervalSec": { "title": "Intervallo di svuotamento (secondi)" }, "flushBatchSize": { "title": "Svuota quando le righe nel buffer raggiungono" } } },
+    "ar": { "name": "مسجّل Google Sheets", "description": "يسجّل أحداث رسائل WhatsApp في جدول بيانات Google Sheets عبر حساب خدمة.",
+      "config": { "serviceAccountJson": { "title": "JSON حساب الخدمة" }, "spreadsheetId": { "title": "معرّف جدول البيانات" }, "sheetTab": { "title": "اسم علامة التبويب" }, "flushIntervalSec": { "title": "فترة المزامنة (بالثواني)" }, "flushBatchSize": { "title": "مزامنة عند بلوغ الصفوف المحفوظة" } } },
+    "he": { "name": "רשומן Google Sheets", "description": "מתעד אירועי הודעות WhatsApp בגיליון Google Sheets דרך חשבון שירות.",
+      "config": { "serviceAccountJson": { "title": "JSON של חשבון השירות" }, "spreadsheetId": { "title": "מזהה הגיליון" }, "sheetTab": { "title": "שם הלשונית" }, "flushIntervalSec": { "title": "מרווח שטיפה (שניות)" }, "flushBatchSize": { "title": "שטוף כשהשורות במאגר מגיעות ל" } } },
+    "te": { "name": "Google Sheets లాగర్", "description": "సర్వీస్ అకౌంట్ ద్వారా WhatsApp సందేశ ఈవెంట్‌లను Google Sheets లో నమోదు చేస్తుంది.",
+      "config": { "serviceAccountJson": { "title": "సర్వీస్ అకౌంట్ JSON" }, "spreadsheetId": { "title": "స్ప్రెడ్‌షీట్ ID" }, "sheetTab": { "title": "షీట్ ట్యాబ్ పేరు" }, "flushIntervalSec": { "title": "ఫ్లష్ విరామం (సెకన్లు)" }, "flushBatchSize": { "title": "బఫర్ చేసిన వరుసలు ఈ సంఖ్యకు చేరినప్పుడు ఫ్లష్ చేయి" } } },
+    "zh-CN": { "name": "Google Sheets 日志记录器", "description": "通过服务账号将 WhatsApp 消息事件记录到 Google Sheets。",
+      "config": { "serviceAccountJson": { "title": "服务账号 JSON" }, "spreadsheetId": { "title": "电子表格 ID" }, "sheetTab": { "title": "工作表标签名称" }, "flushIntervalSec": { "title": "刷新间隔（秒）" }, "flushBatchSize": { "title": "缓冲行数达到时刷新" } } },
+    "zh-HK": { "name": "Google Sheets 日誌記錄器", "description": "透過服務帳號將 WhatsApp 訊息事件記錄到 Google Sheets。",
+      "config": { "serviceAccountJson": { "title": "服務帳號 JSON" }, "spreadsheetId": { "title": "試算表 ID" }, "sheetTab": { "title": "工作表標籤名稱" }, "flushIntervalSec": { "title": "排清間隔（秒）" }, "flushBatchSize": { "title": "緩衝行數達到時排清" } } }
   }
 }

@@ -2,7 +2,7 @@
   {
     "id": "after-hours",
     "name": "After-Hours Auto-Reply",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "type": "extension",
     "status": "stable",
     "description": "Auto-replies with a configurable away/closing message to messages received outside business hours.",
@@ -22,12 +22,182 @@
     "repoPath": "after-hours",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/after-hours",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/after-hours-v0.1.0/after-hours.zip"
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/after-hours-v0.1.1/after-hours.zip",
+    "i18n": {
+      "es": {
+        "name": "Respuesta Automática Fuera de Horario",
+        "description": "Responde automáticamente con un mensaje de ausencia configurable a los mensajes recibidos fuera del horario comercial.",
+        "config": {
+          "schedule": {
+            "title": "Horario semanal (JSON)"
+          },
+          "timezone": {
+            "title": "Zona horaria IANA"
+          },
+          "awayMessage": {
+            "title": "Respuesta fuera de horario"
+          },
+          "cooldownSec": {
+            "title": "Tiempo de espera (segundos por chat)"
+          },
+          "respondInGroups": {
+            "title": "Responder también en grupos"
+          }
+        }
+      },
+      "fr": {
+        "name": "Réponse Automatique Hors Horaires",
+        "description": "Répond automatiquement avec un message d'absence configurable aux messages reçus en dehors des heures d'ouverture.",
+        "config": {
+          "schedule": {
+            "title": "Planning hebdomadaire (JSON)"
+          },
+          "timezone": {
+            "title": "Fuseau horaire IANA"
+          },
+          "awayMessage": {
+            "title": "Réponse hors horaires"
+          },
+          "cooldownSec": {
+            "title": "Délai d'attente (secondes par chat)"
+          },
+          "respondInGroups": {
+            "title": "Répondre aussi dans les groupes"
+          }
+        }
+      },
+      "it": {
+        "name": "Risposta Automatica Fuori Orario",
+        "description": "Risponde automaticamente con un messaggio di assenza configurabile ai messaggi ricevuti fuori dall'orario di lavoro.",
+        "config": {
+          "schedule": {
+            "title": "Orario settimanale (JSON)"
+          },
+          "timezone": {
+            "title": "Fuso orario IANA"
+          },
+          "awayMessage": {
+            "title": "Risposta fuori orario"
+          },
+          "cooldownSec": {
+            "title": "Intervallo (secondi per chat)"
+          },
+          "respondInGroups": {
+            "title": "Rispondi anche nei gruppi"
+          }
+        }
+      },
+      "ar": {
+        "name": "الرد التلقائي خارج ساعات العمل",
+        "description": "يرد تلقائيًا برسالة غياب قابلة للتهيئة على الرسائل الواردة خارج ساعات العمل.",
+        "config": {
+          "schedule": {
+            "title": "الجدول الأسبوعي (JSON)"
+          },
+          "timezone": {
+            "title": "المنطقة الزمنية (IANA)"
+          },
+          "awayMessage": {
+            "title": "رد خارج ساعات العمل"
+          },
+          "cooldownSec": {
+            "title": "فترة الانتظار (ثوانٍ لكل محادثة)"
+          },
+          "respondInGroups": {
+            "title": "الرد في المجموعات أيضًا"
+          }
+        }
+      },
+      "he": {
+        "name": "מענה אוטומטי מחוץ לשעות הפעילות",
+        "description": "שולח מענה אוטומטי עם הודעת היעדרות ניתנת להגדרה להודעות שהתקבלו מחוץ לשעות הפעילות.",
+        "config": {
+          "schedule": {
+            "title": "לוח זמנים שבועי (JSON)"
+          },
+          "timezone": {
+            "title": "אזור זמן IANA"
+          },
+          "awayMessage": {
+            "title": "מענה מחוץ לשעות הפעילות"
+          },
+          "cooldownSec": {
+            "title": "זמן המתנה (שניות לצ'אט)"
+          },
+          "respondInGroups": {
+            "title": "מענה גם בקבוצות"
+          }
+        }
+      },
+      "te": {
+        "name": "వ్యాపార గంటల తర్వాత ఆటో-రిప్లై",
+        "description": "వ్యాపార సమయం వెలుపల వచ్చే సందేశాలకు కాన్ఫిగర్ చేయదగిన గైర్హాజరు సందేశంతో స్వయంచాలకంగా జవాబిస్తుంది.",
+        "config": {
+          "schedule": {
+            "title": "వారపు షెడ్యూల్ (JSON)"
+          },
+          "timezone": {
+            "title": "IANA సమయమండలం"
+          },
+          "awayMessage": {
+            "title": "వ్యాపార సమయం తర్వాత జవాబు"
+          },
+          "cooldownSec": {
+            "title": "కూల్‌డౌన్ (ప్రతి చాట్‌కు సెకన్లు)"
+          },
+          "respondInGroups": {
+            "title": "గ్రూపుల్లోనూ స్పందించు"
+          }
+        }
+      },
+      "zh-CN": {
+        "name": "下班后自动回复",
+        "description": "对在非工作时间收到的消息，自动回复可配置的离开/关闭消息。",
+        "config": {
+          "schedule": {
+            "title": "每周排班 (JSON)"
+          },
+          "timezone": {
+            "title": "IANA 时区"
+          },
+          "awayMessage": {
+            "title": "下班后回复内容"
+          },
+          "cooldownSec": {
+            "title": "冷却时间（每个聊天秒数）"
+          },
+          "respondInGroups": {
+            "title": "也在群组中回复"
+          }
+        }
+      },
+      "zh-HK": {
+        "name": "下班後自動回覆",
+        "description": "對非工作時間收到的訊息，自動回覆可設定的離開／關閉訊息。",
+        "config": {
+          "schedule": {
+            "title": "每週排班 (JSON)"
+          },
+          "timezone": {
+            "title": "IANA 時區"
+          },
+          "awayMessage": {
+            "title": "下班後回覆內容"
+          },
+          "cooldownSec": {
+            "title": "冷卻時間（每個聊天秒數）"
+          },
+          "respondInGroups": {
+            "title": "亦在群組中回覆"
+          }
+        }
+      }
+    }
   },
   {
     "id": "chat-flow",
     "name": "Chat Flow",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "type": "extension",
     "status": "stable",
     "description": "Interactive, stateful auto-reply: a trigger word starts a greeting + numbered menu, replies traverse a configurable menu tree, and per-chat state expires after 15 minutes.",
@@ -48,12 +218,158 @@
     "repoPath": "chat-flow",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/chat-flow",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chat-flow-v1.0.1/chat-flow.zip"
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chat-flow-v1.0.2/chat-flow.zip",
+    "i18n": {
+      "es": {
+        "name": "Flujo de Chat",
+        "description": "Auto-respuesta interactiva con estado: una palabra clave abre un saludo y un menú numerado; las respuestas recorren un árbol de menús configurable.",
+        "config": {
+          "trigger": {
+            "title": "Palabra clave"
+          },
+          "greeting": {
+            "title": "Saludo + menú"
+          },
+          "respondInGroups": {
+            "title": "Responder también en grupos"
+          },
+          "options": {
+            "title": "Opciones del menú"
+          }
+        }
+      },
+      "fr": {
+        "name": "Flux de Chat",
+        "description": "Réponse automatique interactive et avec état : un mot-clé ouvre un message d'accueil et un menu numéroté ; les réponses parcourent une arborescence de menus configurable.",
+        "config": {
+          "trigger": {
+            "title": "Mot-clé déclencheur"
+          },
+          "greeting": {
+            "title": "Message d'accueil + menu"
+          },
+          "respondInGroups": {
+            "title": "Répondre aussi dans les groupes"
+          },
+          "options": {
+            "title": "Options du menu"
+          }
+        }
+      },
+      "it": {
+        "name": "Flusso di Chat",
+        "description": "Risposta automatica interattiva e con stato: una parola chiave apre un saluto e un menu numerato; le risposte percorrono un albero di menu configurabile.",
+        "config": {
+          "trigger": {
+            "title": "Parola chiave"
+          },
+          "greeting": {
+            "title": "Saluto + menu"
+          },
+          "respondInGroups": {
+            "title": "Rispondi anche nei gruppi"
+          },
+          "options": {
+            "title": "Opzioni del menu"
+          }
+        }
+      },
+      "ar": {
+        "name": "تدفّق المحادثة",
+        "description": "رد تلقائي تفاعلي ذو حالة: كلمة مفتاحية تفتح تحية وقائمة مرقّمة؛ تتنقّل الردود عبر شجرة قوائم قابلة للتهيئة.",
+        "config": {
+          "trigger": {
+            "title": "الكلمة المفتاحية"
+          },
+          "greeting": {
+            "title": "التحية + القائمة"
+          },
+          "respondInGroups": {
+            "title": "الرد في المجموعات أيضًا"
+          },
+          "options": {
+            "title": "خيارات القائمة"
+          }
+        }
+      },
+      "he": {
+        "name": "זרימת צ'אט",
+        "description": "מענה אוטומטי אינטראקטיבי עם מצב: מילת מפתח פותחת ברכה ותפריט ממוספר; התשובות עוברות בעץ תפריטים הניתן להגדרה.",
+        "config": {
+          "trigger": {
+            "title": "מילת מפתח"
+          },
+          "greeting": {
+            "title": "ברכה + תפריט"
+          },
+          "respondInGroups": {
+            "title": "מענה גם בקבוצות"
+          },
+          "options": {
+            "title": "אפשרויות התפריט"
+          }
+        }
+      },
+      "te": {
+        "name": "చాట్ ఫ్లో",
+        "description": "ఇంటరాక్టివ్, స్థితి ఆధారిత ఆటో-రిప్లై: ఒక ట్రిగ్గర్ పదం స్వాగతం + నంబర్ మెనూను తెరుస్తుంది; జవాబులు కాన్ఫిగర్ చేయదగిన మెనూ ట్రీలో ప్రయాణిస్తాయి.",
+        "config": {
+          "trigger": {
+            "title": "ట్రిగ్గర్ పదం"
+          },
+          "greeting": {
+            "title": "స్వాగతం + మెనూ"
+          },
+          "respondInGroups": {
+            "title": "గ్రూపుల్లోనూ స్పందించు"
+          },
+          "options": {
+            "title": "మెనూ ఎంపికలు"
+          }
+        }
+      },
+      "zh-CN": {
+        "name": "聊天流程",
+        "description": "交互式有状态自动回复：触发词打开问候语和带编号的菜单；回复会沿可配置的菜单树前进。",
+        "config": {
+          "trigger": {
+            "title": "触发词"
+          },
+          "greeting": {
+            "title": "问候语 + 菜单"
+          },
+          "respondInGroups": {
+            "title": "也在群组中回复"
+          },
+          "options": {
+            "title": "菜单选项"
+          }
+        }
+      },
+      "zh-HK": {
+        "name": "聊天流程",
+        "description": "互動式有狀態自動回覆：觸發詞開啟問候語和編號選單；回覆會沿可設定的選單樹前進。",
+        "config": {
+          "trigger": {
+            "title": "觸發詞"
+          },
+          "greeting": {
+            "title": "問候語 + 選單"
+          },
+          "respondInGroups": {
+            "title": "亦在群組中回覆"
+          },
+          "options": {
+            "title": "選單選項"
+          }
+        }
+      }
+    }
   },
   {
     "id": "faq-bot",
     "name": "FAQ / Auto-Reply Bot",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "type": "extension",
     "status": "stable",
     "description": "Auto-replies to inbound WhatsApp messages from configurable FAQ keyword/regex rules.",
@@ -73,12 +389,158 @@
     "repoPath": "faq-bot",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.1.0/faq-bot.zip"
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.1.1/faq-bot.zip",
+    "i18n": {
+      "es": {
+        "name": "Bot de Preguntas Frecuentes / Respuesta Automática",
+        "description": "Responde automáticamente a los mensajes entrantes de WhatsApp mediante reglas configurables de palabras clave y expresiones regulares.",
+        "config": {
+          "rules": {
+            "title": "Reglas (JSON)"
+          },
+          "fallbackReply": {
+            "title": "Respuesta alternativa"
+          },
+          "fallbackCooldownSec": {
+            "title": "Tiempo de espera alternativo (segundos por chat)"
+          },
+          "respondInGroups": {
+            "title": "Responder también en grupos"
+          }
+        }
+      },
+      "fr": {
+        "name": "Bot FAQ / Réponse Automatique",
+        "description": "Répond automatiquement aux messages WhatsApp entrants via des règles configurables de mots-clés et expressions régulières.",
+        "config": {
+          "rules": {
+            "title": "Règles (JSON)"
+          },
+          "fallbackReply": {
+            "title": "Réponse de secours"
+          },
+          "fallbackCooldownSec": {
+            "title": "Délai de secours (secondes par chat)"
+          },
+          "respondInGroups": {
+            "title": "Répondre aussi dans les groupes"
+          }
+        }
+      },
+      "it": {
+        "name": "Bot FAQ / Risposta Automatica",
+        "description": "Risponde automaticamente ai messaggi WhatsApp in entrata tramite regole configurabili di parole chiave ed espressioni regolari.",
+        "config": {
+          "rules": {
+            "title": "Regole (JSON)"
+          },
+          "fallbackReply": {
+            "title": "Risposta di riserva"
+          },
+          "fallbackCooldownSec": {
+            "title": "Intervallo di riserva (secondi per chat)"
+          },
+          "respondInGroups": {
+            "title": "Rispondi anche nei gruppi"
+          }
+        }
+      },
+      "ar": {
+        "name": "بوت الأسئلة الشائعة / الرد التلقائي",
+        "description": "يرد تلقائيًا على رسائل WhatsApp الواردة وفق قواعد قابلة للتهيئة من كلمات مفتاحية وتعابير نمطية.",
+        "config": {
+          "rules": {
+            "title": "القواعد (JSON)"
+          },
+          "fallbackReply": {
+            "title": "الرد الاحتياطي"
+          },
+          "fallbackCooldownSec": {
+            "title": "فترة انتظار الرد الاحتياطي (ثوانٍ لكل محادثة)"
+          },
+          "respondInGroups": {
+            "title": "الرد في المجموعات أيضًا"
+          }
+        }
+      },
+      "he": {
+        "name": "בוט שאלות נפוצות / מענה אוטומטי",
+        "description": "מגיב אוטומטית להודעות WhatsApp נכנסות לפי כללי מילות מפתח וביטויים רגולריים ניתנים להגדרה.",
+        "config": {
+          "rules": {
+            "title": "כללים (JSON)"
+          },
+          "fallbackReply": {
+            "title": "מענה חלופי"
+          },
+          "fallbackCooldownSec": {
+            "title": "זמן המתנה חלופי (שניות לצ'אט)"
+          },
+          "respondInGroups": {
+            "title": "מענה גם בקבוצות"
+          }
+        }
+      },
+      "te": {
+        "name": "FAQ / ఆటో-రిప్లై బాట్",
+        "description": "కాన్ఫిగర్ చేయదగిన FAQ కీవర్డ్/రెగ్యులర్ ఎక్స్‌ప్రెషన్ నియమాల ద్వారా వచ్చే WhatsApp సందేశాలకు స్వయంచాలకంగా జవాబిస్తుంది.",
+        "config": {
+          "rules": {
+            "title": "నియమాలు (JSON)"
+          },
+          "fallbackReply": {
+            "title": "ఫాల్‌బ్యాక్ జవాబు"
+          },
+          "fallbackCooldownSec": {
+            "title": "ఫాల్‌బ్యాక్ కూల్‌డౌన్ (ప్రతి చాట్‌కు సెకన్లు)"
+          },
+          "respondInGroups": {
+            "title": "గ్రూపుల్లోనూ స్పందించు"
+          }
+        }
+      },
+      "zh-CN": {
+        "name": "FAQ / 自动回复机器人",
+        "description": "通过可配置的 FAQ 关键词/正则表达式规则，自动回复入站的 WhatsApp 消息。",
+        "config": {
+          "rules": {
+            "title": "规则 (JSON)"
+          },
+          "fallbackReply": {
+            "title": "兜底回复"
+          },
+          "fallbackCooldownSec": {
+            "title": "兜底冷却时间（每个聊天秒数）"
+          },
+          "respondInGroups": {
+            "title": "也在群组中回复"
+          }
+        }
+      },
+      "zh-HK": {
+        "name": "FAQ / 自動回覆機器人",
+        "description": "透過可設定的 FAQ 關鍵字/正規表示式規則，自動回覆入站的 WhatsApp 訊息。",
+        "config": {
+          "rules": {
+            "title": "規則 (JSON)"
+          },
+          "fallbackReply": {
+            "title": "後備回覆"
+          },
+          "fallbackCooldownSec": {
+            "title": "後備冷卻時間（每個聊天秒數）"
+          },
+          "respondInGroups": {
+            "title": "亦在群組中回覆"
+          }
+        }
+      }
+    }
   },
   {
     "id": "group-translate",
     "name": "Group Auto-Translation",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "type": "extension",
     "status": "stable",
     "description": "Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled.",
@@ -98,12 +560,230 @@
     "repoPath": "group-translate",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/group-translate-v1.0.0/group-translate.zip"
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/group-translate-v1.0.1/group-translate.zip",
+    "i18n": {
+      "es": {
+        "name": "Traducción Automática de Grupos",
+        "description": "Traduce automáticamente los mensajes del grupo entre los idiomas de los participantes mediante un backend LibreTranslate. Configúralo en el chat con comandos /tr. Gestionado por administradores; desactivado hasta que se habilite.",
+        "config": {
+          "libretranslateUrl": {
+            "title": "URL de LibreTranslate"
+          },
+          "libretranslateApiKey": {
+            "title": "Clave API de LibreTranslate"
+          },
+          "timeoutMs": {
+            "title": "Tiempo de espera de traducción (ms)"
+          },
+          "commandPrefix": {
+            "title": "Prefijo de comando"
+          },
+          "minLength": {
+            "title": "Longitud mínima de mensaje a traducir"
+          },
+          "maxLength": {
+            "title": "Longitud máxima de mensaje a traducir"
+          },
+          "denyReply": {
+            "title": "Responder a comandos denegados"
+          }
+        }
+      },
+      "fr": {
+        "name": "Traduction Automatique de Groupe",
+        "description": "Traduit automatiquement les messages du groupe entre les langues des participants via un backend LibreTranslate. Configurez dans le chat avec des commandes /tr. Réservé aux administrateurs ; désactivé jusqu'à activation.",
+        "config": {
+          "libretranslateUrl": {
+            "title": "URL de LibreTranslate"
+          },
+          "libretranslateApiKey": {
+            "title": "Clé API de LibreTranslate"
+          },
+          "timeoutMs": {
+            "title": "Délai de traduction (ms)"
+          },
+          "commandPrefix": {
+            "title": "Préfixe de commande"
+          },
+          "minLength": {
+            "title": "Longueur minimale du message à traduire"
+          },
+          "maxLength": {
+            "title": "Longueur maximale du message à traduire"
+          },
+          "denyReply": {
+            "title": "Répondre aux commandes refusées"
+          }
+        }
+      },
+      "it": {
+        "name": "Traduzione Automatica di Gruppo",
+        "description": "Traduce automaticamente i messaggi di gruppo tra le lingue dei partecipanti tramite un backend LibreTranslate. Configura in chat con i comandi /tr. Gestito dagli amministratori; disabilitato fino all'attivazione.",
+        "config": {
+          "libretranslateUrl": {
+            "title": "URL di LibreTranslate"
+          },
+          "libretranslateApiKey": {
+            "title": "Chiave API di LibreTranslate"
+          },
+          "timeoutMs": {
+            "title": "Timeout di traduzione (ms)"
+          },
+          "commandPrefix": {
+            "title": "Prefisso comando"
+          },
+          "minLength": {
+            "title": "Lunghezza minima messaggio da tradurre"
+          },
+          "maxLength": {
+            "title": "Lunghezza massima messaggio da tradurre"
+          },
+          "denyReply": {
+            "title": "Rispondi ai comandi negati"
+          }
+        }
+      },
+      "ar": {
+        "name": "الترجمة التلقائية للمجموعات",
+        "description": "يترجم رسائل المجموعة تلقائيًا بين لغات المشاركين عبر خلفية LibreTranslate. اضبطه داخل المحادثة بأوامر /tr. مقيّد للمشرفين؛ معطّل حتى يُفعَّل.",
+        "config": {
+          "libretranslateUrl": {
+            "title": "رابط LibreTranslate"
+          },
+          "libretranslateApiKey": {
+            "title": "مفتاح API لـ LibreTranslate"
+          },
+          "timeoutMs": {
+            "title": "مهلة الترجمة (بالميلي ثانية)"
+          },
+          "commandPrefix": {
+            "title": "بادئة الأمر"
+          },
+          "minLength": {
+            "title": "الحد الأدنى لطول الرسالة المترجمة"
+          },
+          "maxLength": {
+            "title": "الحد الأقصى لطول الرسالة المترجمة"
+          },
+          "denyReply": {
+            "title": "الرد على الأوامر المرفوضة"
+          }
+        }
+      },
+      "he": {
+        "name": "תרגום אוטומטי לקבוצות",
+        "description": "מתרגם אוטומטית הודעות קבוצה בין שפות המשתתפים דרך backend של LibreTranslate. הגדר בצ'אט עם פקודות /tr. מוגן בניהול; מושבת עד להפעלה.",
+        "config": {
+          "libretranslateUrl": {
+            "title": "כתובת LibreTranslate"
+          },
+          "libretranslateApiKey": {
+            "title": "מפתח API של LibreTranslate"
+          },
+          "timeoutMs": {
+            "title": "פסק זמן לתרגום (ms)"
+          },
+          "commandPrefix": {
+            "title": "קידומת פקודה"
+          },
+          "minLength": {
+            "title": "אורך מינימלי להודעה לתרגום"
+          },
+          "maxLength": {
+            "title": "אורך מקסימלי להודעה לתרגום"
+          },
+          "denyReply": {
+            "title": "השב על פקודות שנדחו"
+          }
+        }
+      },
+      "te": {
+        "name": "గ్రూప్ ఆటో-అనువాదం",
+        "description": "LibreTranslate బ్యాకెండ్ ద్వారా గ్రూప్ సందేశాలను పాల్గొనేవారి భాషల మధ్య స్వయంచాలకంగా అనువదిస్తుంది. /tr కమాండ్‌లతో చాట్‌లో కాన్ఫిగర్ చేయండి. అడ్మిన్-గేటెడ్; ప్రారంభించే వరకు నిష్క్రియం.",
+        "config": {
+          "libretranslateUrl": {
+            "title": "LibreTranslate URL"
+          },
+          "libretranslateApiKey": {
+            "title": "LibreTranslate API కీ"
+          },
+          "timeoutMs": {
+            "title": "అనువాద టైమ్‌అవుట్ (ms)"
+          },
+          "commandPrefix": {
+            "title": "కమాండ్ ప్రిఫిక్స్"
+          },
+          "minLength": {
+            "title": "అనువదించే కనీస సందేశ పొడవు"
+          },
+          "maxLength": {
+            "title": "అనువదించే గరిష్ట సందేశ పొడవు"
+          },
+          "denyReply": {
+            "title": "తిరస్కరించిన కమాండ్‌లకు జవాబివ్వు"
+          }
+        }
+      },
+      "zh-CN": {
+        "name": "群组自动翻译",
+        "description": "通过 LibreTranslate 后端自动翻译群组成员之间的消息。使用 /tr 命令在聊天中配置。仅管理员可操作；启用前处于禁用状态。",
+        "config": {
+          "libretranslateUrl": {
+            "title": "LibreTranslate 地址"
+          },
+          "libretranslateApiKey": {
+            "title": "LibreTranslate API 密钥"
+          },
+          "timeoutMs": {
+            "title": "翻译超时 (ms)"
+          },
+          "commandPrefix": {
+            "title": "命令前缀"
+          },
+          "minLength": {
+            "title": "翻译的最小消息长度"
+          },
+          "maxLength": {
+            "title": "翻译的最大消息长度"
+          },
+          "denyReply": {
+            "title": "拒绝命令时回复"
+          }
+        }
+      },
+      "zh-HK": {
+        "name": "群組自動翻譯",
+        "description": "透過 LibreTranslate 後端自動翻譯群組成員之間的訊息。使用 /tr 指令在聊天中設定。僅管理員可操作；啟用前處於停用狀態。",
+        "config": {
+          "libretranslateUrl": {
+            "title": "LibreTranslate 網址"
+          },
+          "libretranslateApiKey": {
+            "title": "LibreTranslate API 金鑰"
+          },
+          "timeoutMs": {
+            "title": "翻譯逾時 (ms)"
+          },
+          "commandPrefix": {
+            "title": "指令前綴"
+          },
+          "minLength": {
+            "title": "翻譯的最小訊息長度"
+          },
+          "maxLength": {
+            "title": "翻譯的最大訊息長度"
+          },
+          "denyReply": {
+            "title": "拒絕指令時回覆"
+          }
+        }
+      }
+    }
   },
   {
     "id": "gsheets-logger",
     "name": "Google Sheets Logger",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "type": "extension",
     "status": "stable",
     "description": "Logs WhatsApp message events to a Google Sheet via a service account.",
@@ -119,10 +799,180 @@
     ],
     "minOpenWAVersion": "0.6.1",
     "testedOpenWAVersion": "0.6.1",
-    "releasedAt": "2026-06-22",
+    "releasedAt": "2026-06-23",
     "repoPath": "gsheets-logger",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/gsheets-logger-v0.2.0/gsheets-logger.zip"
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/gsheets-logger-v0.2.1/gsheets-logger.zip",
+    "i18n": {
+      "es": {
+        "name": "Registrador en Google Sheets",
+        "description": "Registra eventos de mensajes de WhatsApp en una hoja de Google Sheets mediante una cuenta de servicio.",
+        "config": {
+          "serviceAccountJson": {
+            "title": "JSON de cuenta de servicio"
+          },
+          "spreadsheetId": {
+            "title": "ID de hoja de cálculo"
+          },
+          "sheetTab": {
+            "title": "Nombre de la pestaña"
+          },
+          "flushIntervalSec": {
+            "title": "Intervalo de volcado (segundos)"
+          },
+          "flushBatchSize": {
+            "title": "Volcar cuando las filas en búfer lleguen a"
+          }
+        }
+      },
+      "fr": {
+        "name": "Journal Google Sheets",
+        "description": "Enregistre les événements de messages WhatsApp dans une feuille Google Sheets via un compte de service.",
+        "config": {
+          "serviceAccountJson": {
+            "title": "JSON du compte de service"
+          },
+          "spreadsheetId": {
+            "title": "ID de la feuille de calcul"
+          },
+          "sheetTab": {
+            "title": "Nom de l'onglet"
+          },
+          "flushIntervalSec": {
+            "title": "Intervalle de vidage (secondes)"
+          },
+          "flushBatchSize": {
+            "title": "Vider quand les lignes en mémoire tampon atteignent"
+          }
+        }
+      },
+      "it": {
+        "name": "Logger su Google Sheets",
+        "description": "Registra gli eventi dei messaggi WhatsApp in un foglio Google Sheets tramite un account di servizio.",
+        "config": {
+          "serviceAccountJson": {
+            "title": "JSON dell'account di servizio"
+          },
+          "spreadsheetId": {
+            "title": "ID del foglio di calcolo"
+          },
+          "sheetTab": {
+            "title": "Nome della scheda"
+          },
+          "flushIntervalSec": {
+            "title": "Intervallo di svuotamento (secondi)"
+          },
+          "flushBatchSize": {
+            "title": "Svuota quando le righe nel buffer raggiungono"
+          }
+        }
+      },
+      "ar": {
+        "name": "مسجّل Google Sheets",
+        "description": "يسجّل أحداث رسائل WhatsApp في جدول بيانات Google Sheets عبر حساب خدمة.",
+        "config": {
+          "serviceAccountJson": {
+            "title": "JSON حساب الخدمة"
+          },
+          "spreadsheetId": {
+            "title": "معرّف جدول البيانات"
+          },
+          "sheetTab": {
+            "title": "اسم علامة التبويب"
+          },
+          "flushIntervalSec": {
+            "title": "فترة المزامنة (بالثواني)"
+          },
+          "flushBatchSize": {
+            "title": "مزامنة عند بلوغ الصفوف المحفوظة"
+          }
+        }
+      },
+      "he": {
+        "name": "רשומן Google Sheets",
+        "description": "מתעד אירועי הודעות WhatsApp בגיליון Google Sheets דרך חשבון שירות.",
+        "config": {
+          "serviceAccountJson": {
+            "title": "JSON של חשבון השירות"
+          },
+          "spreadsheetId": {
+            "title": "מזהה הגיליון"
+          },
+          "sheetTab": {
+            "title": "שם הלשונית"
+          },
+          "flushIntervalSec": {
+            "title": "מרווח שטיפה (שניות)"
+          },
+          "flushBatchSize": {
+            "title": "שטוף כשהשורות במאגר מגיעות ל"
+          }
+        }
+      },
+      "te": {
+        "name": "Google Sheets లాగర్",
+        "description": "సర్వీస్ అకౌంట్ ద్వారా WhatsApp సందేశ ఈవెంట్‌లను Google Sheets లో నమోదు చేస్తుంది.",
+        "config": {
+          "serviceAccountJson": {
+            "title": "సర్వీస్ అకౌంట్ JSON"
+          },
+          "spreadsheetId": {
+            "title": "స్ప్రెడ్‌షీట్ ID"
+          },
+          "sheetTab": {
+            "title": "షీట్ ట్యాబ్ పేరు"
+          },
+          "flushIntervalSec": {
+            "title": "ఫ్లష్ విరామం (సెకన్లు)"
+          },
+          "flushBatchSize": {
+            "title": "బఫర్ చేసిన వరుసలు ఈ సంఖ్యకు చేరినప్పుడు ఫ్లష్ చేయి"
+          }
+        }
+      },
+      "zh-CN": {
+        "name": "Google Sheets 日志记录器",
+        "description": "通过服务账号将 WhatsApp 消息事件记录到 Google Sheets。",
+        "config": {
+          "serviceAccountJson": {
+            "title": "服务账号 JSON"
+          },
+          "spreadsheetId": {
+            "title": "电子表格 ID"
+          },
+          "sheetTab": {
+            "title": "工作表标签名称"
+          },
+          "flushIntervalSec": {
+            "title": "刷新间隔（秒）"
+          },
+          "flushBatchSize": {
+            "title": "缓冲行数达到时刷新"
+          }
+        }
+      },
+      "zh-HK": {
+        "name": "Google Sheets 日誌記錄器",
+        "description": "透過服務帳號將 WhatsApp 訊息事件記錄到 Google Sheets。",
+        "config": {
+          "serviceAccountJson": {
+            "title": "服務帳號 JSON"
+          },
+          "spreadsheetId": {
+            "title": "試算表 ID"
+          },
+          "sheetTab": {
+            "title": "工作表標籤名稱"
+          },
+          "flushIntervalSec": {
+            "title": "排清間隔（秒）"
+          },
+          "flushBatchSize": {
+            "title": "緩衝行數達到時排清"
+          }
+        }
+      }
+    }
   }
 ]

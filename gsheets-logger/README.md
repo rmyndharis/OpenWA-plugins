@@ -13,8 +13,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `gsheets-logger` |
-| **Version** | 0.2.0 |
-| **Released** | 2026-06-22 |
+| **Version** | 0.2.1 |
+| **Released** | 2026-06-23 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
