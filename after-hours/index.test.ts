@@ -44,3 +44,13 @@ test('allowReply enforces the per-chat cooldown and caps the map', () => {
   assert.equal(big.size, 5000);
   assert.equal(big.has('k-0'), false);
 });
+
+test('allowReply eviction is recency-aware: re-touching a key protects it', () => {
+  const map = new Map<string, number>();
+  for (let i = 0; i < 5000; i++) allowReply(map, `k-${i}`, i, 0);
+  allowReply(map, 'k-0', 10000, 0); // re-touch -> most recently used
+  allowReply(map, 'k-new', 10001, 0); // overflow -> evict genuinely-oldest
+  assert.equal(map.size, 5000);
+  assert.equal(map.has('k-0'), true); // protected by recent touch
+  assert.equal(map.has('k-1'), false); // now the oldest, evicted
+});

@@ -41,12 +41,13 @@ export function parseConfig(raw: Record<string, unknown>): { config: AfterHoursC
 }
 
 /**
- * Decide whether an after-hours reply may go to `key` now. On allow, records `nowMs` and caps the map
- * (drop oldest). `cooldownMs` of 0 always allows.
+ * Decide whether an after-hours reply may go to `key` now. On allow, records `nowMs` (re-inserting so
+ * the map evicts least-recently-used) and caps the map by dropping the LRU entry. `cooldownMs` of 0 always allows.
  */
 export function allowReply(map: Map<string, number>, key: string, nowMs: number, cooldownMs: number): boolean {
   const last = map.get(key);
   if (last !== undefined && nowMs - last < cooldownMs) return false;
+  map.delete(key); // re-insert so iteration order tracks recency (LRU by touch)
   map.set(key, nowMs);
   if (map.size > MAX_COOLDOWN_ENTRIES) {
     const oldest = map.keys().next().value as string | undefined;
