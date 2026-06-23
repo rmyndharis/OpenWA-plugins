@@ -9,7 +9,7 @@
     "build": "node package.mjs gsheets-logger",
     "catalog": "node scripts/catalog.mjs",
     "catalog:check": "node scripts/catalog.mjs --check",
-    "test": "node --import tsx --test \"gsheets-logger/*.test.ts\" \"faq-bot/*.test.ts\"",
+    "test": "node --import tsx --test \"gsheets-logger/*.test.ts\" \"faq-bot/*.test.ts\" \"after-hours/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

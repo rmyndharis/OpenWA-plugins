@@ -1,0 +1,34 @@
+{
+  "id": "after-hours",
+  "name": "After-Hours Auto-Reply",
+  "version": "0.1.0",
+  "type": "extension",
+  "main": "dist/index.js",
+  "description": "Auto-replies with a configurable away/closing message to messages received outside business hours.",
+  "author": "Yudhi Armyndharis <yudhi@rmyndharis.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/after-hours",
+  "repository": "https://github.com/rmyndharis/OpenWA-plugins",
+  "keywords": ["after-hours", "business-hours", "away", "auto-reply", "whatsapp", "openwa"],
+  "status": "stable",
+  "minOpenWAVersion": "0.6.2",
+  "testedOpenWAVersion": "0.6.2",
+  "provides": ["auto-reply"],
+  "permissions": ["messages:send"],
+  "sessions": ["*"],
+  "hooks": ["message:received"],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "schedule": { "type": "string", "required": true, "title": "Weekly schedule (JSON)",
+        "description": "Object mapping mon..sun to \"HH:MM-HH:MM\" or null (closed), e.g. {\"mon\":\"09:00-17:00\",\"sat\":\"09:00-13:00\",\"sun\":null}." },
+      "timezone": { "type": "string", "default": "UTC", "title": "IANA timezone",
+        "description": "e.g. Asia/Jakarta. The schedule is interpreted in this timezone." },
+      "awayMessage": { "type": "string", "required": true, "title": "After-hours reply",
+        "description": "Sent when a message arrives outside business hours." },
+      "cooldownSec": { "type": "number", "default": 3600, "title": "Cooldown (seconds per chat)",
+        "description": "Minimum seconds between after-hours replies to the same chat. 0 = reply every time." },
+      "respondInGroups": { "type": "boolean", "default": false, "title": "Also respond in group chats" }
+    }
+  }
+}
