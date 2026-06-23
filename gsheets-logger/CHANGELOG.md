@@ -8,6 +8,15 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-06-23
+
+### Fixed
+
+- `flushIntervalSec` and `flushBatchSize` are now clamped to safe positive values. A non-numeric or
+  zero/negative interval previously coerced to `NaN`, which made the flush timer fire roughly every
+  millisecond (a hot-loop that burns CPU and Google Sheets API quota). Invalid values now fall back to
+  the documented defaults (5s / 20 rows).
+
 ## [0.2.1] — 2026-06-23
 
 ### Added

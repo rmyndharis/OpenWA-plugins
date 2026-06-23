@@ -1,7 +1,7 @@
 {
   "id": "gsheets-logger",
   "name": "Google Sheets Logger",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Logs WhatsApp message events to a Google Sheet via a service account.",

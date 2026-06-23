@@ -35,13 +35,17 @@ export function parseConfig(raw: Record<string, unknown>): { config: LoggerConfi
     throw new Error('gsheets-logger: serviceAccountJson missing client_email/private_key');
   }
 
+  // Clamp to safe positives: a non-numeric interval coerces to NaN, and setInterval(NaN) fires at ~1ms
+  // (a flush hot-loop / Sheets-quota burn). A NaN batch size silently disables the size trigger.
+  const flushIntervalSec = Number(raw.flushIntervalSec ?? 5);
+  const flushBatchSize = Number(raw.flushBatchSize ?? 20);
   return {
     config: {
       serviceAccountJson,
       spreadsheetId,
       sheetTab: String(raw.sheetTab ?? 'Logs'),
-      flushIntervalSec: Number(raw.flushIntervalSec ?? 5),
-      flushBatchSize: Number(raw.flushBatchSize ?? 20),
+      flushIntervalSec: Number.isFinite(flushIntervalSec) && flushIntervalSec > 0 ? flushIntervalSec : 5,
+      flushBatchSize: Number.isFinite(flushBatchSize) && flushBatchSize >= 1 ? flushBatchSize : 20,
     },
     sa,
   };
