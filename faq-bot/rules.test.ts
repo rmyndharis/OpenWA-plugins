@@ -43,6 +43,31 @@ test('parseRules skips a catastrophic-backtracking regex (nested unbounded quant
   assert.deepEqual(skipped, ['(a+)+$', '(\\w+\\s?)*$']);
 });
 
+test('parseRules rejects nested unbounded quantifiers hidden behind extra groups', () => {
+  const { rules, skipped } = parseRules(
+    JSON.stringify([
+      { mode: 'regex', pattern: '((a+))+$', reply: 'evil' },
+      { mode: 'regex', pattern: '(((a+)))*', reply: 'evil2' },
+      { mode: 'regex', pattern: '((\\w+\\s?))*$', reply: 'evil3' },
+      { mode: 'contains', pattern: 'hi', reply: 'hello' },
+    ]),
+  );
+  assert.equal(rules.length, 1);
+  assert.deepEqual(skipped, ['((a+))+$', '(((a+)))*', '((\\w+\\s?))*$']);
+});
+
+test('parseRules keeps grouped patterns that carry only a single quantifier', () => {
+  const { rules, skipped } = parseRules(
+    JSON.stringify([
+      { mode: 'regex', pattern: '((ab)+)', reply: 'a' },
+      { mode: 'regex', pattern: '(a+)', reply: 'b' },
+      { mode: 'regex', pattern: '((cat|dog))', reply: 'c' },
+    ]),
+  );
+  assert.equal(skipped.length, 0);
+  assert.equal(rules.length, 3);
+});
+
 test('parseRules keeps safe regexes (single/non-nested quantifiers, lookahead)', () => {
   const { rules, skipped } = parseRules(
     JSON.stringify([
