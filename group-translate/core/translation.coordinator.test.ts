@@ -442,4 +442,37 @@ describe('TranslationCoordinator', () => {
       }),
     );
   });
+
+  test('a sender wid of __proto__ does not pollute Object.prototype', async () => {
+    const { store, gateway, translator } = makeDeps(freshState({ active: true, announced: true }));
+    const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+    await c.handleMessage('s', msg({ author: '__proto__', pushName: 'EVIL', body: 'hola amigo mio' }));
+    const leaked = (Object.prototype as Record<string, unknown>).pushName;
+    delete (Object.prototype as Record<string, unknown>).pushName; // cleanup regardless of assertion outcome
+    assert.equal(leaked, undefined, 'Object.prototype must not be polluted via a crafted participant wid');
+  });
+
+  test('concurrent first messages for the same group announce only once', async () => {
+    let current: GroupState = freshState({ active: false, announced: false });
+    const sends: string[] = [];
+    const store: ConfigStore = {
+      load: async () => { await Promise.resolve(); return JSON.parse(JSON.stringify(current)) as GroupState; },
+      save: async (s: GroupState) => { await Promise.resolve(); current = JSON.parse(JSON.stringify(s)) as GroupState; },
+    };
+    const gateway: ChatGateway = {
+      sendText: async (_s: string, _c: string, text: string) => { await Promise.resolve(); sends.push(text); },
+      sendCombinedReply: async () => {},
+      getGroupAdmins: async () => [],
+    };
+    const translator: Translator = {
+      detect: async () => ({ lang: 'en', confidence: 1 }), translate: async () => '',
+      languages: async () => ['en'], isHealthy: () => true,
+    };
+    const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+    await Promise.all([
+      c.handleMessage('s', msg({ id: 'm1', body: 'hello there' })),
+      c.handleMessage('s', msg({ id: 'm2', body: 'hello again' })),
+    ]);
+    assert.equal(sends.length, 1, 'the help announcement must be sent once, not duplicated by a load/save race');
+  });
 });

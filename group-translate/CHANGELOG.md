@@ -8,6 +8,19 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.0.3] — 2026-06-23
+
+### Fixed
+
+- Participant lookups now reject prototype keys (`__proto__`, `constructor`, `prototype`) and test
+  existence with `hasOwnProperty`, so a crafted participant/target id can no longer read or write
+  `Object.prototype`.
+- Concurrent messages for the same group are serialized through a per-(session, chat) lock, closing a
+  load→mutate→save race that could duplicate the help announcement or drop a participant-language update.
+  The lock map self-evicts when a chat's queue drains.
+- A LibreTranslate `/translate` response without a string `translatedText` now fails the call (counted by
+  the circuit breaker and excluded from the reply) instead of posting the literal text `undefined`.
+
 ## [1.0.2] — 2026-06-23
 
 ### Fixed
