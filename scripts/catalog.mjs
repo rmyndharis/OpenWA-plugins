@@ -58,6 +58,7 @@ function buildEntry(id) {
     download: manifest.repository
       ? `${manifest.repository}/releases/download/${manifest.id}-v${manifest.version}/${manifest.id}.zip`
       : null,
+    ...(manifest.i18n ? { i18n: manifest.i18n } : {}),
   };
 }
 

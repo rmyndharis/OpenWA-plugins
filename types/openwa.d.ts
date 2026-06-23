@@ -102,6 +102,8 @@ export interface PluginManifest {
   configUi?: { entry: string; height?: number };
   /** Declarative config schema (rendered by the host into an authenticated form). */
   configSchema?: PluginConfigSchema;
+  /** Localization strings for the dashboard Catalog tab, keyed by BCP-47 locale tag. */
+  i18n?: PluginI18n;
   [key: string]: unknown;
 }
 
@@ -133,6 +135,22 @@ export interface PluginConfigSchema {
   type: 'object';
   properties: Record<string, PluginConfigField>;
 }
+
+/** Localized display text for a plugin or one of its config fields. */
+export interface PluginI18nText {
+  title?: string;
+  description?: string;
+}
+
+/** Translations for a single BCP-47 locale (e.g. "es", "zh-CN"). */
+export interface PluginI18nLocale {
+  name?: string;
+  description?: string;
+  config?: Record<string, PluginI18nText>;
+}
+
+/** Map of BCP-47 locale tag → locale translations. Set as `manifest.i18n`. */
+export type PluginI18n = Record<string, PluginI18nLocale>;
 
 export interface PluginContext {
   pluginId: string;
