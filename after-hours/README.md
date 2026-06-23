@@ -12,7 +12,7 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `after-hours` |
-| **Version** | 0.1.1 |
+| **Version** | 0.1.2 |
 | **Released** | 2026-06-23 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |

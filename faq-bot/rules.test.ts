@@ -31,6 +31,33 @@ test('parseRules skips an invalid regex but keeps valid rules', () => {
   assert.deepEqual(skipped, ['(']);
 });
 
+test('parseRules skips a catastrophic-backtracking regex (nested unbounded quantifiers)', () => {
+  const { rules, skipped } = parseRules(
+    JSON.stringify([
+      { mode: 'regex', pattern: '(a+)+$', reply: 'evil' },
+      { mode: 'regex', pattern: '(\\w+\\s?)*$', reply: 'evil2' },
+      { mode: 'contains', pattern: 'hi', reply: 'hello' },
+    ]),
+  );
+  assert.equal(rules.length, 1);
+  assert.deepEqual(skipped, ['(a+)+$', '(\\w+\\s?)*$']);
+});
+
+test('parseRules keeps safe regexes (single/non-nested quantifiers, lookahead)', () => {
+  const { rules, skipped } = parseRules(
+    JSON.stringify([
+      { mode: 'regex', pattern: '^/start', reply: 'a' },
+      { mode: 'regex', pattern: '(abc)+', reply: 'b' },
+      { mode: 'regex', pattern: '\\d{2,5}', reply: 'c' },
+      { mode: 'regex', pattern: 'a*b*c*', reply: 'd' },
+      { mode: 'regex', pattern: '(?=.*foo)', reply: 'e' },
+    ]),
+  );
+  assert.equal(skipped.length, 0);
+  assert.equal(rules.length, 5);
+  assert.equal(matchRule(rules, 'abcabc')?.reply, 'b');
+});
+
 test('matchRule: contains is case-insensitive substring; no match returns null', () => {
   const { rules } = parseRules(ok);
   assert.equal(matchRule(rules, 'Brp HARGAnya?')?.reply, 'Harga mulai 100rb');

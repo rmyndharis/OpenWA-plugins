@@ -8,6 +8,14 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-06-23
+
+### Changed
+
+- The per-chat cooldown map now evicts least-recently-used entries (re-inserting a chat on each reply)
+  instead of first-seen order, so a continuously-active chat keeps its cooldown when the map reaches its
+  cap rather than being evicted and allowed to bypass the throttle.
+
 ## [0.1.1] — 2026-06-23
 
 ### Added
