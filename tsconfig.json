@@ -15,6 +15,7 @@
     "after-hours/**/*.ts",
     "chat-flow/**/*.ts",
     "group-translate/**/*.ts",
+    "voice-transcription/**/*.ts",
     "types/**/*.d.ts"
   ]
 }

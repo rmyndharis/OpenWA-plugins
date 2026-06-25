@@ -8,6 +8,7 @@ function res(partial: { ok?: boolean; status?: number; json?: () => Promise<unkn
     ok: partial.ok ?? true,
     status: partial.status ?? 200,
     headers: {},
+    body: '',
     text: async () => '',
     // PluginNetResponse.json is generic (<T>() => Promise<T>); a concrete fake needs the cast.
     json: (partial.json ?? (async () => ({}))) as PluginNetResponse['json'],

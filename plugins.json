@@ -974,5 +974,38 @@
         }
       }
     }
+  },
+  {
+    "id": "voice-transcription",
+    "name": "Voice Note Transcription",
+    "version": "1.0.0",
+    "type": "extension",
+    "status": "beta",
+    "description": "Transcribes inbound WhatsApp voice notes to text via an OpenAI-compatible speech-to-text backend (self-hosted Speaches/faster-whisper or hosted Groq/OpenAI) and delivers a `message.transcription` event to your webhook — so bots and AI can read and reply to audio. Off the message-delivery path; disabled until enabled.",
+    "author": "Yudhi Armyndharis <yudhi@rmyndharis.com>",
+    "license": "MIT",
+    "keywords": [
+      "transcription",
+      "speech-to-text",
+      "stt",
+      "whisper",
+      "voice",
+      "audio",
+      "whatsapp",
+      "openwa"
+    ],
+    "minOpenWAVersion": "0.7.0",
+    "testedOpenWAVersion": "0.7.3",
+    "releasedAt": "2026-06-25",
+    "repoPath": "voice-transcription",
+    "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
+    "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/voice-transcription",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/voice-transcription-v1.0.0/voice-transcription.zip",
+    "i18n": {
+      "es": {
+        "name": "Transcripción de Notas de Voz",
+        "description": "Transcribe las notas de voz entrantes de WhatsApp a texto mediante un backend de voz a texto compatible con OpenAI (Speaches/faster-whisper autoalojado o Groq/OpenAI) y entrega un evento message.transcription a tu webhook, para que los bots y la IA puedan leer y responder al audio. Fuera de la ruta de entrega de mensajes; desactivado hasta que se habilite."
+      }
+    }
   }
 ]

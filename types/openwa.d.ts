@@ -68,14 +68,24 @@ export interface PluginEngineReadCapability {
 export interface PluginNetRequestInit {
   method?: string;
   headers?: Record<string, string>;
-  body?: string;
+  // The sandbox bridges the request to the host via structuredClone, which preserves typed arrays —
+  // so a binary body (e.g. an assembled multipart/form-data upload) is sent intact. A string body is
+  // UTF-8 encoded by the host fetch, so binary MUST be passed as Uint8Array/Buffer, not a string.
+  body?: string | Uint8Array;
   timeoutMs?: number;
 }
 
 export interface PluginNetResponse {
   ok: boolean;
   status: number;
+  statusText?: string;
   headers: Record<string, string>;
+  // The actual field the sandbox runtime returns: the response body, read host-side (capped at 10 MiB)
+  // and handed back as a UTF-8 string. Parse JSON with `JSON.parse(res.body)`.
+  body: string;
+  // NOTE: these method forms are NOT provided by the sandbox runtime (functions cannot cross the
+  // worker structuredClone boundary). Use `body` above; the methods are retained only so older
+  // plugins still type-check. Calling them at runtime throws.
   text(): Promise<string>;
   json<T = unknown>(): Promise<T>;
   arrayBuffer(): Promise<ArrayBuffer>;
@@ -190,4 +200,14 @@ export interface IncomingMessage {
   senderPhone?: string | null;
   mentionedIds?: string[];
   contact?: { name?: string; pushName?: string };
+  // Inbound media, materialized by the adapter before the hook fires (both engines). `data` is base64
+  // and ABSENT when `omitted` is true (the payload exceeded the inbound size cap; `sizeBytes` is still
+  // set). For a voice note `type` is `'voice'` and `mimetype` is typically `'audio/ogg; codecs=opus'`.
+  media?: {
+    mimetype: string;
+    filename?: string;
+    data?: string;
+    omitted?: boolean;
+    sizeBytes?: number;
+  };
 }
