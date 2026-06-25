@@ -83,7 +83,9 @@ export class LibreTranslateClient implements Translator {
       if (!res.ok) {
         throw new Error(`LibreTranslate ${path} -> HTTP ${res.status}`);
       }
-      const data = await res.json();
+      // The sandbox runtime hands back the body as a string (no res.json() — functions can't cross the
+      // worker boundary), so parse it here. A malformed/empty body throws and is counted as a failure.
+      const data = JSON.parse(res.body);
       this.consecutiveFailures = 0;
       return data;
     } catch (err) {

@@ -13,8 +13,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `group-translate` |
-| **Version** | 1.0.3 |
-| **Released** | 2026-06-23 |
+| **Version** | 1.0.4 |
+| **Released** | 2026-06-25 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |

@@ -3,15 +3,18 @@ import assert from 'node:assert/strict';
 import type { PluginNetCapability, PluginNetResponse } from '../types/openwa';
 import { LibreTranslateClient } from './libretranslate.client.ts';
 
-function res(partial: { ok?: boolean; status?: number; json?: () => Promise<unknown> }): PluginNetResponse {
+function res(partial: { ok?: boolean; status?: number; body?: unknown }): PluginNetResponse {
   return {
     ok: partial.ok ?? true,
     status: partial.status ?? 200,
     headers: {},
-    body: '',
+    // The sandbox runtime returns the response body as a string and provides NO .json() (functions
+    // can't cross the worker structuredClone boundary). The client must JSON.parse(res.body).
+    body: partial.body === undefined ? '{}' : JSON.stringify(partial.body),
     text: async () => '',
-    // PluginNetResponse.json is generic (<T>() => Promise<T>); a concrete fake needs the cast.
-    json: (partial.json ?? (async () => ({}))) as PluginNetResponse['json'],
+    json: (async () => {
+      throw new Error('res.json() is not available in the sandbox runtime');
+    }) as PluginNetResponse['json'],
     arrayBuffer: async () => new ArrayBuffer(0),
   };
 }
@@ -31,20 +34,20 @@ function fakeNet(handlers: Array<(url: string) => Promise<PluginNetResponse>>) {
 }
 
 test('translate posts and returns translatedText on success', async () => {
-  const { net, calls } = fakeNet([async () => res({ json: async () => ({ translatedText: 'hola' }) })]);
+  const { net, calls } = fakeNet([async () => res({ body: { translatedText: 'hola' } })]);
   const c = new LibreTranslateClient({ url: 'http://lt:7001/', timeoutMs: 4000, net });
   assert.equal(await c.translate('hi', 'en', 'es'), 'hola');
   assert.equal(calls[0], 'http://lt:7001/translate'); // trailing slash trimmed
 });
 
 test('translate throws when the response lacks a translatedText string', async () => {
-  const { net } = fakeNet([async () => res({ json: async () => ({}) })]); // partial/empty body
+  const { net } = fakeNet([async () => res({ body: {} })]); // partial/empty body
   const c = new LibreTranslateClient({ url: 'http://lt:7001', timeoutMs: 4000, net });
   await assert.rejects(c.translate('hi', 'en', 'es'), /translatedText/);
 });
 
 test('detect returns the top result', async () => {
-  const { net } = fakeNet([async () => res({ json: async () => [{ language: 'en', confidence: 0.9 }] })]);
+  const { net } = fakeNet([async () => res({ body: [{ language: 'en', confidence: 0.9 }] })]);
   const c = new LibreTranslateClient({ url: 'http://lt:7001', timeoutMs: 4000, net });
   assert.deepEqual(await c.detect('hello'), { lang: 'en', confidence: 0.9 });
 });
@@ -69,7 +72,7 @@ test('opens the circuit after the failure threshold and short-circuits the next 
 
 test('a success resets the consecutive-failure counter', async () => {
   const fail = async () => { throw new Error('boom'); };
-  const ok = async () => res({ json: async () => ({ translatedText: 'x' }) });
+  const ok = async () => res({ body: { translatedText: 'x' } });
   const { net } = fakeNet([fail, ok]);
   const c = new LibreTranslateClient({ url: 'http://lt:7001', timeoutMs: 4000, net, failureThreshold: 3 });
   await assert.rejects(c.translate('a', 'en', 'es'));
