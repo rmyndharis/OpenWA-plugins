@@ -8,6 +8,15 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.0.4] — 2026-06-25
+
+### Fixed
+
+- Translations now actually apply. The LibreTranslate client read the response with `res.json()`, but the
+  sandboxed `ctx.net.fetch` returns the body as a string and provides no `.json()` method (functions can't
+  cross the worker boundary) — so every call threw and failed open, a silent no-op. The client now parses
+  `res.body` directly.
+
 ## [1.0.3] — 2026-06-23
 
 ### Fixed
