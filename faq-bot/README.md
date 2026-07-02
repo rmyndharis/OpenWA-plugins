@@ -13,8 +13,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `faq-bot` |
-| **Version** | 0.1.4 |
-| **Released** | 2026-06-24 |
+| **Version** | 0.1.5 |
+| **Released** | 2026-07-02 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -85,7 +85,12 @@ on v0.6.0/v0.6.1 a disable + re-enable is needed after changing rules.
 ## Security
 
 `regex` patterns are operator-authored (trusted) and tested against at most the first 1000 characters
-of a message; the sandbox hook timeout bounds a runaway pattern, so the host is never stalled.
+of a message. At parse time every pattern is screened for catastrophic-backtracking shapes — nested,
+adjacent-overlapping, and repeated-variable-width quantifiers (e.g. `(a+)+`, `.*.*`, `(a?){40}`) — and
+an unsafe one is skipped with a warning. This parse-time screen is the real safeguard: the sandbox hook
+timeout lets the host proceed but cannot interrupt a synchronous regex already running in the plugin
+worker, so a pattern that slips through would still pin that worker. Overlapping-alternation patterns
+(e.g. `(a|a)*`) are a known class the screen does not yet cover.
 
 ## Changelog
 
