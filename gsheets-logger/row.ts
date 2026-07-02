@@ -8,6 +8,13 @@ export const COLUMNS = [
 type FailedPayload = { sessionId?: string; error?: string; input?: { chatId?: string; text?: string } };
 type AckPayload = { messageId?: string; status?: string };
 
+// Google Sheets rejects a cell longer than 50 000 chars with a 400 that fails the whole append batch;
+// one over-limit inbound body would then stall all logging (the batch is retained and retried forever).
+// Cap every cell as the final step so a single long message can't poison the pipeline. Applied after the
+// quote prefix so the guarded prefix is never truncated away.
+const MAX_CELL = 50000;
+const cap = (s: string): string => (s.length > MAX_CELL ? s.slice(0, MAX_CELL) : s);
+
 // Neutralize CSV / spreadsheet formula injection on export/re-import (values are already written
 // with valueInputOption=RAW, so Sheets never evaluates them — this is defense-in-depth for CSV
 // round-trips). A leading single quote makes a spreadsheet treat the cell as literal text.
@@ -16,16 +23,16 @@ type AckPayload = { messageId?: string; status?: string };
 // a leading + - = @ is never legitimate.
 function strId(value: unknown): string {
   const s = value == null ? '' : String(value);
-  return /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  return cap(/^[=+\-@\t\r]/.test(s) ? `'${s}` : s);
 }
 
-// `strText` is for free-text fields (message body, sender name, error). It omits `+` and `-` because
-// those legitimately start human content (e.g. a phone number "+62812…" or "-5°C") and quoting them
-// corrupts the value on CSV export. `=` and `@` (plus tab/CR) remain guarded — they never start
-// normal prose and are the meaningful formula-injection vectors.
+// `strText` is for free-text fields (message body, sender name, error). A leading `+`/`-` is quoted
+// only when it is NOT the start of a number (`(?![\d.])`), so a phone number "+62812…" or "-5°C" stays
+// readable while a formula like "-IMPORTXML(…)" / "+ HYPERLINK(…)" is neutralized. `=` and `@` (plus
+// tab/CR) never start normal prose and are always guarded.
 function strText(value: unknown): string {
   const s = value == null ? '' : String(value);
-  return /^[=@\t\r]/.test(s) ? `'${s}` : s;
+  return cap(/^[=@\t\r]/.test(s) || /^[+\-](?![\d.])/.test(s) ? `'${s}` : s);
 }
 
 export function buildRow(ctx: HookContext): string[] {
