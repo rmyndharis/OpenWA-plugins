@@ -8,6 +8,24 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.1.5] — 2026-07-02
+
+### Fixed
+
+- The regex safety check now rejects two further catastrophic-backtracking classes it previously
+  missed: **adjacent overlapping quantifiers** in one concatenation (e.g. `.*.*.*`, `\w*\w*` —
+  polynomial) and a **group repeated `{n}`/`*`/`+` times whose body has a variable-width quantifier**
+  (e.g. `(a?){40}` — exponential). A pattern that lands in either class is skipped with a warning like
+  any other unusable pattern, so a crafted 1000-character message can no longer pin the plugin worker.
+  Ordinary patterns — adjacent *disjoint* classes (`a*b*c*`, `order\s+\d+`), a wildcard separated by a
+  literal (`.*urgent.*`), and fixed-width nesting (`(\d{2}){3}`) — are unaffected.
+
+### Changed
+
+- The README **Security** section now states accurately that the parse-time screen (not the sandbox
+  hook timeout) is what bounds a runaway pattern, and notes the still-uncovered overlapping-alternation
+  class (e.g. `(a|a)*`).
+
 ## [0.1.4] — 2026-06-24
 
 ### Changed

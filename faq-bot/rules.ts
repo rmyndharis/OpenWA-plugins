@@ -14,55 +14,105 @@ const MAX_REGEX_INPUT = 1000;
 /** Reject absurdly long patterns outright. */
 const MAX_PATTERN_LENGTH = 1000;
 
-/** Unbounded quantifier (`*`, `+`, or open-ended `{n,}`) at position `i`; returns its source length. */
-function unboundedQuantifierAt(p: string, i: number): { unbounded: boolean; len: number } {
+/** The single atom starting at `i` (an escaped token, a `[...]` class, `.`, or a literal) and its key
+ *  for overlap comparison. `.` and a `[...]` class are compared by source; `.` (key `ANY`) overlaps any
+ *  atom. Two atoms "overlap" when they can match a common character. */
+function atomAt(p: string, i: number): { key: string; len: number } {
   const c = p[i];
-  if (c === '*' || c === '+') return { unbounded: true, len: 1 };
-  if (c === '{') {
-    const close = p.indexOf('}', i);
-    if (close === -1) return { unbounded: false, len: 1 };
-    const m = /^(\d+)(,(\d*))?$/.exec(p.slice(i + 1, close));
-    if (!m) return { unbounded: false, len: 1 };
-    return { unbounded: m[2] !== undefined && (m[3] ?? '') === '', len: close - i + 1 };
+  if (c === '\\') return { key: p.slice(i, i + 2), len: 2 };
+  if (c === '[') {
+    let j = i + 1;
+    if (p[j] === '^') j++;
+    if (p[j] === ']') j++; // a `]` as the first member is a literal, not the close
+    while (j < p.length && p[j] !== ']') { if (p[j] === '\\') j++; j++; }
+    const end = j < p.length ? j + 1 : p.length;
+    return { key: p.slice(i, end), len: end - i };
   }
-  return { unbounded: false, len: 0 };
+  if (c === '.') return { key: 'ANY', len: 1 };
+  return { key: c, len: 1 };
 }
 
+/** The quantifier at `i`, if any. `min` = minimum repeats; `repeat2` = can apply its atom ≥2 times;
+ *  `variable` = matches a variable count (so repeating it can backtrack); `unbounded` = no upper limit. */
+function quantifierAt(
+  p: string,
+  i: number,
+): { present: boolean; len: number; min: number; unbounded: boolean; repeat2: boolean; variable: boolean } {
+  const none = { present: false, len: 0, min: 1, unbounded: false, repeat2: false, variable: false };
+  const lazy = (len: number) => (p[i + len] === '?' ? len + 1 : len); // trailing `?` = lazy modifier
+  const c = p[i];
+  if (c === '*') return { present: true, len: lazy(1), min: 0, unbounded: true, repeat2: true, variable: true };
+  if (c === '+') return { present: true, len: lazy(1), min: 1, unbounded: true, repeat2: true, variable: true };
+  if (c === '?') return { present: true, len: lazy(1), min: 0, unbounded: false, repeat2: false, variable: true };
+  if (c === '{') {
+    const close = p.indexOf('}', i);
+    if (close === -1) return none;
+    const m = /^(\d+)(,(\d*))?$/.exec(p.slice(i + 1, close));
+    if (!m) return none;
+    const min = Number(m[1]);
+    const len = lazy(close - i + 1);
+    if (m[2] === undefined) return { present: true, len, min, unbounded: false, repeat2: min >= 2, variable: false }; // {n}
+    if ((m[3] ?? '') === '') return { present: true, len, min, unbounded: true, repeat2: true, variable: true }; // {n,}
+    const max = Number(m[3]); // {n,m}
+    return { present: true, len, min, unbounded: false, repeat2: max >= 2, variable: max > min };
+  }
+  return none;
+}
+
+const overlaps = (a: string, b: string): boolean => a === 'ANY' || b === 'ANY' || a === b;
+
 /**
- * Conservatively reject patterns prone to catastrophic backtracking — an unbounded quantifier applied
- * to a group that itself contains an unbounded quantifier, e.g. `(a+)+`, `(\w+\s?)*`. Accepted patterns
- * run on the native engine unchanged (full ECMAScript semantics). Does not catch every ReDoS class
- * (e.g. overlapping alternation), but closes the dominant nested-quantifier class; fails closed.
+ * Conservatively reject patterns prone to catastrophic backtracking. Three classes are closed:
+ *  1. an unbounded quantifier on a group that itself contains one — `(a+)+`, `((a+))+`, `(\w+\s?)*`;
+ *  2. two adjacent unbounded quantifiers over overlapping atoms in one concatenation — `.*.*`, `\w*\w*`
+ *     (polynomial); a mandatory atom or a group boundary between them breaks the chain (`.*x.*` is fine);
+ *  3. a group repeated ≥2 times whose body carries a variable-width quantifier — `(a?){40}` (exponential).
+ * Accepted patterns run on the native engine unchanged. Overlapping-alternation (`(a|a)*`) is still not
+ * modelled — a known, documented residual. Fails closed on anything it can't parse cleanly.
  */
 export function isSafeRegexPattern(p: string): boolean {
   if (p.length > MAX_PATTERN_LENGTH) return false;
-  const stack: { hasUnbounded: boolean }[] = [];
-  let inClass = false;
-  for (let i = 0; i < p.length; i++) {
+  const stack: { hasUnbounded: boolean; hasVariable: boolean }[] = [];
+  // Rule 2 state: the key of the previous unbounded-quantified atom in the current flat concatenation,
+  // or null after a mandatory atom / `|` / group boundary (which break adjacency).
+  let prevUnbounded: string | null = null;
+  let i = 0;
+  while (i < p.length) {
     const c = p[i];
-    if (c === '\\') { i++; continue; } // escaped atom
-    if (inClass) { if (c === ']') inClass = false; continue; }
-    if (c === '[') { inClass = true; continue; }
-    if (c === '(') { stack.push({ hasUnbounded: false }); continue; }
-    if (c === ')') {
-      const group = stack.pop() ?? { hasUnbounded: false };
-      const q = unboundedQuantifierAt(p, i + 1);
-      if (q.unbounded) {
-        if (group.hasUnbounded) return false; // nested unbounded quantifier -> catastrophic
-        if (stack.length) stack[stack.length - 1].hasUnbounded = true; // quantified group repeats too
-        i += q.len;
-      } else if (group.hasUnbounded && stack.length) {
-        // An inner unbounded quantifier propagates to the enclosing group even when this group is not
-        // itself quantified, so a wrapping group can't hide it (e.g. ((a+))+ must still be rejected).
-        stack[stack.length - 1].hasUnbounded = true;
-      }
+
+    if (c === '|') { prevUnbounded = null; i++; continue; }
+    if (c === '(') {
+      stack.push({ hasUnbounded: false, hasVariable: false });
+      prevUnbounded = null;
+      i++;
+      if (p[i] === '?') { i++; if (p[i] === '<') i++; if (p[i] === ':' || p[i] === '=' || p[i] === '!') i++; }
       continue;
     }
-    const q = unboundedQuantifierAt(p, i);
+    if (c === ')') {
+      const frame = stack.pop() ?? { hasUnbounded: false, hasVariable: false };
+      const q = quantifierAt(p, i + 1);
+      if (q.unbounded && frame.hasUnbounded) return false; // (1) nested unbounded
+      if (q.repeat2 && frame.hasVariable) return false; // (3) repeated group with a variable-width body
+      if (stack.length) {
+        if (q.unbounded || frame.hasUnbounded) stack[stack.length - 1].hasUnbounded = true;
+        if (q.variable || frame.hasVariable) stack[stack.length - 1].hasVariable = true;
+      }
+      prevUnbounded = null; // a group boundary breaks flat adjacency (Rule 2)
+      i += 1 + q.len;
+      continue;
+    }
+
+    const atom = atomAt(p, i);
+    const q = quantifierAt(p, i + atom.len);
+    if (stack.length && q.variable) stack[stack.length - 1].hasVariable = true;
     if (q.unbounded) {
       if (stack.length) stack[stack.length - 1].hasUnbounded = true;
-      i += q.len - 1;
+      if (prevUnbounded !== null && overlaps(prevUnbounded, atom.key)) return false; // (2) adjacent overlap
+      prevUnbounded = atom.key;
+    } else if (!q.present || q.min >= 1) {
+      prevUnbounded = null; // a mandatory (non-skippable) atom breaks adjacency
     }
+    i += atom.len + q.len;
   }
   return true;
 }
