@@ -36,7 +36,8 @@ export function parseConfig(raw: Record<string, unknown>): { config: LoggerConfi
   }
 
   // Clamp to safe positives: a non-numeric interval coerces to NaN, and setInterval(NaN) fires at ~1ms
-  // (a flush hot-loop / Sheets-quota burn). A NaN batch size silently disables the size trigger.
+  // (a flush hot-loop / Sheets-quota burn). A NaN batch size silently disables the size trigger. A finite
+  // but sub-second interval (e.g. 0.001) is likewise a hot-loop, so floor it to 1s.
   const flushIntervalSec = Number(raw.flushIntervalSec ?? 5);
   const flushBatchSize = Number(raw.flushBatchSize ?? 20);
   return {
@@ -44,7 +45,7 @@ export function parseConfig(raw: Record<string, unknown>): { config: LoggerConfi
       serviceAccountJson,
       spreadsheetId,
       sheetTab: String(raw.sheetTab ?? 'Logs'),
-      flushIntervalSec: Number.isFinite(flushIntervalSec) && flushIntervalSec > 0 ? flushIntervalSec : 5,
+      flushIntervalSec: Number.isFinite(flushIntervalSec) && flushIntervalSec > 0 ? Math.max(1, flushIntervalSec) : 5,
       flushBatchSize: Number.isFinite(flushBatchSize) && flushBatchSize >= 1 ? flushBatchSize : 20,
     },
     sa,

@@ -172,3 +172,29 @@ test('a prototype-property name as input is an invalid option, never a false mat
     assert.deepEqual((storage.get(key) as { path: string[] }).path, [], `${evil} keeps the flow active`);
   }
 });
+
+test('group mode: different authors in the same chat get independent flow state', async () => {
+  const { ctx, storage } = makeCtx();
+  // alice and bob both message the same group; the 7th arg (actor) scopes state per participant.
+  await FlowEngine.processMessage(ctx, xyz, 'sess', 'grp@g.us', 'hello', 'a1', 'alice@c.us'); // alice: greeting
+  await FlowEngine.processMessage(ctx, xyz, 'sess', 'grp@g.us', 'hello', 'b1', 'bob@c.us');   // bob: greeting
+  // alice picks option 2 (which has a sub-option) → only ALICE's path advances to ['2'].
+  const r = await FlowEngine.processMessage(ctx, xyz, 'sess', 'grp@g.us', '2', 'a2', 'alice@c.us');
+  assert.equal(r, true);
+  const aliceKey = 'state__sess__grp@g.us|alice@c.us';
+  const bobKey = 'state__sess__grp@g.us|bob@c.us';
+  assert.deepEqual((storage.get(aliceKey) as { path: string[] }).path, ['2']); // alice advanced
+  assert.deepEqual((storage.get(bobKey) as { path: string[] }).path, []);      // bob untouched
+});
+
+test('sweepExpired deletes state entries past the TTL and keeps fresh ones', async () => {
+  const { ctx, storage } = makeCtx();
+  storage.set('state__s__fresh', { path: [], lastActive: Date.now() });
+  storage.set('state__s__stale', { path: [], lastActive: Date.now() - 20 * 60 * 1000 }); // 20 min > 15 min TTL
+  storage.set('other__key', { keep: true }); // non-state key must be left alone
+  const removed = await FlowEngine.sweepExpired(ctx);
+  assert.equal(removed, 1);
+  assert.equal(storage.has('state__s__stale'), false);
+  assert.equal(storage.has('state__s__fresh'), true);
+  assert.equal(storage.has('other__key'), true);
+});

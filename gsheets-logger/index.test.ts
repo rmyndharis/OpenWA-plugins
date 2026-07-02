@@ -36,6 +36,13 @@ test('parseConfig clamps non-numeric/non-positive flush interval and batch size 
   assert.equal(parseConfig({ ...base, flushBatchSize: 50 }).config.flushBatchSize, 50);
 });
 
+test('parseConfig floors a sub-second flush interval to >=1s (setInterval hot-loop guard)', () => {
+  const base = { spreadsheetId: 'sid', serviceAccountJson: validSa };
+  assert.equal(parseConfig({ ...base, flushIntervalSec: 0.001 }).config.flushIntervalSec, 1);
+  assert.equal(parseConfig({ ...base, flushIntervalSec: 0.5 }).config.flushIntervalSec, 1);
+  assert.equal(parseConfig({ ...base, flushIntervalSec: 10 }).config.flushIntervalSec, 10); // sane values unchanged
+});
+
 test('flushBuffer clears the buffer on success', async () => {
   const buffer = [['a'], ['b']];
   await flushBuffer(buffer, async () => {});

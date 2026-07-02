@@ -8,6 +8,22 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-07-02
+
+### Fixed
+
+- **Oversized cell no longer stalls logging.** A message body longer than Google Sheets' 50 000-char
+  cell limit made the whole append batch fail with a 400 that was retained and retried forever,
+  blocking all logging. Every cell is now capped at 50 000 chars, so one long message can't poison the
+  pipeline.
+- **Formula-injection guard on free-text fields extended to `+`/`-`.** A leading `+`/`-` is now quoted
+  when it is not the start of a number, so an attacker-controlled sender name or body like
+  `-IMPORTXML(…)` / `+ HYPERLINK(…)` is neutralized on CSV export, while a phone number (`+62812…`) or a
+  negative number (`-5°C`) is still written unquoted.
+- **Sub-second flush interval floored to 1s.** A finite but tiny `flushIntervalSec` (e.g. `0.001`) was
+  accepted and hot-looped the flush timer; it is now floored to 1 second (the NaN/0/negative clamp is
+  unchanged).
+
 ## [0.2.2] — 2026-06-23
 
 ### Fixed
