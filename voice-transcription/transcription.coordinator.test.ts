@@ -205,3 +205,11 @@ test('works chat-only when no webhook delivery is configured', async () => {
   await assert.doesNotReject(co.handle('s1', voiceMsg()));
   assert.equal(chatSends.length, 1);
 });
+
+test('a webhook delivery failure does not suppress the in-chat transcript delivery', async () => {
+  // The two sinks are independent: a 502 from the delivery webhook must not swallow the chat send.
+  const { co, chatSends, warns } = setup({ deliveryThrows: true, chatDelivery: 'self' });
+  await assert.doesNotReject(co.handle('s1', voiceMsg()));
+  assert.equal(chatSends.length, 1);   // chat sink still fired despite the webhook failure
+  assert.ok(warns.length >= 1);        // the webhook failure is still warned
+});

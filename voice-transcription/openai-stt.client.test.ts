@@ -1,7 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { PluginNetCapability, PluginNetRequestInit, PluginNetResponse } from '../types/openwa';
-import { OpenAiSttClient } from './openai-stt.client.ts';
+import { OpenAiSttClient, sanitizeContentType } from './openai-stt.client.ts';
+
+test('sanitizeContentType keeps a valid mimetype (codec-stripped) but rejects CRLF / garbage', () => {
+  assert.equal(sanitizeContentType('audio/ogg; codecs=opus'), 'audio/ogg'); // real PTT — codec stripped, kept
+  assert.equal(sanitizeContentType('audio/mpeg'), 'audio/mpeg');
+  assert.equal(sanitizeContentType('audio/x-wav'), 'audio/x-wav');
+  assert.equal(sanitizeContentType('audio/vnd.wave'), 'audio/vnd.wave');
+  // A CRLF-bearing mimetype must not reach the multipart part headers verbatim.
+  assert.equal(sanitizeContentType('audio/ogg\r\nContent-Disposition: form-data; name="prompt"'), 'audio/ogg');
+  assert.equal(sanitizeContentType(''), 'audio/ogg');
+  assert.equal(sanitizeContentType('not a mime type'), 'audio/ogg');
+});
 
 function res(partial: { ok?: boolean; status?: number; body?: string }): PluginNetResponse {
   return {

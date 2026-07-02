@@ -1,6 +1,14 @@
 import type { PluginNetCapability } from '../types/openwa';
 import { buildMultipartBody, MultipartField } from './multipart.ts';
 
+/** Derive the multipart part Content-Type from an untrusted media mimetype: strip the codec suffix, then
+ *  accept only a well-formed `type/subtype` token. Anything else (empty, spaces, an injected CRLF) falls
+ *  back to audio/ogg — the part filename is fixed to voice.ogg, so the decoder keys off that regardless. */
+export function sanitizeContentType(mimetype: string): string {
+  const token = mimetype.split(';')[0].trim();
+  return /^[\w.+-]+\/[\w.+-]+$/.test(token) ? token : 'audio/ogg';
+}
+
 export interface SttResult {
   text: string;
   language?: string;
@@ -80,7 +88,7 @@ export class OpenAiSttClient implements SttProvider {
     // Strip the codec suffix ("audio/ogg; codecs=opus" → "audio/ogg") and always name the part
     // `voice.ogg`: OpenAI-compatible servers key the decoder off the filename extension and reject a
     // bare ".opus", but accept ogg/oga.
-    const contentType = mimetype.split(';')[0].trim() || 'audio/ogg';
+    const contentType = sanitizeContentType(mimetype);
     const formBody = buildMultipartBody(boundary, fields, [
       { name: 'file', filename: 'voice.ogg', contentType, data: audio },
     ]);
