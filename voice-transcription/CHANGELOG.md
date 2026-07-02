@@ -6,7 +6,18 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
-## [1.0.0] — 2026-06-25
+## [1.0.1] — 2026-07-02
+
+### Fixed
+
+- **A webhook-delivery failure no longer suppresses the in-chat transcript.** When both
+  `deliveryWebhookUrl` and `chatDelivery` were configured, a transient webhook error threw before the
+  chat send, so the transcript reached neither channel. The two sinks are now isolated: a webhook failure
+  is warned and the in-chat delivery still runs.
+- **Untrusted media mimetype is validated before it reaches the STT upload's multipart headers.** The
+  inbound `mimetype` is now accepted only as a well-formed `type/subtype` token (codec suffix stripped);
+  anything else — including a CRLF-bearing value — falls back to `audio/ogg`. The part filename is already
+  fixed to `voice.ogg`, so valid formats (e.g. `audio/ogg; codecs=opus`) are unaffected.
 
 ### Added
 

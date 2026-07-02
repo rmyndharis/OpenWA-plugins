@@ -149,7 +149,18 @@ export class TranscriptionCoordinator {
       ...(o.reason ? { reason: o.reason } : {}),
       ...(o.transcription ? { transcription: o.transcription } : {}),
     };
-    if (this.deps.delivery) await this.deps.delivery.deliver(payload);
+    // The webhook and in-chat deliveries are independent sinks — isolate the webhook so a failing
+    // delivery endpoint can't swallow the in-chat transcript (and vice versa is unaffected: chat is last).
+    if (this.deps.delivery) {
+      try {
+        await this.deps.delivery.deliver(payload);
+      } catch (err) {
+        this.deps.logger.warn('Transcript webhook delivery failed', {
+          messageId: msg.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
     if (o.status === 'completed' && o.text && this.deps.chat && this.deps.chatDelivery !== 'off') {
       if (this.deps.chatDelivery === 'self') await this.deps.chat.sendText(sessionId, msg.to, o.text);
       else await this.deps.chat.reply(sessionId, msg.chatId, msg.id, o.text);

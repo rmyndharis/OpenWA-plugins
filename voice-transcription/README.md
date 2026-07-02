@@ -13,8 +13,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `voice-transcription` |
-| **Version** | 1.0.0 |
-| **Released** | 2026-06-25 |
+| **Version** | 1.0.1 |
+| **Released** | 2026-07-02 |
 | **Status** | beta |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
