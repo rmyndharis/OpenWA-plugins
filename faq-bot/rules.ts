@@ -23,7 +23,9 @@ function atomAt(p: string, i: number): { key: string; len: number } {
   if (c === '[') {
     let j = i + 1;
     if (p[j] === '^') j++;
-    if (p[j] === ']') j++; // a `]` as the first member is a literal, not the close
+    // JS class semantics: a `]` here CLOSES the class (`[]` is an empty class, `[^]` matches any char).
+    // Do NOT treat a leading `]` as a literal member (POSIX/PCRE) — that would let `[^]`/`[]` swallow the
+    // rest of the pattern into one fake atom and hide a catastrophic tail (e.g. `[^](a+)+`).
     while (j < p.length && p[j] !== ']') { if (p[j] === '\\') j++; j++; }
     const end = j < p.length ? j + 1 : p.length;
     return { key: p.slice(i, end), len: end - i };
@@ -32,18 +34,20 @@ function atomAt(p: string, i: number): { key: string; len: number } {
   return { key: c, len: 1 };
 }
 
-/** The quantifier at `i`, if any. `min` = minimum repeats; `repeat2` = can apply its atom ≥2 times;
- *  `variable` = matches a variable count (so repeating it can backtrack); `unbounded` = no upper limit. */
+/** The quantifier at `i`, if any. `min` = minimum repeats; `count` = the MAXIMUM repeats (Infinity when
+ *  unbounded); `variable` = matches a variable count (so repeating it can backtrack); `unbounded` = no
+ *  upper limit. `count` drives the repeated-group check: a large/unbounded repeat of a variable-width
+ *  body backtracks exponentially, a small bounded one (2–4) does not. */
 function quantifierAt(
   p: string,
   i: number,
-): { present: boolean; len: number; min: number; unbounded: boolean; repeat2: boolean; variable: boolean } {
-  const none = { present: false, len: 0, min: 1, unbounded: false, repeat2: false, variable: false };
+): { present: boolean; len: number; min: number; count: number; unbounded: boolean; variable: boolean } {
+  const none = { present: false, len: 0, min: 1, count: 1, unbounded: false, variable: false };
   const lazy = (len: number) => (p[i + len] === '?' ? len + 1 : len); // trailing `?` = lazy modifier
   const c = p[i];
-  if (c === '*') return { present: true, len: lazy(1), min: 0, unbounded: true, repeat2: true, variable: true };
-  if (c === '+') return { present: true, len: lazy(1), min: 1, unbounded: true, repeat2: true, variable: true };
-  if (c === '?') return { present: true, len: lazy(1), min: 0, unbounded: false, repeat2: false, variable: true };
+  if (c === '*') return { present: true, len: lazy(1), min: 0, count: Infinity, unbounded: true, variable: true };
+  if (c === '+') return { present: true, len: lazy(1), min: 1, count: Infinity, unbounded: true, variable: true };
+  if (c === '?') return { present: true, len: lazy(1), min: 0, count: 1, unbounded: false, variable: true };
   if (c === '{') {
     const close = p.indexOf('}', i);
     if (close === -1) return none;
@@ -51,24 +55,30 @@ function quantifierAt(
     if (!m) return none;
     const min = Number(m[1]);
     const len = lazy(close - i + 1);
-    if (m[2] === undefined) return { present: true, len, min, unbounded: false, repeat2: min >= 2, variable: false }; // {n}
-    if ((m[3] ?? '') === '') return { present: true, len, min, unbounded: true, repeat2: true, variable: true }; // {n,}
+    if (m[2] === undefined) return { present: true, len, min, count: min, unbounded: false, variable: false }; // {n}
+    if ((m[3] ?? '') === '') return { present: true, len, min, count: Infinity, unbounded: true, variable: true }; // {n,}
     const max = Number(m[3]); // {n,m}
-    return { present: true, len, min, unbounded: false, repeat2: max >= 2, variable: max > min };
+    return { present: true, len, min, count: max, unbounded: false, variable: max > min };
   }
   return none;
 }
 
 const overlaps = (a: string, b: string): boolean => a === 'ANY' || b === 'ANY' || a === b;
 
+/** A group repeated this many times (or unbounded) with a variable-width body backtracks catastrophically;
+ *  a smaller bounded repeat is bounded by the constant and safe. */
+const REPEAT_THRESHOLD = 10;
+
 /**
  * Conservatively reject patterns prone to catastrophic backtracking. Three classes are closed:
  *  1. an unbounded quantifier on a group that itself contains one — `(a+)+`, `((a+))+`, `(\w+\s?)*`;
- *  2. two adjacent unbounded quantifiers over overlapping atoms in one concatenation — `.*.*`, `\w*\w*`
- *     (polynomial); a mandatory atom or a group boundary between them breaks the chain (`.*x.*` is fine);
- *  3. a group repeated ≥2 times whose body carries a variable-width quantifier — `(a?){40}` (exponential).
- * Accepted patterns run on the native engine unchanged. Overlapping-alternation (`(a|a)*`) is still not
- * modelled — a known, documented residual. Fails closed on anything it can't parse cleanly.
+ *  2. THREE OR MORE adjacent unbounded quantifiers over overlapping atoms in one concatenation —
+ *     `.*.*.*`, `\w*\w*\w*` (O(n^3)+); TWO adjacent (`.*.*`, `.*\d+`) is only O(n^2), safe under the
+ *     1000-char input cap, so it is allowed; a mandatory atom or a group boundary breaks the chain;
+ *  3. an unbounded or ≥REPEAT_THRESHOLD repeat of a group whose body has a variable-width quantifier —
+ *     `(a?){40}`, `(a?)+` (exponential); a small bounded repeat like `(ab?){2}` is allowed.
+ * Character classes follow JS semantics (`[]` empty, `[^]` any). Accepted patterns run on the native engine
+ * unchanged. Overlapping-alternation (`(a|a)*`) is still not modelled — a documented residual. Fails closed.
  */
 export function isSafeRegexPattern(p: string): boolean {
   if (p.length > MAX_PATTERN_LENGTH) return false;
@@ -76,14 +86,15 @@ export function isSafeRegexPattern(p: string): boolean {
   // Rule 2 state: the key of the previous unbounded-quantified atom in the current flat concatenation,
   // or null after a mandatory atom / `|` / group boundary (which break adjacency).
   let prevUnbounded: string | null = null;
+  let adjacentRun = 0; // length of the current run of adjacent overlapping unbounded-quantified atoms
   let i = 0;
   while (i < p.length) {
     const c = p[i];
 
-    if (c === '|') { prevUnbounded = null; i++; continue; }
+    if (c === '|') { prevUnbounded = null; adjacentRun = 0; i++; continue; }
     if (c === '(') {
       stack.push({ hasUnbounded: false, hasVariable: false });
-      prevUnbounded = null;
+      prevUnbounded = null; adjacentRun = 0;
       i++;
       if (p[i] === '?') { i++; if (p[i] === '<') i++; if (p[i] === ':' || p[i] === '=' || p[i] === '!') i++; }
       continue;
@@ -92,12 +103,12 @@ export function isSafeRegexPattern(p: string): boolean {
       const frame = stack.pop() ?? { hasUnbounded: false, hasVariable: false };
       const q = quantifierAt(p, i + 1);
       if (q.unbounded && frame.hasUnbounded) return false; // (1) nested unbounded
-      if (q.repeat2 && frame.hasVariable) return false; // (3) repeated group with a variable-width body
+      if (q.count >= REPEAT_THRESHOLD && frame.hasVariable) return false; // (3) large/unbounded repeat of a variable body
       if (stack.length) {
         if (q.unbounded || frame.hasUnbounded) stack[stack.length - 1].hasUnbounded = true;
         if (q.variable || frame.hasVariable) stack[stack.length - 1].hasVariable = true;
       }
-      prevUnbounded = null; // a group boundary breaks flat adjacency (Rule 2)
+      prevUnbounded = null; adjacentRun = 0; // a group boundary breaks flat adjacency (Rule 2)
       i += 1 + q.len;
       continue;
     }
@@ -107,10 +118,14 @@ export function isSafeRegexPattern(p: string): boolean {
     if (stack.length && q.variable) stack[stack.length - 1].hasVariable = true;
     if (q.unbounded) {
       if (stack.length) stack[stack.length - 1].hasUnbounded = true;
-      if (prevUnbounded !== null && overlaps(prevUnbounded, atom.key)) return false; // (2) adjacent overlap
+      if (prevUnbounded !== null && overlaps(prevUnbounded, atom.key)) {
+        if (++adjacentRun >= 3) return false; // (2) 3+ adjacent overlapping unbounded quantifiers
+      } else {
+        adjacentRun = 1;
+      }
       prevUnbounded = atom.key;
     } else if (!q.present || q.min >= 1) {
-      prevUnbounded = null; // a mandatory (non-skippable) atom breaks adjacency
+      prevUnbounded = null; adjacentRun = 0; // a mandatory (non-skippable) atom breaks adjacency
     }
     i += atom.len + q.len;
   }
