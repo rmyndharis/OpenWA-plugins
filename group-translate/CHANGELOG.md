@@ -8,6 +8,23 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.0.5] — 2026-07-02
+
+### Fixed
+
+- **`denyReply` is now honored.** The denial reply for a restricted command was sent unconditionally,
+  ignoring the `denyReply` config (which the manifest documents as default `false`). It now replies only
+  when `denyReply` is enabled — so by default an unauthorized user cannot make the bot echo an "admins
+  only" message back into the group on every attempt.
+
+### Changed
+
+- **README Security section corrected.** It previously claimed `SSRF_ALLOWED_HOSTS` "no longer applies to
+  plugins" — the opposite of the truth. The host SSRF guard blocks loopback/private addresses at connect
+  for every `ctx.net.fetch` regardless of `net.allow`, so a self-hosted LibreTranslate on
+  `localhost`/`127.0.0.1`/a private host (including the default `http://localhost:7001`) requires
+  `SSRF_ALLOWED_HOSTS=<hostname>` on the gateway. The Security section and config table now say so.
+
 ## [1.0.4] — 2026-06-25
 
 ### Fixed

@@ -287,14 +287,17 @@ export class TranslationCoordinator {
       const isController = isAdmin || state.delegatedControllers.some(c => widEquals(c, msg.author));
       const adminOnly = cmd.name === 'grant' || cmd.name === 'revoke';
       if ((adminOnly && !isAdmin) || (!adminOnly && !isController)) {
-        // Always reply on denial — a command must never fail silently.
-        await this.gateway.sendText(
-          sessionId,
-          msg.chatId,
-          adminOnly
-            ? '⛔ Only group admins can use that command.'
-            : '⛔ Only group admins or delegated users can use that command.',
-        );
+        // Reply on denial only when the operator opted in (denyReply). Default is silent, so an
+        // unauthorized user spamming a restricted command can't amplify replies out of the group.
+        if (this.opts.denyReply) {
+          await this.gateway.sendText(
+            sessionId,
+            msg.chatId,
+            adminOnly
+              ? '⛔ Only group admins can use that command.'
+              : '⛔ Only group admins or delegated users can use that command.',
+          );
+        }
         return;
       }
     }
