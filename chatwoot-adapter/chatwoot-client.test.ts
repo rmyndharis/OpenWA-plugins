@@ -1,0 +1,50 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { ChatwootClient } from './chatwoot-client.ts';
+
+function fakeFetch(routes: Record<string, { status?: number; body: unknown }>) {
+  const calls: Array<{ url: string; init?: { method?: string; headers?: Record<string, string>; body?: unknown } }> = [];
+  const fn = async (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string | Uint8Array }) => {
+    calls.push({ url, init });
+    const r = routes[`${init?.method ?? 'GET'} ${new URL(url).pathname}`] ?? { body: {} };
+    return { ok: (r.status ?? 200) < 400, status: r.status ?? 200, body: JSON.stringify(r.body) };
+  };
+  return { fn, calls };
+}
+const cfg = { baseUrl: 'https://chat.acme.com', apiToken: 'tok', accountId: 3, inboxId: 7 };
+
+test('searchContact matches on identifier (WA JID) and returns the inbox source_id', async () => {
+  const { fn } = fakeFetch({
+    'GET /api/v1/accounts/3/contacts/search': {
+      body: {
+        payload: [
+          { id: 11, identifier: '621@c.us', contact_inboxes: [{ inbox: { id: 7 }, source_id: 'src-11' }] },
+          { id: 12, identifier: 'other@c.us' },
+        ],
+      },
+    },
+  });
+  const c = new ChatwootClient(fn, cfg);
+  assert.deepEqual(await c.searchContact('621@c.us'), { id: 11, sourceId: 'src-11' });
+  assert.equal(await c.searchContact('missing@c.us'), null);
+});
+
+test('createContact on 422 re-searches and returns the existing contact (find-existing)', async () => {
+  const { fn } = fakeFetch({
+    'POST /api/v1/accounts/3/contacts': { status: 422, body: { message: 'already exists' } },
+    'GET /api/v1/accounts/3/contacts/search': {
+      body: { payload: [{ id: 11, identifier: '621@c.us', contact_inboxes: [{ inbox: { id: 7 }, source_id: 'src-11' }] }] },
+    },
+  });
+  const c = new ChatwootClient(fn, cfg);
+  assert.deepEqual(await c.createContact('621@c.us', 'Budi'), { id: 11, sourceId: 'src-11' });
+});
+
+test('postText posts an incoming message with the api token header', async () => {
+  const { fn, calls } = fakeFetch({ 'POST /api/v1/accounts/3/conversations/55/messages': { body: { id: 999 } } });
+  const res = await new ChatwootClient(fn, cfg).postText(55, 'hello');
+  assert.equal(res.id, 999);
+  const last = calls.at(-1)!;
+  assert.deepEqual(JSON.parse(last.init!.body as string), { content: 'hello', message_type: 'incoming', private: false });
+  assert.equal(last.init!.headers!['api_access_token'], 'tok');
+});
