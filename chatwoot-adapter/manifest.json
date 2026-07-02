@@ -1,7 +1,7 @@
 {
   "id": "chatwoot-adapter",
   "name": "Chatwoot Adapter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Two-way sync between a WhatsApp session and a Chatwoot inbox: relays WhatsApp messages (1:1 and groups, with media) into Chatwoot as an API-channel inbox, sends agent replies back to WhatsApp, and hands a chat over to a human agent — silencing other OpenWA bots — when an agent takes it in Chatwoot. First consumer of the OpenWA Integration SDK v1; runs sandboxed in the plugin worker.",

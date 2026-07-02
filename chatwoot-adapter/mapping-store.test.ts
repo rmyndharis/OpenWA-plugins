@@ -20,20 +20,33 @@ function fakeMappings(sink: unknown[] = []): PluginMappingsCapability {
   };
 }
 
-test('link writes forward + reverse and mirrors ctx.mappings.upsert', async () => {
+test('link writes forward + a session-scoped reverse and mirrors ctx.mappings.upsert', async () => {
   const upserts: unknown[] = [];
   const store = new MappingStore(fakeStorage(), fakeMappings(upserts));
   await store.link('sess', 'c@wa', 'inst', { conversationId: 55, contactId: 9, sourceId: 'src' });
   assert.deepEqual(await store.getByChat('sess', 'c@wa'), { conversationId: 55, contactId: 9, sourceId: 'src' });
+  // Scoped lookup for the owning session resolves; so does the unscoped/legacy lookup (back-compat).
+  assert.deepEqual(await store.getByConversation(55, 'sess'), { sessionId: 'sess', chatId: 'c@wa' });
   assert.deepEqual(await store.getByConversation(55), { sessionId: 'sess', chatId: 'c@wa' });
   assert.deepEqual(upserts, [[{ sessionId: 'sess', chatId: 'c@wa', instanceId: 'inst' }, '55']]);
 });
 
-test('seen is an idempotent check-and-set, namespaced by kind', async () => {
+test('two tenants sharing a conversationId are isolated when looked up with their own session', async () => {
   const store = new MappingStore(fakeStorage(), fakeMappings());
-  assert.equal(await store.seen('wa', 'm1'), false); // first time → not seen, now marked
-  assert.equal(await store.seen('wa', 'm1'), true); // second time → seen
-  assert.equal(await store.seen('cw', 'm1'), false); // different namespace
+  // Both Chatwoot accounts autoincrement to id 55; each session maps it to a different WA chat.
+  await store.link('sessA', 'alice@wa', 'instA', { conversationId: 55, contactId: 1, sourceId: 'a' });
+  await store.link('sessB', 'bob@wa', 'instB', { conversationId: 55, contactId: 2, sourceId: 'b' });
+  assert.deepEqual(await store.getByConversation(55, 'sessA'), { sessionId: 'sessA', chatId: 'alice@wa' });
+  assert.deepEqual(await store.getByConversation(55, 'sessB'), { sessionId: 'sessB', chatId: 'bob@wa' });
+});
+
+test('hasSeen/markSeen: scoped markers isolate tenants; unscoped stays global', async () => {
+  const store = new MappingStore(fakeStorage(), fakeMappings());
+  assert.equal(await store.hasSeen('cw', '5', 'sessA'), false);
+  await store.markSeen('cw', '5', 'sessA');
+  assert.equal(await store.hasSeen('cw', '5', 'sessA'), true); // marked for A
+  assert.equal(await store.hasSeen('cw', '5', 'sessB'), false); // NOT for B — no cross-tenant drop
+  assert.equal(await store.hasSeen('wa', '5', 'sessA'), false); // different kind
 });
 
 test('patch merges over the existing forward doc', async () => {

@@ -26,6 +26,18 @@ function readConfig(raw: Record<string, unknown>): ChatwootFullConfig {
     !Number.isFinite(inboxId) && 'inboxId',
   ].filter(Boolean);
   if (missing.length) throw new Error(`chatwoot-adapter: missing/invalid config: ${missing.join(', ')}`);
+  // Fail fast at enable time: the host's config-derived net allowlist only admits an https, credential-free
+  // baseUrl, so an http/private/credentialed value would otherwise pass here yet make every inbound relay
+  // silently fail per-message with the plugin still reporting healthy.
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    throw new Error('chatwoot-adapter: baseUrl must be a valid URL');
+  }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
+    throw new Error('chatwoot-adapter: baseUrl must be an https URL without embedded credentials');
+  }
   return { baseUrl, apiToken, accountId, inboxId, relayGroups: raw.relayGroups !== false, relayMedia: raw.relayMedia !== false };
 }
 

@@ -21,7 +21,10 @@ export async function handleInbound(deps: InboundDeps, sessionId: string, source
   if (!shouldRelayInbound(msg, source, deps.relayGroups)) return;
   await deps.lock.run(`${sessionId}:${msg.chatId}`, async () => {
     try {
-      if (await deps.store.seen('wa', msg.id)) return;
+      // Mark-before-act: inbound is deliberately at-most-once (a failed post won't re-relay). Scoped by
+      // session so two tenants' WA message ids can't collide in the shared plugin store.
+      if (await deps.store.hasSeen('wa', msg.id, sessionId)) return;
+      await deps.store.markSeen('wa', msg.id, sessionId);
       const conversationId = await resolveConversation(deps, sessionId, msg);
       const content = prefixSender(msg);
       if (deps.relayMedia && msg.media?.data && !msg.media.omitted) {

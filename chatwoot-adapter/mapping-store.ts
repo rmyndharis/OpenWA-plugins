@@ -8,10 +8,12 @@ export interface ChatLink {
 }
 
 // Single-document-per-chat mapping over ctx.storage, mirrored into the core ctx.mappings row so the
-// session+chat handover gate and handover.set can resolve this chat. Forward `conv:{sessionId}:{chatId}`
-// holds the full ChatLink; reverse `wa:{conversationId}` holds {sessionId, chatId}; both are written
-// together in link() (called inside the per-chat lock, so the pair never diverges). `seen` is an
-// idempotency check-and-set over `seen:{kind}:{id}` (mark-before-act; also inside the lock).
+// session+chat handover gate and handover.set can resolve this chat. `ctx.storage` is plugin-GLOBAL
+// (shared across every session/instance), and Chatwoot conversation + message ids are per-account
+// autoincrement, so anything keyed by id alone collides across tenants. The reverse map and dedup markers
+// are therefore scoped by the WA sessionId (the one identity both the inbound hook and the outbound
+// ingress delivery share). A session-scoped legacy reverse key is ALSO written so a delivery that arrives
+// without a session scope (or a pre-scope row) still resolves — unscoped, so single-tenant is unaffected.
 export class MappingStore {
   constructor(
     private readonly storage: PluginStorage,
@@ -21,21 +23,39 @@ export class MappingStore {
   private fwdKey(sessionId: string, chatId: string): string {
     return `conv:${sessionId}:${chatId}`;
   }
-  private revKey(conversationId: number): string {
+  private revKey(sessionId: string, conversationId: number): string {
+    return `wa:${sessionId}:${conversationId}`;
+  }
+  private legacyRevKey(conversationId: number): string {
     return `wa:${conversationId}`;
+  }
+  private seenKey(kind: 'wa' | 'cw', id: string, scope?: string): string {
+    return scope ? `seen:${scope}:${kind}:${id}` : `seen:${kind}:${id}`;
   }
 
   getByChat(sessionId: string, chatId: string): Promise<ChatLink | null> {
     return this.storage.get<ChatLink>(this.fwdKey(sessionId, chatId));
   }
 
-  getByConversation(conversationId: number): Promise<{ sessionId: string; chatId: string } | null> {
-    return this.storage.get<{ sessionId: string; chatId: string }>(this.revKey(conversationId));
+  // Resolve the WA chat for a Chatwoot conversation. With a `sessionId` (a delivery that carries its
+  // session scope), the tenant-scoped key wins — isolating two accounts that share a conversation id.
+  // Without one, fall back to the unscoped key (single-tenant / pre-scope data), same as before.
+  async getByConversation(
+    conversationId: number,
+    sessionId?: string,
+  ): Promise<{ sessionId: string; chatId: string } | null> {
+    if (sessionId) {
+      const scoped = await this.storage.get<{ sessionId: string; chatId: string }>(this.revKey(sessionId, conversationId));
+      if (scoped) return scoped;
+    }
+    return this.storage.get<{ sessionId: string; chatId: string }>(this.legacyRevKey(conversationId));
   }
 
   async link(sessionId: string, chatId: string, instanceId: string, link: ChatLink): Promise<void> {
     await this.storage.set(this.fwdKey(sessionId, chatId), link);
-    await this.storage.set(this.revKey(link.conversationId), { sessionId, chatId });
+    const rev = { sessionId, chatId };
+    await this.storage.set(this.revKey(sessionId, link.conversationId), rev); // tenant-scoped lookup
+    await this.storage.set(this.legacyRevKey(link.conversationId), rev); // back-compat for scope-less deliveries
     await this.mappings.upsert({ sessionId, chatId, instanceId }, String(link.conversationId));
   }
 
@@ -45,11 +65,13 @@ export class MappingStore {
     await this.storage.set(this.fwdKey(sessionId, chatId), { ...existing, ...patch });
   }
 
-  // Returns true if (kind,id) was already seen; otherwise marks it and returns false.
-  async seen(kind: 'wa' | 'cw', id: string): Promise<boolean> {
-    const key = `seen:${kind}:${id}`;
-    if (await this.storage.get(key)) return true;
-    await this.storage.set(key, 1);
-    return false;
+  // Idempotency markers, split so the caller controls WHEN the mark lands (outbound marks only AFTER a
+  // successful send, so a transient failure retries instead of silently dropping the reply). `scope`
+  // isolates a tenant's markers; both sides of a given `kind` must pass the same scope.
+  async hasSeen(kind: 'wa' | 'cw', id: string, scope?: string): Promise<boolean> {
+    return Boolean(await this.storage.get(this.seenKey(kind, id, scope)));
+  }
+  async markSeen(kind: 'wa' | 'cw', id: string, scope?: string): Promise<void> {
+    await this.storage.set(this.seenKey(kind, id, scope), 1);
   }
 }

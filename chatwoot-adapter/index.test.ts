@@ -33,3 +33,11 @@ test('onEnable throws on missing / invalid config', async () => {
   const { ctx } = fakeCtx({ baseUrl: 'https://x' }); // missing apiToken, accountId, inboxId
   await assert.rejects(new ChatwootAdapter().onEnable(ctx), /missing\/invalid config/);
 });
+
+test('onEnable rejects a non-https or credentialed baseUrl (fail fast, not per-message)', async () => {
+  // The host net allowlist only admits an https, credential-free host, so these would otherwise enable
+  // "healthy" and then silently fail every inbound relay.
+  await assert.rejects(new ChatwootAdapter().onEnable(fakeCtx({ ...goodConfig, baseUrl: 'http://chat.acme.com' }).ctx), /https/);
+  await assert.rejects(new ChatwootAdapter().onEnable(fakeCtx({ ...goodConfig, baseUrl: 'https://user:pw@chat.acme.com' }).ctx), /credential/);
+  await assert.rejects(new ChatwootAdapter().onEnable(fakeCtx({ ...goodConfig, baseUrl: 'not a url' }).ctx), /valid URL/);
+});

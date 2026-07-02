@@ -27,7 +27,8 @@ function deps(over: { client?: Record<string, unknown>; store?: Record<string, u
     getByChat: async (s: string, c: string) => store.get(`${s}:${c}`) ?? null,
     getByConversation: async () => null,
     link: async (s: string, c: string, _i: string, l: unknown) => void store.set(`${s}:${c}`, l),
-    seen: async () => false,
+    hasSeen: async () => false,
+    markSeen: async () => {},
     ...over.store,
   };
   const d = {
@@ -54,7 +55,7 @@ test('two concurrent inbounds for a NEW chat make exactly ONE contact + conversa
 });
 
 test('skips fromMe and is idempotent (already seen → no post)', async () => {
-  const { deps: d, posted } = deps({ store: { seen: async () => true } });
+  const { deps: d, posted } = deps({ store: { hasSeen: async () => true } });
   await handleInbound(d, 'sess', 'Engine', msg);
   await handleInbound(d, 'sess', 'Engine', { ...msg, fromMe: true });
   assert.equal(posted.length, 0);
