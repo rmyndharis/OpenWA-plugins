@@ -1,0 +1,13 @@
+{
+  "event": "message_created",
+  "id": 12345,
+  "content": "Hi! How can I help you today?",
+  "message_type": "outgoing",
+  "private": false,
+  "content_type": "text",
+  "created_at": "2026-07-02T10:15:00.000Z",
+  "sender": { "id": 3, "name": "Agent Smith", "type": "user" },
+  "conversation": { "id": 55, "inbox_id": 7, "status": "open" },
+  "inbox": { "id": 7, "name": "WhatsApp" },
+  "account": { "id": 3, "name": "Acme" }
+}
