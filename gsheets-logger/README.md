@@ -13,8 +13,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `gsheets-logger` |
-| **Version** | 0.2.2 |
-| **Released** | 2026-06-23 |
+| **Version** | 0.2.3 |
+| **Released** | 2026-07-02 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -24,9 +24,9 @@
 | **Repository** | [OpenWA-plugins/gsheets-logger](https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger) |
 <!-- END DETAILS -->
 
-The installed version is also visible in the OpenWA dashboard Plugins list (`v0.2.2`), via
+The installed version is also visible in the OpenWA dashboard Plugins list (`v0.2.3`), via
 `GET /plugins/gsheets-logger`, and at runtime in the enable log line and `healthCheck`
-(`GET /plugins/gsheets-logger/health` → `"v0.2.2 — N rows buffered"`).
+(`GET /plugins/gsheets-logger/health` → `"v0.2.3 — N rows buffered"`).
 
 ## Features
 
@@ -143,7 +143,7 @@ Send yourself a WhatsApp message, then confirm the pipeline end to end:
 
 1. **Events are arriving.** Call the health endpoint:
    ```
-   GET /plugins/gsheets-logger/health   →   "v0.2.2 — N rows buffered"
+   GET /plugins/gsheets-logger/health   →   "v0.2.3 — N rows buffered"
    ```
    If `N` grows, messages are reaching the plugin — the only step left is the write to Google.
 2. **Writes are succeeding.** A healthy flush logs nothing; a failed one logs
@@ -216,14 +216,18 @@ evaluates a cell as a formula. As defense-in-depth for CSV export/re-import, cel
 single quote (`'`) when they start with a formula trigger:
 
 - **ID / enum fields** (chatId, from, to, messageId, status, type): full guard — `=` `+` `-` `@` `\t` `\r`.
-- **Free-text fields** (body, senderName, error): guard `=` `@` `\t` `\r` only, so a phone number
-  (`+62812…`) or a negative number is not corrupted with a leading quote.
+- **Free-text fields** (body, senderName, error): guard `=` `@` `\t` `\r`, plus a leading `+`/`-` that
+  is not the start of a number — so a formula like `-IMPORTXML(…)` / `+ HYPERLINK(…)` is quoted while a
+  phone number (`+62812…`) or a negative number (`-5°C`) is left readable.
+
+Every cell is also capped at 50 000 characters (Google Sheets' per-cell limit), so a single oversized
+message can't fail an append batch and stall logging.
 
 The service-account JSON is marked `secret` in the config schema, so OpenWA masks it on read.
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md). Latest: **0.2.2** (2026-06-23) — clamp the flush interval / batch size to safe positive values.
+See [CHANGELOG.md](./CHANGELOG.md). Latest: **0.2.3** (2026-07-02) — cap oversized cells, extend the formula-injection guard to `+`/`-`, floor the flush interval.
 
 ## License
 
