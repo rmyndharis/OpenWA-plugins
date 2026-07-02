@@ -63,10 +63,15 @@ export class FlowEngine {
    *  plugin calls this periodically. Returns the number of entries removed. */
   public static async sweepExpired(context: PluginContext): Promise<number> {
     const keys = (await context.storage.list('state__')).filter(k => k.startsWith('state__'));
+    const expired = (s: UserState | null): boolean => !!s && Date.now() - s.lastActive > this.TIMEOUT_MS;
     let removed = 0;
     for (const k of keys) {
-      const s = await context.storage.get<UserState>(k);
-      if (s && Date.now() - s.lastActive > this.TIMEOUT_MS) {
+      if (!expired(await context.storage.get<UserState>(k))) continue;
+      // Re-read immediately before deleting: a message may have re-created fresh state for this key since
+      // the scan. Only delete if it is STILL expired, so a live flow isn't wiped.
+      // ponytail: this narrows the check→delete race to a tiny window; a per-key lock would close it fully
+      // but isn't worth it for a 30-min GC of already-stale state that self-heals on the next message.
+      if (expired(await context.storage.get<UserState>(k))) {
         await context.storage.delete(k);
         removed++;
       }

@@ -198,3 +198,23 @@ test('sweepExpired deletes state entries past the TTL and keeps fresh ones', asy
   assert.equal(storage.has('state__s__fresh'), true);
   assert.equal(storage.has('other__key'), true);
 });
+
+test('sweepExpired does not delete a state refreshed between the scan and the delete (race guard)', async () => {
+  const NOW = Date.now();
+  const stale = { path: [], lastActive: NOW - 20 * 60 * 1000 }; // > 15-min TTL
+  const fresh = { path: [], lastActive: NOW };
+  let gets = 0;
+  let deleted = false;
+  const ctx = {
+    storage: {
+      list: async () => ['state__s__x'],
+      get: async () => (++gets === 1 ? stale : fresh), // scan sees stale; the re-check sees fresh
+      delete: async () => { deleted = true; },
+      set: async () => {},
+    },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+  } as unknown as import('../types/openwa').PluginContext;
+  const removed = await FlowEngine.sweepExpired(ctx);
+  assert.equal(removed, 0);        // the re-read saw fresh state → the live flow is not wiped
+  assert.equal(deleted, false);
+});

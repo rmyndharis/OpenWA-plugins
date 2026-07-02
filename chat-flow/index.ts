@@ -56,6 +56,7 @@ export default class ChatFlow implements IPlugin {
     // Reclaim states abandoned before this enable, then keep sweeping — lazy per-key expiry only fires
     // when a conversation messages again, so an abandoned flow would otherwise linger in storage forever.
     void FlowEngine.sweepExpired(ctx).catch(() => {});
+    this.stopSweep(); // idempotent: clear any timer from a prior enable before starting a fresh one
     this.sweepTimer = setInterval(() => void FlowEngine.sweepExpired(ctx).catch(() => {}), SWEEP_INTERVAL_MS);
     this.sweepTimer.unref?.();
   }

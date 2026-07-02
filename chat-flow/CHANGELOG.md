@@ -8,6 +8,20 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.0.5] — 2026-07-02
+
+### Fixed
+
+- The periodic expired-state sweep now re-reads an entry immediately before deleting it, so a flow
+  re-created by a message in the gap between the scan and the delete is not wiped.
+- Restored the `## [1.0.3]` changelog heading that a prior edit dropped (its entries had been folded
+  under 1.0.4 by mistake).
+
+### Changed
+
+- `onEnable` clears any existing sweep timer before starting a new one (defensive idempotency, matching
+  the other timer-using plugins).
+
 ## [1.0.4] — 2026-07-02
 
 ### Fixed
@@ -19,6 +33,8 @@ The version here always matches `manifest.json`'s `version`.
 - **Abandoned flow states are reclaimed.** Per-state expiry only ran when a chat messaged again, so a
   flow started and then abandoned lingered in plugin storage indefinitely. The plugin now sweeps expired
   states on enable and periodically (every 30 min; state TTL is 15 min).
+
+## [1.0.3] — 2026-06-23
 
 ### Fixed
 

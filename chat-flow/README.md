@@ -13,7 +13,7 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chat-flow` |
-| **Version** | 1.0.4 |
+| **Version** | 1.0.5 |
 | **Released** | 2026-07-02 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
