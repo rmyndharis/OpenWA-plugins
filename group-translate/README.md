@@ -19,7 +19,7 @@
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.7.0) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.8.1) |
 | **Keywords** | translation, libretranslate, i18n, groups, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/group-translate](https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate) |
 <!-- END DETAILS -->

@@ -17,7 +17,7 @@ mirror it. Runs sandboxed in the plugin worker; no server, no extra port.
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.0 (tested 0.8.0) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.8.1) |
 | **Keywords** | chatwoot, helpdesk, inbox, handover, two-way, agent, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/chatwoot-adapter](https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter) |
 <!-- END DETAILS -->

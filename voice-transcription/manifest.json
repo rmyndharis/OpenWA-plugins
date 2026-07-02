@@ -12,7 +12,7 @@
   "keywords": ["transcription", "speech-to-text", "stt", "whisper", "voice", "audio", "whatsapp", "openwa"],
   "status": "beta",
   "minOpenWAVersion": "0.7.0",
-  "testedOpenWAVersion": "0.7.3",
+  "testedOpenWAVersion": "0.8.1",
   "provides": ["transcription"],
   "permissions": ["net:fetch"],
   "net": { "allow": ["localhost", "127.0.0.1", "api.groq.com:443", "api.openai.com:443"] },

@@ -12,7 +12,7 @@
   "keywords": ["google-sheets", "logging", "audit", "crm", "whatsapp", "openwa"],
   "status": "stable",
   "minOpenWAVersion": "0.6.1",
-  "testedOpenWAVersion": "0.6.1",
+  "testedOpenWAVersion": "0.8.1",
   "provides": ["message-logging"],
   "permissions": [],
   "sessions": ["*"],

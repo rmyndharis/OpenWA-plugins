@@ -12,7 +12,7 @@
   "keywords": ["translation", "libretranslate", "i18n", "groups", "whatsapp", "openwa"],
   "status": "stable",
   "minOpenWAVersion": "0.7.0",
-  "testedOpenWAVersion": "0.7.0",
+  "testedOpenWAVersion": "0.8.1",
   "provides": ["translation"],
   "permissions": ["messages:send", "engine:read", "net:fetch"],
   "net": { "allow": ["localhost:7001"] },

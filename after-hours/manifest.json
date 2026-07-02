@@ -12,7 +12,7 @@
   "keywords": ["after-hours", "business-hours", "away", "auto-reply", "whatsapp", "openwa"],
   "status": "stable",
   "minOpenWAVersion": "0.6.2",
-  "testedOpenWAVersion": "0.6.2",
+  "testedOpenWAVersion": "0.8.1",
   "provides": ["auto-reply"],
   "permissions": ["messages:send"],
   "sessions": ["*"],

@@ -17,7 +17,7 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.6.2",
-    "testedOpenWAVersion": "0.6.2",
+    "testedOpenWAVersion": "0.8.1",
     "releasedAt": "2026-06-23",
     "repoPath": "after-hours",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
@@ -213,7 +213,7 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.7.0",
-    "testedOpenWAVersion": "0.7.0",
+    "testedOpenWAVersion": "0.8.1",
     "releasedAt": "2026-07-02",
     "repoPath": "chat-flow",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
@@ -386,7 +386,7 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.8.0",
-    "testedOpenWAVersion": "0.8.0",
+    "testedOpenWAVersion": "0.8.1",
     "releasedAt": "2026-07-02",
     "repoPath": "chatwoot-adapter",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
@@ -411,7 +411,7 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.6.1",
-    "testedOpenWAVersion": "0.6.1",
+    "testedOpenWAVersion": "0.8.1",
     "releasedAt": "2026-07-02",
     "repoPath": "faq-bot",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
@@ -582,7 +582,7 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.7.0",
-    "testedOpenWAVersion": "0.7.0",
+    "testedOpenWAVersion": "0.8.1",
     "releasedAt": "2026-07-02",
     "repoPath": "group-translate",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
@@ -825,7 +825,7 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.6.1",
-    "testedOpenWAVersion": "0.6.1",
+    "testedOpenWAVersion": "0.8.1",
     "releasedAt": "2026-07-02",
     "repoPath": "gsheets-logger",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
@@ -1022,7 +1022,7 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.7.0",
-    "testedOpenWAVersion": "0.7.3",
+    "testedOpenWAVersion": "0.8.1",
     "releasedAt": "2026-07-02",
     "repoPath": "voice-transcription",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
