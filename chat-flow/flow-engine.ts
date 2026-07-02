@@ -24,8 +24,12 @@ export class FlowEngine {
 
   /**
    * Process an incoming message and send auto-replies according to `flow` (the resolved per-session
-   * config). Returns true if a reply was sent, false otherwise. Serializes per (session, chat) so
-   * concurrent messages for the same chat can't interleave the state read→write.
+   * config). Returns true if a reply was sent, false otherwise. Serializes per (session, conversation)
+   * so concurrent messages for the same conversation can't interleave the state read→write.
+   *
+   * `actor` scopes the flow state to a participant: in a group, pass the sender so each member walks
+   * their own menu (a group chat is shared by many people); in a 1:1 chat leave it undefined so the
+   * state key is just the chatId (unchanged). Replies always go to `chatId`.
    */
   public static async processMessage(
     context: PluginContext,
@@ -34,13 +38,17 @@ export class FlowEngine {
     chatId: string,
     messageBody: string,
     messageId: string,
+    actor?: string,
   ): Promise<boolean> {
+    const conversation = actor ? `${chatId}|${actor}` : chatId;
     // The bounded re-process inside the body calls processLocked directly (bypassing this lock) so a
-    // chat never waits on its own still-pending chain entry (self-deadlock). Store a settled tail so a
-    // rejection can't wedge the chain, and evict the key once the chain drains.
-    const lockKey = `${sessionId}__${chatId}`;
+    // conversation never waits on its own still-pending chain entry (self-deadlock). Store a settled
+    // tail so a rejection can't wedge the chain, and evict the key once the chain drains.
+    const lockKey = `${sessionId}__${conversation}`;
     const prev = this.locks.get(lockKey) ?? Promise.resolve();
-    const run = prev.then(() => this.processLocked(context, flow, sessionId, chatId, messageBody, messageId, 0));
+    const run = prev.then(() =>
+      this.processLocked(context, flow, sessionId, chatId, conversation, messageBody, messageId, 0),
+    );
     const tail = run.catch(() => {});
     this.locks.set(lockKey, tail);
     try {
@@ -50,11 +58,28 @@ export class FlowEngine {
     }
   }
 
+  /** Delete persisted flow states whose last activity is older than the TTL. Lazy per-key expiry only
+   *  runs when a conversation messages again, so an abandoned flow would otherwise linger forever; the
+   *  plugin calls this periodically. Returns the number of entries removed. */
+  public static async sweepExpired(context: PluginContext): Promise<number> {
+    const keys = (await context.storage.list('state__')).filter(k => k.startsWith('state__'));
+    let removed = 0;
+    for (const k of keys) {
+      const s = await context.storage.get<UserState>(k);
+      if (s && Date.now() - s.lastActive > this.TIMEOUT_MS) {
+        await context.storage.delete(k);
+        removed++;
+      }
+    }
+    return removed;
+  }
+
   private static async processLocked(
     context: PluginContext,
     flow: SessionFlow,
     sessionId: string,
     chatId: string,
+    conversation: string,
     messageBody: string,
     messageId: string,
     depth = 0,
@@ -62,7 +87,7 @@ export class FlowEngine {
     context.logger.debug('[FlowEngine] Processing message', { sessionId, chatId, body: messageBody });
 
     const input = messageBody.trim();
-    const stateKey = `state__${sessionId}__${chatId}`.replace(/:/g, '_');
+    const stateKey = `state__${sessionId}__${conversation}`.replace(/:/g, '_');
     let state = await context.storage.get<UserState>(stateKey);
     context.logger.debug('[FlowEngine] Loaded state', { stateKey, state });
 
@@ -113,8 +138,8 @@ export class FlowEngine {
           return false;
         }
         // Recurse on the locked body, NOT processMessage — re-entering the lock would deadlock on this
-        // chat's own still-pending chain entry.
-        return this.processLocked(context, flow, sessionId, chatId, messageBody, messageId, depth + 1);
+        // conversation's own still-pending chain entry.
+        return this.processLocked(context, flow, sessionId, chatId, conversation, messageBody, messageId, depth + 1);
       }
     }
 

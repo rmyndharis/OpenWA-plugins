@@ -35,11 +35,11 @@ This repository provides:
 | Plugin | Description | Version | Status |
 | ------ | ----------- | ------- | ------ |
 | [`after-hours`](./after-hours) | Auto-replies with a configurable away/closing message to messages received outside business hours. | 0.1.2 | stable |
-| [`chat-flow`](./chat-flow) | Interactive, stateful auto-reply: a trigger word starts a greeting + numbered menu, replies traverse a configurable menu tree, and per-chat state expires after 15 minutes. | 1.0.3 | stable |
+| [`chat-flow`](./chat-flow) | Interactive, stateful auto-reply: a trigger word starts a greeting + numbered menu, replies traverse a configurable menu tree, and per-chat state expires after 15 minutes. | 1.0.4 | stable |
 | [`chatwoot-adapter`](./chatwoot-adapter) | Two-way sync between a WhatsApp session and a Chatwoot inbox: relays WhatsApp messages (1:1 and groups, with media) into Chatwoot as an API-channel inbox, sends agent replies back to WhatsApp, and hands a chat over to a human agent — silencing other OpenWA bots — when an agent takes it in Chatwoot. First consumer of the OpenWA Integration SDK v1; runs sandboxed in the plugin worker. | 0.1.0 | beta |
-| [`faq-bot`](./faq-bot) | Auto-replies to inbound WhatsApp messages from configurable FAQ keyword/regex rules. | 0.1.4 | stable |
-| [`group-translate`](./group-translate) | Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled. | 1.0.4 | stable |
-| [`gsheets-logger`](./gsheets-logger) | Logs WhatsApp message events to a Google Sheet via a service account. | 0.2.2 | stable |
+| [`faq-bot`](./faq-bot) | Auto-replies to inbound WhatsApp messages from configurable FAQ keyword/regex rules. | 0.1.5 | stable |
+| [`group-translate`](./group-translate) | Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled. | 1.0.5 | stable |
+| [`gsheets-logger`](./gsheets-logger) | Logs WhatsApp message events to a Google Sheet via a service account. | 0.2.3 | stable |
 | [`voice-transcription`](./voice-transcription) | Transcribes inbound WhatsApp voice notes to text via an OpenAI-compatible speech-to-text backend (self-hosted Speaches/faster-whisper or hosted Groq/OpenAI) and delivers a `message.transcription` event to your webhook — so bots and AI can read and reply to audio. Off the message-delivery path; disabled until enabled. | 1.0.1 | beta |
 <!-- END PLUGIN CATALOG -->
 

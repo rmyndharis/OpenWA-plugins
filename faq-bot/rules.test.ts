@@ -94,6 +94,56 @@ test('parseRules keeps safe regexes (single/non-nested quantifiers, lookahead)',
   assert.equal(matchRule(rules, 'abcabc')?.reply, 'b');
 });
 
+test('parseRules rejects adjacent overlapping unbounded quantifiers (sibling ReDoS)', () => {
+  // Same-level adjacent quantifiers over overlapping classes backtrack polynomially even without
+  // any group nesting — e.g. `.*.*.*done` hangs on a 1000-char body. The nested-only check missed them.
+  const { rules, skipped } = parseRules(
+    JSON.stringify([
+      { mode: 'regex', pattern: '.*.*.*done', reply: 'evil1' },
+      { mode: 'regex', pattern: '.*.*done', reply: 'evil2' },
+      { mode: 'regex', pattern: '\\w*\\w*\\w*\\w*\\w*!', reply: 'evil3' },
+      { mode: 'contains', pattern: 'hi', reply: 'hello' },
+    ]),
+  );
+  assert.equal(rules.length, 1);
+  assert.deepEqual(skipped, ['.*.*.*done', '.*.*done', '\\w*\\w*\\w*\\w*\\w*!']);
+});
+
+test('parseRules rejects a repeated group whose body has a variable-width quantifier', () => {
+  // `(a?){40}` is exponential: the optional inner + a bounded outer repeat is invisible to a check
+  // that only models UNBOUNDED nesting. Reject any group repeated >=2 times with a variable-width body.
+  const { rules, skipped } = parseRules(
+    JSON.stringify([
+      { mode: 'regex', pattern: '(a?){40}b', reply: 'evil1' },
+      { mode: 'regex', pattern: '(a?){25}b', reply: 'evil2' },
+      { mode: 'contains', pattern: 'hi', reply: 'hello' },
+    ]),
+  );
+  assert.equal(rules.length, 1);
+  assert.deepEqual(skipped, ['(a?){40}b', '(a?){25}b']);
+});
+
+test('parseRules keeps legitimate patterns (adjacent DISJOINT classes, separated widecards, fixed nesting)', () => {
+  // Regression guard: the hardening must not reject ordinary operator patterns. Adjacent quantifiers
+  // over disjoint classes (a/b/c, \s/\d) are linear; a wildcard separated by a literal is fine; a group
+  // with only a fixed-width body ({2}) repeated is fine.
+  const corpus = [
+    'a*b*c*',        // adjacent, disjoint literals — already a shipped assertion
+    'order\\s+\\d+', // adjacent, disjoint classes
+    '.*urgent.*',    // two wildcards separated by a mandatory literal
+    'https?://\\S+', // single unbounded quantifier
+    '(cat|dog)s?',   // group not repeated
+    'colou?r',       // lone optional
+    '\\d{3}-\\d{4}', // bounded, no repeat-of-variable
+    '(\\d{2}){3}',   // repeated group, FIXED-width body — safe
+    'hi|hello|hey',
+    '\\bprice\\b',
+  ].map((pattern, i) => ({ mode: 'regex', pattern, reply: String(i) }));
+  const { rules, skipped } = parseRules(JSON.stringify(corpus));
+  assert.deepEqual(skipped, []);
+  assert.equal(rules.length, corpus.length);
+});
+
 test('matchRule: contains is case-insensitive substring; no match returns null', () => {
   const { rules } = parseRules(ok);
   assert.equal(matchRule(rules, 'Brp HARGAnya?')?.reply, 'Harga mulai 100rb');
