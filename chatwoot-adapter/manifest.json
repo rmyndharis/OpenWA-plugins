@@ -1,0 +1,83 @@
+{
+  "id": "chatwoot-adapter",
+  "name": "Chatwoot Adapter",
+  "version": "0.1.0",
+  "type": "extension",
+  "main": "dist/index.js",
+  "description": "Two-way sync between a WhatsApp session and a Chatwoot inbox: relays WhatsApp messages (1:1 and groups, with media) into Chatwoot as an API-channel inbox, sends agent replies back to WhatsApp, and hands a chat over to a human agent — silencing other OpenWA bots — when an agent takes it in Chatwoot. First consumer of the OpenWA Integration SDK v1; runs sandboxed in the plugin worker.",
+  "author": "Yudhi Armyndharis <yudhi@rmyndharis.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter",
+  "repository": "https://github.com/rmyndharis/OpenWA-plugins",
+  "keywords": ["chatwoot", "helpdesk", "inbox", "handover", "two-way", "agent", "whatsapp", "openwa"],
+  "status": "beta",
+  "minOpenWAVersion": "0.8.0",
+  "testedOpenWAVersion": "0.8.0",
+  "sdkVersion": "1",
+  "permissions": ["net:fetch", "conversation:send", "webhook:ingress"],
+  "net": { "allow": [], "allowConfigHosts": ["baseUrl"] },
+  "sessionScoped": true,
+  "sessions": ["*"],
+  "hooks": ["message:received"],
+  "ingress": [
+    {
+      "route": "chatwoot",
+      "mode": "async",
+      "verify": "core",
+      "maxBodyBytes": 262144,
+      "signature": {
+        "scheme": "hmac-sha256",
+        "header": "X-Chatwoot-Signature",
+        "contentTemplate": "{timestamp}.{rawBody}",
+        "encoding": "hex",
+        "prefix": "sha256=",
+        "timestampHeader": "X-Chatwoot-Timestamp",
+        "toleranceSec": 300,
+        "dedupHeader": "X-Chatwoot-Delivery"
+      },
+      "conversationId": { "jsonPointer": "/conversation/id" }
+    }
+  ],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "title": "Chatwoot base URL",
+        "required": true,
+        "description": "Public https URL of your Chatwoot (Cloud or a public-domain self-hosted install), e.g. https://app.chatwoot.com. Its host is auto-added to this plugin's outbound allowlist. Private/LAN hosts are not supported."
+      },
+      "apiToken": {
+        "type": "string",
+        "title": "API access token",
+        "secret": true,
+        "required": true,
+        "description": "A Chatwoot access token (Profile > Access Token, or an agent-bot token) with access to the API-channel inbox."
+      },
+      "accountId": {
+        "type": "number",
+        "title": "Account ID",
+        "required": true,
+        "description": "Your Chatwoot account id (the number in the dashboard URL, /app/accounts/<id>/...)."
+      },
+      "inboxId": {
+        "type": "number",
+        "title": "API-channel inbox ID",
+        "required": true,
+        "description": "The API-channel inbox this adapter posts into and relays agent replies from."
+      },
+      "relayGroups": {
+        "type": "boolean",
+        "title": "Relay group chats",
+        "default": true,
+        "description": "Relay WhatsApp group chats. Each group maps to one synthetic Chatwoot contact; messages are prefixed with the sender's name."
+      },
+      "relayMedia": {
+        "type": "boolean",
+        "title": "Relay inbound media to Chatwoot",
+        "default": true,
+        "description": "Upload inbound WhatsApp media (images, files, audio) to Chatwoot as attachments."
+      }
+    }
+  }
+}

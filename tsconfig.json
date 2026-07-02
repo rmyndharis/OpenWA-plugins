@@ -16,6 +16,7 @@
     "chat-flow/**/*.ts",
     "group-translate/**/*.ts",
     "voice-transcription/**/*.ts",
+    "chatwoot-adapter/**/*.ts",
     "types/**/*.d.ts"
   ]
 }

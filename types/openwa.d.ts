@@ -106,8 +106,9 @@ export interface PluginManifest {
   hooks?: HookEvent[];
   /** v0.7: per-session activation (default true). The platform owns which sessions a plugin runs for. */
   sessionScoped?: boolean;
-  /** v0.7: outbound HTTP host allowlist for ctx.net.fetch — "host:port" entries; deny by default. */
-  net?: { allow: string[] };
+  /** v0.7: outbound HTTP host allowlist for ctx.net.fetch — "host:port" entries; deny by default.
+   *  v1: `allowConfigHosts` additionally admits the host of each named config key (e.g. "baseUrl"). */
+  net?: { allow: string[]; allowConfigHosts?: string[] };
   /** v0.7: a sandboxed-iframe config editor served by the host. */
   configUi?: { entry: string; height?: number };
   /** Declarative config schema (rendered by the host into an authenticated form). */
@@ -175,6 +176,58 @@ export interface PluginContext {
   engine: PluginEngineReadCapability;
   /** v0.7: host-proxied, SSRF-guarded outbound HTTP (needs the "net:fetch" permission + manifest net.allow). */
   net: PluginNetCapability;
+  /** v1: claim an inbound ingress webhook route (needs the "webhook:ingress" permission). */
+  registerWebhook(route: string, handler: WebhookHandler): void;
+  /** v1: normalized outbound send, translated host-side to MessageService (needs "conversation:send"). */
+  conversations: PluginConversationsCapability;
+  /** v1: flip a mapped conversation's bot/human/closed handover state (needs "conversation:send"). */
+  handover: PluginHandoverCapability;
+  /** v1: create/read the WA-chat <-> provider-conversation mapping (needs "conversation:send"). */
+  mappings: PluginMappingsCapability;
+}
+
+// ── Integration SDK v1: inbound webhook ingress, normalized send, handover, conversation mapping ────
+export interface WebhookRequest {
+  instanceId: string;
+  method: string;
+  headers: Record<string, string>;
+  query: Record<string, string>;
+  body: string;
+  rawBody: string;
+  verified: boolean;
+  deliveryId: string;
+  sessionId?: string;
+}
+export type WebhookResponse = { status?: number; headers?: Record<string, string>; body?: string };
+export type WebhookHandler = (req: WebhookRequest) => Promise<WebhookResponse | void> | WebhookResponse | void;
+
+export type HandoverState = 'bot' | 'human' | 'closed';
+
+export interface ConversationSendEnvelope {
+  sessionId?: string;
+  instanceId?: string;
+  chatId?: string;
+  type: 'text' | 'image' | 'file' | 'audio' | 'video' | 'location';
+  text?: string;
+  mediaUrl?: string;
+  replyTo?: string;
+  source?: { provider: string; externalConversationId: string };
+}
+export interface PluginConversationsCapability {
+  send(env: ConversationSendEnvelope): Promise<unknown>;
+}
+export interface PluginHandoverCapability {
+  set(key: { sessionId: string; chatId: string; instanceId: string }, state: HandoverState): Promise<unknown>;
+}
+export interface PluginMappingsCapability {
+  upsert(key: { sessionId: string; chatId: string; instanceId: string }, providerConversationId: string): Promise<unknown>;
+  get(
+    key: { sessionId: string; chatId: string; instanceId: string },
+  ): Promise<{ providerConversationId: string; handoverState: HandoverState } | null>;
+  getByProvider(
+    instanceId: string,
+    providerConversationId: string,
+  ): Promise<{ sessionId: string; chatId: string; handoverState: HandoverState } | null>;
 }
 
 export interface IPlugin {
