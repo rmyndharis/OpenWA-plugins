@@ -94,33 +94,72 @@ test('parseRules keeps safe regexes (single/non-nested quantifiers, lookahead)',
   assert.equal(matchRule(rules, 'abcabc')?.reply, 'b');
 });
 
-test('parseRules rejects adjacent overlapping unbounded quantifiers (sibling ReDoS)', () => {
-  // Same-level adjacent quantifiers over overlapping classes backtrack polynomially even without
-  // any group nesting — e.g. `.*.*.*done` hangs on a 1000-char body. The nested-only check missed them.
+test('parseRules rejects 3+ adjacent overlapping unbounded quantifiers (sibling ReDoS)', () => {
+  // 3+ same-level adjacent quantifiers over overlapping classes backtrack polynomially (O(n^3)+) and hang
+  // on a 1000-char body. Two adjacent is only O(n^2) — safe under the cap — so it is allowed (next test).
   const { rules, skipped } = parseRules(
     JSON.stringify([
       { mode: 'regex', pattern: '.*.*.*done', reply: 'evil1' },
-      { mode: 'regex', pattern: '.*.*done', reply: 'evil2' },
       { mode: 'regex', pattern: '\\w*\\w*\\w*\\w*\\w*!', reply: 'evil3' },
       { mode: 'contains', pattern: 'hi', reply: 'hello' },
     ]),
   );
   assert.equal(rules.length, 1);
-  assert.deepEqual(skipped, ['.*.*.*done', '.*.*done', '\\w*\\w*\\w*\\w*\\w*!']);
+  assert.deepEqual(skipped, ['.*.*.*done', '\\w*\\w*\\w*\\w*\\w*!']);
 });
 
-test('parseRules rejects a repeated group whose body has a variable-width quantifier', () => {
-  // `(a?){40}` is exponential: the optional inner + a bounded outer repeat is invisible to a check
-  // that only models UNBOUNDED nesting. Reject any group repeated >=2 times with a variable-width body.
+test('parseRules allows two adjacent overlapping quantifiers (O(n^2) is safe under the 1000-char cap)', () => {
+  const { skipped } = parseRules(
+    JSON.stringify([
+      { mode: 'regex', pattern: '.*.*done', reply: 'a' }, // two dots
+      { mode: 'regex', pattern: '.*\\d+', reply: 'b' },   // dot then \d
+      { mode: 'regex', pattern: '\\w+.*', reply: 'c' },
+    ]),
+  );
+  assert.deepEqual(skipped, []);
+});
+
+test('parseRules rejects a LARGE/unbounded repeat of a variable-width group, allows a small bounded one', () => {
+  // `(a?){40}` is exponential (2^40); a small bounded repeat like `(ab?){2}` is bounded by the constant and
+  // safe. Reject on unbounded or a large count; allow the small ones common in real (e.g. phone) patterns.
   const { rules, skipped } = parseRules(
     JSON.stringify([
       { mode: 'regex', pattern: '(a?){40}b', reply: 'evil1' },
       { mode: 'regex', pattern: '(a?){25}b', reply: 'evil2' },
+      { mode: 'regex', pattern: '(a?)+b', reply: 'evil3' }, // unbounded outer
+      { mode: 'regex', pattern: '(ab?){2}', reply: 'ok1' },
+      { mode: 'regex', pattern: '(\\d{2,4}){3}', reply: 'ok2' },
+      { mode: 'contains', pattern: 'hi', reply: 'hello' },
+    ]),
+  );
+  assert.deepEqual(skipped, ['(a?){40}b', '(a?){25}b', '(a?)+b']);
+  assert.equal(rules.length, 3); // ok1, ok2, hi
+});
+
+test('parseRules: an empty character class [^] / [] does not hide a catastrophic pattern (JS class semantics)', () => {
+  // In JavaScript `[^]` matches ANY char and `[]` is an empty class — the `]` closes the class. A POSIX-style
+  // "leading ] is a literal member" reading would swallow the rest of the pattern and bypass the screen.
+  const { rules, skipped } = parseRules(
+    JSON.stringify([
+      { mode: 'regex', pattern: '[^](a+)+!', reply: 'evil1' },
+      { mode: 'regex', pattern: '[](a+)+!', reply: 'evil2' },
       { mode: 'contains', pattern: 'hi', reply: 'hello' },
     ]),
   );
   assert.equal(rules.length, 1);
-  assert.deepEqual(skipped, ['(a?){40}b', '(a?){25}b']);
+  assert.deepEqual(skipped, ['[^](a+)+!', '[](a+)+!']);
+});
+
+test('parseRules: a normal character class is still accepted (no regression from the empty-class fix)', () => {
+  const { rules, skipped } = parseRules(
+    JSON.stringify([
+      { mode: 'regex', pattern: '[abc]+', reply: 'a' },
+      { mode: 'regex', pattern: '[a\\]b]+', reply: 'b' }, // an escaped ] inside the class
+      { mode: 'regex', pattern: '[^0-9]*x', reply: 'c' },
+    ]),
+  );
+  assert.deepEqual(skipped, []);
+  assert.equal(rules.length, 3);
 });
 
 test('parseRules keeps legitimate patterns (adjacent DISJOINT classes, separated widecards, fixed nesting)', () => {

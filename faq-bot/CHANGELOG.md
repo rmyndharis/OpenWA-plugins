@@ -8,6 +8,23 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.1.6] — 2026-07-02
+
+### Fixed
+
+- **An empty character class (`[]` / `[^]`) no longer bypasses the regex safety screen.** The class
+  parser treated a leading `]` as a literal member (POSIX), but in JavaScript `[]` is an empty class and
+  `[^]` matches any char — so `[^](a+)+!` was mis-parsed as one atom and its catastrophic `(a+)+` tail
+  slipped through and could pin the worker. The parser now follows JS class semantics. (Differential
+  fuzzing confirms the screen rejects everything the pre-0.1.5 screen did, with no reintroduced hole.)
+
+### Changed
+
+- **Fewer false rejections of safe patterns.** Adjacent overlapping quantifiers are now rejected only at
+  **3 or more** in a row (`.*.*.*`) — two adjacent (`.*.*`, `.*\d+`) is `O(n²)`, safe under the 1000-char
+  cap, and is now allowed. A repeated variable-width group is rejected only when the repeat is unbounded
+  or large (≥10, e.g. `(a?){40}`); a small bounded repeat like `(ab?){2}` or `(\d{2,4}){3}` is allowed.
+
 ## [0.1.5] — 2026-07-02
 
 ### Fixed
