@@ -188,7 +188,7 @@ describe('TranslationCoordinator', () => {
     assert.equal(saved.at(-1)?.active ?? false, false);
   });
 
-  test('rejects activation from a non-admin (silent by default)', async () => {
+  test('rejects activation from a non-admin silently by default (denyReply false)', async () => {
     const state = freshState({ announced: true });
     const { store, gateway, translator, saved, mocks } = makeDeps(state);
     mocks.getGroupAdmins.mockResolvedValue(['999@c.us']);
@@ -196,6 +196,19 @@ describe('TranslationCoordinator', () => {
     const res = await c.handleMessage('s', msg({ body: '/tr on' }));
     assert.deepEqual(res, { swallow: true });
     assert.equal(saved.at(-1)?.active ?? false, false);
+    assert.equal(mocks.sendText.calls.length, 0, 'denyReply defaults false: a denied command must not reply');
+  });
+
+  test('replies "admins only" on a denied command when denyReply is enabled', async () => {
+    const state = freshState({ announced: true });
+    const { store, gateway, translator, saved, mocks } = makeDeps(state);
+    mocks.getGroupAdmins.mockResolvedValue(['999@c.us']);
+    const c = new TranslationCoordinator(translator, store, gateway, { ...OPTS, denyReply: true });
+    const res = await c.handleMessage('s', msg({ body: '/tr on' }));
+    assert.deepEqual(res, { swallow: true });
+    assert.equal(saved.at(-1)?.active ?? false, false);
+    assert.equal(mocks.sendText.calls.length, 1);
+    assert.match(String((mocks.sendText.calls[0] as unknown[])[2]), /admins/i);
   });
 
   test('translates an active-group message into other participants languages (skipping the source)', async () => {

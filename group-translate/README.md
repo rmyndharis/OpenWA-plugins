@@ -13,8 +13,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `group-translate` |
-| **Version** | 1.0.4 |
-| **Released** | 2026-06-25 |
+| **Version** | 1.0.5 |
+| **Released** | 2026-07-02 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -74,7 +74,7 @@ Then, in the group, an admin runs `/tr on`. Or install the packaged `.zip` from
 
 | Key | Required | Default | Description |
 | --- | -------- | ------- | ----------- |
-| `libretranslateUrl` | yes | `http://localhost:7001` | Base URL of your LibreTranslate instance — its host:port **must** also be in the manifest `net.allow` |
+| `libretranslateUrl` | yes | `http://localhost:7001` | Base URL of your LibreTranslate instance — its host:port **must** be in the manifest `net.allow`; a `localhost`/private host **also** requires `SSRF_ALLOWED_HOSTS` on the gateway (see [Security](#security)) |
 | `libretranslateApiKey` | no | — | Secret API key, if your instance requires one (redacted on read) |
 | `timeoutMs` | no | `4000` | Per-call timeout; keep ≤ the host hook budget (5000 ms) |
 | `commandPrefix` | no | `/tr` | The in-chat command prefix |
@@ -90,13 +90,23 @@ Targets OpenWA **≥ 0.7.0** — outbound HTTP uses the v0.7 `ctx.net.fetch` cap
 ## Security
 
 Outbound translate calls go **exclusively** through the host's SSRF-guarded `ctx.net.fetch`; there is no
-raw socket in the plugin. The host denies any outbound host that is not in this plugin's manifest
-`net.allow` allowlist (deny by default), so before packaging you **must** set `net.allow` to the
-`host:port` of your `libretranslateUrl` — e.g. `"net": { "allow": ["libretranslate:7001"] }`. This replaces
-the old core-module guidance about `SSRF_ALLOWED_HOSTS`, which no longer applies to plugins. The API key
-travels only in the request body to the allow-listed host and is stored as a redacted secret. Commands that
-change group state are admin-gated via `ctx.engine.getGroupInfo`; the per-call timeout (≤ the host hook
-budget) and circuit breaker keep a slow backend from stalling the host.
+raw socket in the plugin. Two independent controls apply and **both** must pass:
+
+1. **Manifest allowlist (`net.allow`, deny by default).** Before packaging you **must** set `net.allow`
+   to the `host:port` of your `libretranslateUrl` — e.g. `"net": { "allow": ["libretranslate:7001"] }`.
+2. **Host SSRF guard.** The host additionally blocks private / loopback addresses (`127.0.0.0/8`, `::1`,
+   RFC-1918, link-local) at connect time, **regardless of `net.allow`**, with no plugin opt-out.
+
+Because of (2), a **self-hosted LibreTranslate on `localhost` / `127.0.0.1` / a private LAN or Docker
+host** — including this plugin's default `http://localhost:7001` — is blocked unless the operator adds
+that hostname to the gateway environment variable **`SSRF_ALLOWED_HOSTS`** (e.g.
+`SSRF_ALLOWED_HOSTS=localhost,127.0.0.1`, or the Docker service name). Without it, translate calls fail at
+connect: the plugin fails open (messages pass through **untranslated**) and the circuit opens after a few
+failures. A **public** LibreTranslate host needs only `net.allow`, not `SSRF_ALLOWED_HOSTS`.
+
+The API key travels only in the request body to the allow-listed host and is stored as a redacted secret.
+Commands that change group state are admin-gated via `ctx.engine.getGroupInfo`; the per-call timeout (≤ the
+host hook budget) and circuit breaker keep a slow backend from stalling the host.
 
 ## Changelog
 
