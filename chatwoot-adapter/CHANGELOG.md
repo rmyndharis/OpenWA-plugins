@@ -18,6 +18,13 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
   placeholder instead of an empty bubble. Outbound audio attachments from Chatwoot are sent back to
   WhatsApp as PTT voice notes, and image/video/file attachments are relayed as their native media type —
   previously any attachment without text was silently dropped. Requires OpenWA 0.8.3+. (#607)
+- **Contact names self-heal for `@lid` chats.** A chat first seen from a privacy-id (`@lid`) sender is
+  seeded in Chatwoot with the bare id; once a real WhatsApp display name arrives on a later message, the
+  Chatwoot contact is renamed to it. Best-effort, only when the name actually changed, and never for
+  group contacts. (#609)
+- **Self-hosted Chatwoot guidance** in the README: `baseUrl` must be a public `https` URL (LAN/`localhost`
+  are rejected by the SSRF guard), how to expose a self-hosted instance, and how to avoid 502/530 on large
+  media uploads through a tunnel. (#609)
 
 ## [0.1.1] — 2026-07-02
 

@@ -91,3 +91,40 @@ test('a voice note with an omitted blob posts a placeholder, not an empty bubble
   await handleInbound(d, 'sess', 'Engine', voice);
   assert.deepEqual(posted, [{ id: 55, c: '🎤 Voice message' }]);
 });
+
+test('refreshes an @lid contact name once a real pushName arrives (#609)', async () => {
+  const updates: Array<[number, string]> = [];
+  const patches: Array<{ name?: string }> = [];
+  const { deps: d } = deps({
+    client: { updateContact: async (id: number, name: string) => void updates.push([id, name]) },
+    store: {
+      getByChat: async () => ({ conversationId: 55, contactId: 9, sourceId: 'src', name: '621@lid' }),
+      patch: async (_s: string, _c: string, p: { name?: string }) => void patches.push(p),
+    },
+  });
+  const lidMsg = { ...msg, id: 'x1', chatId: '621@lid', contact: { pushName: 'Budi' } } as IncomingMessage;
+  await handleInbound(d, 'sess', 'Engine', lidMsg);
+  assert.deepEqual(updates, [[9, 'Budi']]);
+  assert.deepEqual(patches, [{ name: 'Budi' }]);
+});
+
+test('does not rename when the stored name already matches (#609)', async () => {
+  const updates: unknown[] = [];
+  const { deps: d } = deps({
+    client: { updateContact: async (id: number, name: string) => void updates.push([id, name]) },
+    store: { getByChat: async () => ({ conversationId: 55, contactId: 9, sourceId: 'src', name: 'Budi' }) },
+  });
+  await handleInbound(d, 'sess', 'Engine', { ...msg, chatId: '621@lid', contact: { pushName: 'Budi' } } as IncomingMessage);
+  assert.equal(updates.length, 0);
+});
+
+test('never renames a group contact from a member pushName (#609)', async () => {
+  const updates: unknown[] = [];
+  const { deps: d } = deps({
+    client: { updateContact: async (...a: unknown[]) => void updates.push(a) },
+    store: { getByChat: async () => ({ conversationId: 55, contactId: 9, sourceId: 'src', name: 'Group 12@g.us' }) },
+  });
+  const grp = { ...msg, isGroup: true, chatId: '12@g.us', author: '621@c.us', contact: { pushName: 'Budi' } } as IncomingMessage;
+  await handleInbound(d, 'sess', 'Engine', grp);
+  assert.equal(updates.length, 0);
+});

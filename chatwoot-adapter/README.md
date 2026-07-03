@@ -70,10 +70,23 @@ sees it.
 The Chatwoot webhook **secret** and the instance's **session scope** are set when you mint the instance (they
 are not part of the config above).
 
+## Self-hosted Chatwoot
+
+`baseUrl` must be a **public `https` URL** — `localhost`, a LAN IP, or a Docker-internal host such as
+`host.docker.internal` are rejected (OpenWA's SSRF guard blocks private addresses, and only the configured
+public host is added to the outbound allowlist). To use a self-hosted Chatwoot:
+
+- Put it behind a public domain with TLS, or expose it through a tunnel (Cloudflare Tunnel, ngrok, …) and set
+  `baseUrl` to that public URL.
+- Media flows through this URL both ways — inbound uploads (`attachments[]`) and the host fetching an outbound
+  attachment. A tunnel or reverse proxy with a small body-size limit can return **502/530** on large files; raise
+  the limit (e.g. nginx `client_max_body_size`, or your tunnel's max request size). Oversized inbound media that
+  the engine already dropped for size is relayed as a short placeholder instead of an empty message.
+
 ## Compatibility
 
-- **OpenWA** ≥ 0.8.0 — needs Integration SDK v1 (webhook ingress, `ctx.mappings`, the session+chat handover
-  gate, and `net.allowConfigHosts`).
+- **OpenWA** ≥ 0.8.3 — needs Integration SDK v1 (webhook ingress, `ctx.mappings`, the session+chat handover
+  gate, `net.allowConfigHosts`) and the `conversation.send` media/voice types used for outbound attachments.
 - **Chatwoot** — account-level webhooks with timestamped HMAC signing (see Setup).
 
 ## Security

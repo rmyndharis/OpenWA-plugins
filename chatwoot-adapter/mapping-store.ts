@@ -5,6 +5,9 @@ export interface ChatLink {
   contactId: number;
   sourceId: string;
   handoverState?: 'bot' | 'human' | 'closed';
+  // Last name synced to the Chatwoot contact. Lets inbound skip a redundant rename and detect when a real
+  // pushName has arrived for a contact first seeded with a bare JID. Absent on pre-0.2.0 rows.
+  name?: string;
 }
 
 // Single-document-per-chat mapping over ctx.storage, mirrored into the core ctx.mappings row so the

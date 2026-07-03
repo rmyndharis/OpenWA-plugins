@@ -49,6 +49,14 @@ test('postText posts an incoming message with the api token header', async () =>
   assert.equal(last.init!.headers!['api_access_token'], 'tok');
 });
 
+test('updateContact PUTs the new name to the contact', async () => {
+  const { fn, calls } = fakeFetch({ 'PUT /api/v1/accounts/3/contacts/9': { body: { id: 9 } } });
+  await new ChatwootClient(fn, cfg).updateContact(9, 'Budi');
+  const last = calls.at(-1)!;
+  assert.equal(last.init!.method, 'PUT');
+  assert.deepEqual(JSON.parse(last.init!.body as string), { name: 'Budi' });
+});
+
 test('postText forwards source_id and the in_reply_to_external_id thread pointer when given', async () => {
   const { fn, calls } = fakeFetch({ 'POST /api/v1/accounts/3/conversations/55/messages': { body: { id: 1 } } });
   await new ChatwootClient(fn, cfg).postText(55, '..', { sourceId: 'wa1', inReplyToExternalId: 'wa0' });

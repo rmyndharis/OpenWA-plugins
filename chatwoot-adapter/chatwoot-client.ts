@@ -90,6 +90,10 @@ export class ChatwootClient {
     return src;
   }
 
+  async updateContact(contactId: number, name: string): Promise<void> {
+    await this.json(`${this.base()}/contacts/${contactId}`, { method: 'PUT', body: JSON.stringify({ name }) });
+  }
+
   async findOpenConversation(contactId: number): Promise<number | null> {
     const { data } = await this.json<{ payload?: Array<{ id: number; inbox_id?: number; status?: string }> }>(
       `${this.base()}/contacts/${contactId}/conversations`,
