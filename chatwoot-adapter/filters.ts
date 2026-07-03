@@ -6,6 +6,14 @@ export function shouldRelayInbound(msg: IncomingMessage, source: string, relayGr
   return source === 'Engine' && !msg.fromMe && !!msg.chatId && (!msg.isGroup || relayGroups);
 }
 
+// Relay the account's OWN outbound sends (composed on a linked phone or via the OpenWA API) so the
+// Chatwoot thread mirrors WhatsApp (#615). The mirror of shouldRelayInbound with fromMe===true. The
+// adapter's own Chatwoot-agent replies are ALSO fromMe and reach message:sent, but they're excluded
+// out-of-band by the 'wa' send-id echo marker, not here. Pure — no ctx.
+export function shouldRelayOwn(msg: IncomingMessage, source: string, relayGroups: boolean): boolean {
+  return source === 'Engine' && msg.fromMe && !!msg.chatId && (!msg.isGroup || relayGroups);
+}
+
 // The subset of a Chatwoot account-level webhook payload the adapter reads (message_created +
 // conversation_updated). Everything is optional — Chatwoot omits fields per event/version.
 export interface ChatwootWebhookMessage {

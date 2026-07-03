@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { shouldRelayInbound, shouldRelayOutbound } from './filters.ts';
+import { shouldRelayInbound, shouldRelayOutbound, shouldRelayOwn } from './filters.ts';
 
 const base = {
   id: 'm1',
@@ -20,6 +20,16 @@ test('inbound: Engine + not fromMe + has chatId; drops API, fromMe, and groups w
   assert.equal(shouldRelayInbound(base, 'API', true), false);
   assert.equal(shouldRelayInbound({ ...base, isGroup: true }, 'Engine', false), false);
   assert.equal(shouldRelayInbound({ ...base, isGroup: true }, 'Engine', true), true);
+});
+
+test('own-outbound: Engine + fromMe + has chatId; drops inbound, API source, empty chatId, and groups when relayGroups=false', () => {
+  const own = { ...base, fromMe: true } as const;
+  assert.equal(shouldRelayOwn(own, 'Engine', true), true);
+  assert.equal(shouldRelayOwn({ ...own, fromMe: false }, 'Engine', true), false); // inbound is not an own send
+  assert.equal(shouldRelayOwn(own, 'API', true), false); // only engine-delivered creates
+  assert.equal(shouldRelayOwn({ ...own, chatId: '' }, 'Engine', true), false); // no target chat
+  assert.equal(shouldRelayOwn({ ...own, isGroup: true }, 'Engine', false), false);
+  assert.equal(shouldRelayOwn({ ...own, isGroup: true }, 'Engine', true), true);
 });
 
 test('outbound: strict private — relay only outgoing + private===false in the configured inbox', () => {

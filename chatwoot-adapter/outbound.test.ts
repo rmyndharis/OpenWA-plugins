@@ -35,6 +35,7 @@ function deps(over: { store?: Record<string, unknown> } = {}) {
     lock: new KeyedAsyncLock(),
     conversations: { send: async (e: { sessionId?: string; chatId?: string; type: string; text?: string }) => void sent.push(e) },
     handover: { set: async (k: unknown, s: string) => void handovers.push([k, s]) },
+    engine: { canonicalChatId: async (_s: string, c: string) => c },
     store: {
       hasSeen: async () => false,
       markSeen: async () => {},
@@ -124,6 +125,7 @@ test('cross-tenant: two accounts sharing conversation id 55 route to the correct
     lock: new KeyedAsyncLock(),
     conversations: { send: async (e: { sessionId?: string; chatId?: string; text?: string }) => void sent.push(e) },
     handover: { set: async () => {} },
+    engine: { canonicalChatId: async (_s: string, c: string) => c },
     store,
     inboxId: 7,
     log: () => {},
@@ -151,6 +153,7 @@ test('a transient send failure does not poison dedup: the retry re-sends the rep
       },
     },
     handover: { set: async () => {} },
+    engine: { canonicalChatId: async (_s: string, c: string) => c },
     store,
     inboxId: 7,
     log: () => {},
@@ -160,6 +163,61 @@ test('a transient send failure does not poison dedup: the retry re-sends the rep
   await handleOutbound(d, reqScoped('sess', body)); // retry: NOT suppressed by a premature dedup mark
   assert.equal(sent.length, 1);
   assert.equal(sent[0].text, 'hi');
+});
+
+test('marks the WA send id as seen (scoped by the WA session) so message:sent does not echo the agent reply', async () => {
+  const marks: Array<[string, string, string | undefined]> = [];
+  const d = {
+    lock: new KeyedAsyncLock(),
+    // conversations.send returns { messageId, timestamp } — the engine's serialized id of the sent
+    // message, which is the same id the subsequent message:sent event carries.
+    conversations: { send: async () => ({ messageId: 'WA_9', timestamp: 0 }) },
+    handover: { set: async () => {} },
+    engine: { canonicalChatId: async (_s: string, c: string) => c },
+    store: {
+      hasSeen: async () => false,
+      markSeen: async (kind: string, id: string, scope?: string) => void marks.push([kind, id, scope]),
+      // The WA session that owns this chat (target.sessionId) differs from the delivery scope on purpose.
+      getByConversation: async () => ({ sessionId: 'sessX', chatId: 'c@wa' }),
+    },
+    inboxId: 7,
+    log: () => {},
+  } as unknown as OutboundDeps;
+  await handleOutbound(
+    d,
+    req({ event: 'message_created', message_type: 'outgoing', private: false, id: 5, content: 'reply', inbox: { id: 7 }, conversation: { id: 55 } }),
+  );
+  assert.ok(
+    marks.some(([k, id, scope]) => k === 'wa' && id === 'WA_9' && scope === 'sessX'),
+    `expected a wa:WA_9 marker scoped by the WA session sessX, got ${JSON.stringify(marks)}`,
+  );
+});
+
+test('relay canonicalizes the WA chat id (via engine.canonicalChatId) so its lock serializes with the own-send handler', async () => {
+  const calls: Array<[string, string]> = [];
+  const d = {
+    lock: new KeyedAsyncLock(),
+    conversations: { send: async () => ({ messageId: 'X', timestamp: 0 }) },
+    handover: { set: async () => {} },
+    engine: {
+      canonicalChatId: async (s: string, c: string) => {
+        calls.push([s, c]);
+        return c === '628@lid' ? '628@c.us' : c;
+      },
+    },
+    store: {
+      hasSeen: async () => false,
+      markSeen: async () => {},
+      getByConversation: async () => ({ sessionId: 'sessX', chatId: '628@lid' }),
+    },
+    inboxId: 7,
+    log: () => {},
+  } as unknown as OutboundDeps;
+  await handleOutbound(
+    d,
+    req({ event: 'message_created', message_type: 'outgoing', private: false, id: 5, content: 'r', inbox: { id: 7 }, conversation: { id: 55 } }),
+  );
+  assert.deepEqual(calls, [['sessX', '628@lid']]); // canonicalized with the target's session + raw chatId, before locking
 });
 
 test('handover guards a non-object changed_attributes element (no throw / retry loop)', async () => {

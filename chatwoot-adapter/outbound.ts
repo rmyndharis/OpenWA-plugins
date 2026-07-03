@@ -1,4 +1,10 @@
-import type { WebhookRequest, PluginConversationsCapability, PluginHandoverCapability, HandoverState } from '../types/openwa';
+import type {
+  WebhookRequest,
+  PluginConversationsCapability,
+  PluginHandoverCapability,
+  PluginEngineReadCapability,
+  HandoverState,
+} from '../types/openwa';
 import type { MappingStore } from './mapping-store.ts';
 import type { KeyedAsyncLock } from './chat-lock.ts';
 import { shouldRelayOutbound, type ChatwootWebhookMessage } from './filters.ts';
@@ -7,6 +13,9 @@ export interface OutboundDeps {
   lock: KeyedAsyncLock;
   conversations: PluginConversationsCapability;
   handover: PluginHandoverCapability;
+  // Resolves @lid -> @c.us so the per-chat lock key matches handleSent's for a migrated contact (the echo
+  // marker + own-send handler must serialize on one canonical key).
+  engine: PluginEngineReadCapability;
   store: MappingStore;
   inboxId: number;
   log: (m: string, e?: unknown) => void;
@@ -50,13 +59,15 @@ async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: Cha
     deps.log(`no WA mapping for conversation ${conversationId}`);
     return;
   }
-  await deps.lock.run(`${target.sessionId}:${target.chatId}`, async () => {
+  const lockKey = await deps.engine.canonicalChatId(target.sessionId, target.chatId);
+  await deps.lock.run(`${target.sessionId}:${lockKey}`, async () => {
     const id = evt.id !== undefined ? String(evt.id) : undefined;
     // Dedup, but mark only AFTER a successful send: a transient send failure must retry the reply, not be
     // silently suppressed as "already seen". Scope the marker by the delivery's session (F-02/F-03).
     if (id && (await deps.store.hasSeen('cw', id, sessionId))) return;
+    let res: unknown;
     if (media) {
-      await deps.conversations.send({
+      res = await deps.conversations.send({
         sessionId: target.sessionId,
         chatId: target.chatId,
         type: media.type,
@@ -64,9 +75,22 @@ async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: Cha
         text: text || undefined,
       });
     } else {
-      await deps.conversations.send({ sessionId: target.sessionId, chatId: target.chatId, type: 'text', text });
+      res = await deps.conversations.send({ sessionId: target.sessionId, chatId: target.chatId, type: 'text', text });
     }
     if (id) await deps.store.markSeen('cw', id, sessionId);
+    // Echo guard for the own-send relay (#615): the message we just sent to WhatsApp will come back as a
+    // fromMe message:sent event. Mark its WA id seen — scoped by the WA session that will emit it
+    // (target.sessionId, NOT the delivery scope) — so handleSent recognizes it as ours and skips it. Held
+    // inside this lock, so the mark lands before message:sent can acquire the same per-chat lock.
+    const sentId = (res as { messageId?: string } | null)?.messageId;
+    if (sentId) {
+      await deps.store.markSeen('wa', sentId, target.sessionId);
+    } else {
+      // No id to key the echo guard on (an engine that returns an empty messageId — e.g. Baileys' `?? ''`).
+      // The reply's own message:sent could then be re-relayed as a duplicate; surface it rather than fail
+      // silently open.
+      deps.log('conversation.send returned no message id; own-send echo guard skipped for this reply');
+    }
   });
 }
 
@@ -109,7 +133,11 @@ async function applyHandover(deps: OutboundDeps, sessionId: string | undefined, 
   if (!state) return; // never infer human from status alone
   const resolved = state; // const so the closure keeps the non-null narrowing
   // instanceId in the mapping mirror = sessionId (a session-scoped instance is 1:1 with its session), so
-  // inbound's ctx.mappings.upsert and this handover.set address the SAME conversation-mapping row.
+  // inbound's ctx.mappings.upsert and this handover.set address the SAME conversation-mapping row. Lock on
+  // the RAW chatId (not canonicalized): a handover webhook arrives independently of WA session state, and
+  // canonicalChatId requires a live engine — resolving it here would wedge a handover while the session is
+  // offline. Handover (a state-flag write) and relay (a message send) are independent, so they don't need
+  // to serialize with each other; the raw key still serializes concurrent handover events for a chat.
   await deps.lock.run(`${target.sessionId}:${target.chatId}`, () =>
     deps.handover.set({ sessionId: target.sessionId, chatId: target.chatId, instanceId: target.sessionId }, resolved),
   );
