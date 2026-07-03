@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { PluginStorage, PluginMappingsCapability } from '../types/openwa';
+import type { PluginStorage, PluginMappingsCapability, IncomingMessage } from '../types/openwa';
 import { MappingStore } from './mapping-store.ts';
+
+const msg = (id: string, chatId = 'c@wa'): IncomingMessage =>
+  ({ id, from: 'x', to: 'y', chatId, body: 'hi', type: 'chat', timestamp: 0, fromMe: false, isGroup: false }) as IncomingMessage;
 
 function fakeStorage(): PluginStorage {
   const m = new Map<string, unknown>();
@@ -54,4 +57,45 @@ test('patch merges over the existing forward doc', async () => {
   await store.link('s', 'c', 'i', { conversationId: 1, contactId: 2, sourceId: 'x' });
   await store.patch('s', 'c', { handoverState: 'human' });
   assert.deepEqual(await store.getByChat('s', 'c'), { conversationId: 1, contactId: 2, sourceId: 'x', handoverState: 'human' });
+});
+
+test('enqueueRetry persists an entry; listRetries returns it; deleteRetry removes it; countRetries counts', async () => {
+  const store = new MappingStore(fakeStorage(), fakeMappings());
+  const dropped = await store.enqueueRetry({ sessionId: 'sess', chatId: 'c@wa', msg: msg('m1'), enqueuedAt: 100 }, 500);
+  assert.equal(dropped, null);
+  assert.equal(await store.countRetries(), 1);
+  const [e] = await store.listRetries();
+  assert.equal(e.msg.id, 'm1');
+  assert.equal(e.attempts, 0);
+  assert.equal(e.sessionId, 'sess');
+  await store.deleteRetry(e.key);
+  assert.equal(await store.countRetries(), 0);
+});
+
+test('enqueueRetry is a no-op for an already-queued message id (does not reset attempts)', async () => {
+  const store = new MappingStore(fakeStorage(), fakeMappings());
+  await store.enqueueRetry({ sessionId: 'sess', chatId: 'c@wa', msg: msg('m1'), enqueuedAt: 100 }, 500);
+  const [e1] = await store.listRetries();
+  await store.bumpRetryAttempts(e1.key, 3);
+  await store.enqueueRetry({ sessionId: 'sess', chatId: 'c@wa', msg: msg('m1'), enqueuedAt: 200 }, 500); // duplicate id
+  assert.equal(await store.countRetries(), 1);
+  assert.equal((await store.listRetries())[0].attempts, 3); // not reset
+});
+
+test('bumpRetryAttempts updates the attempt count in place', async () => {
+  const store = new MappingStore(fakeStorage(), fakeMappings());
+  await store.enqueueRetry({ sessionId: 'sess', chatId: 'c@wa', msg: msg('m1'), enqueuedAt: 100 }, 500);
+  const [e] = await store.listRetries();
+  await store.bumpRetryAttempts(e.key, 2);
+  assert.equal((await store.listRetries())[0].attempts, 2);
+});
+
+test('enqueueRetry drops the OLDEST entry (by enqueuedAt) when the queue is at capacity', async () => {
+  const store = new MappingStore(fakeStorage(), fakeMappings());
+  await store.enqueueRetry({ sessionId: 's', chatId: 'c', msg: msg('old'), enqueuedAt: 100 }, 2);
+  await store.enqueueRetry({ sessionId: 's', chatId: 'c', msg: msg('mid'), enqueuedAt: 200 }, 2);
+  const dropped = await store.enqueueRetry({ sessionId: 's', chatId: 'c', msg: msg('new'), enqueuedAt: 300 }, 2);
+  assert.equal(dropped, 'old'); // returns the dropped id for logging
+  const ids = (await store.listRetries()).map(e => e.msg.id).sort();
+  assert.deepEqual(ids, ['mid', 'new']);
 });

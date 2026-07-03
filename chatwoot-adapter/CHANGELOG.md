@@ -6,6 +6,18 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-07-03
+
+### Added
+
+- **Inbound relay is now retried instead of dropped** when Chatwoot is transiently unreachable (#609).
+  A failed inbound message is held in a durable, storage-backed queue and re-posted on a timer until it
+  succeeds; a message that keeps failing is dead-lettered after several attempts. The plugin's health
+  check surfaces the pending backlog and any dead-lettered messages.
+  - This makes inbound delivery **at-least-once** (previously at-most-once — a failed post was logged and
+    dropped). As a result, a message that actually reached Chatwoot but whose response was lost may, on
+    rare occasions, be re-posted as a duplicate.
+
 ## [0.4.0] — 2026-07-03
 
 ### Added

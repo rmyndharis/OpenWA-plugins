@@ -2,10 +2,11 @@ import type { IPlugin, PluginContext, IncomingMessage, HookContext, HookResult, 
 import { ChatwootClient } from './chatwoot-client.ts';
 import { MappingStore } from './mapping-store.ts';
 import { KeyedAsyncLock } from './chat-lock.ts';
-import { handleInbound } from './inbound.ts';
+import { handleInbound, relayInbound } from './inbound.ts';
 import { handleSent } from './sent.ts';
 import { backfillAllChats } from './backfill.ts';
 import { handleOutbound } from './outbound.ts';
+import { drainRetries, RETRY_INTERVAL_MS, MAX_RETRY_ATTEMPTS, MAX_PENDING_RETRIES } from './retry.ts';
 
 interface ChatwootFullConfig {
   baseUrl: string;
@@ -58,10 +59,17 @@ function readConfig(raw: Record<string, unknown>): ChatwootFullConfig {
 }
 
 export default class ChatwootAdapter implements IPlugin {
+  private retryTimer: ReturnType<typeof setInterval> | null = null;
+  private store: MappingStore | null = null;
+  private deadLetterCount = 0;
+  private draining = false;
+
   async onEnable(ctx: PluginContext): Promise<void> {
+    this.clearRetryTimer(); // idempotent re-enable: never leak a timer from a prior enable
     readConfig(ctx.config); // fail fast on the base config
     const lock = new KeyedAsyncLock();
     const store = new MappingStore(ctx.storage, ctx.mappings);
+    this.store = store;
     // Re-read config per event so a per-session/instance override (PR E) is picked up live.
     const clientFor = () => new ChatwootClient(ctx.net.fetch.bind(ctx.net), readConfig(ctx.config));
 
@@ -131,6 +139,62 @@ export default class ChatwootAdapter implements IPlugin {
       ),
     );
 
+    // Retry failed inbound relays (at-least-once). The durable, storage-backed queue is drained on a timer:
+    // each queued message is re-posted via the same inbound path, and a message that keeps failing is
+    // dead-lettered after MAX_RETRY_ATTEMPTS. Retries use the base config (per-session overrides aren't
+    // re-resolved outside a hook). .unref() so the timer never keeps the worker alive; cleared on disable.
+    const drain = (): Promise<void> => {
+      // Single-flight: a slow drain (large backlog) must not overlap the next tick, or two runs would
+      // snapshot the same entries and double-post. Skip the tick if a drain is still in progress.
+      if (this.draining) return Promise.resolve();
+      // Skip entirely if the config is currently invalid (e.g. apiToken cleared): every relay would throw
+      // on readConfig and walk the whole queue to dead-letter within a few ticks. Wait for valid config.
+      try {
+        readConfig(ctx.config);
+      } catch {
+        return Promise.resolve();
+      }
+      this.draining = true;
+      return drainRetries(
+        { store, lock, log: (m, e) => ctx.logger.error(m, e) },
+        (sessionId, _chatId, msg) => relayInbound(buildDeps(readConfig(ctx.config), sessionId), sessionId, msg),
+        MAX_RETRY_ATTEMPTS,
+      )
+        .then(
+          ({ deadLettered }) => void (this.deadLetterCount += deadLettered),
+          e => ctx.logger.error('retry drain failed', e),
+        )
+        .finally(() => void (this.draining = false));
+    };
+    this.retryTimer = setInterval(() => void drain(), RETRY_INTERVAL_MS);
+    this.retryTimer.unref?.();
+
     ctx.logger.log('chatwoot-adapter enabled');
+  }
+
+  async onDisable(): Promise<void> {
+    this.clearRetryTimer();
+  }
+
+  async onUnload(): Promise<void> {
+    this.clearRetryTimer();
+  }
+
+  private clearRetryTimer(): void {
+    if (this.retryTimer) {
+      clearInterval(this.retryTimer);
+      this.retryTimer = null;
+    }
+  }
+
+  // Surface the retry backlog + permanent failures in the dashboard's plugin health. A saturated queue is
+  // unhealthy: at capacity, every new failure drops the oldest pending message (active data loss).
+  async healthCheck(): Promise<{ healthy: boolean; message?: string }> {
+    const pending = this.store ? await this.store.countRetries() : 0;
+    const saturated = pending >= MAX_PENDING_RETRIES;
+    const parts: string[] = [];
+    if (pending > 0) parts.push(`${pending} inbound message(s) pending retry${saturated ? ' — queue full, dropping oldest' : ''}`);
+    if (this.deadLetterCount > 0) parts.push(`${this.deadLetterCount} dead-lettered after ${MAX_RETRY_ATTEMPTS} attempts`);
+    return { healthy: this.deadLetterCount === 0 && !saturated, message: parts.join('; ') || undefined };
   }
 }

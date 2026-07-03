@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import ChatwootAdapter from './index.ts';
+import { MAX_PENDING_RETRIES } from './retry.ts';
 import type { PluginContext } from '../types/openwa';
 
 function fakeCtx(config: Record<string, unknown>) {
@@ -8,9 +9,15 @@ function fakeCtx(config: Record<string, unknown>) {
   const routes: string[] = [];
   const cbs: Record<string, (h: unknown) => Promise<{ continue: boolean }>> = {};
   let fetches = 0;
+  const storageMap = new Map<string, unknown>();
   const ctx = {
     config,
-    storage: { get: async () => null, set: async () => {}, delete: async () => {}, list: async () => [] },
+    storage: {
+      get: async (k: string) => (storageMap.has(k) ? storageMap.get(k) : null),
+      set: async (k: string, v: unknown) => void storageMap.set(k, v),
+      delete: async (k: string) => void storageMap.delete(k),
+      list: async () => [...storageMap.keys()],
+    },
     mappings: { upsert: async () => {}, get: async () => null, getByProvider: async () => null },
     net: { fetch: async () => { fetches++; return { ok: true, status: 200, headers: {}, body: '{}' }; } },
     conversations: { send: async () => ({}) },
@@ -20,7 +27,7 @@ function fakeCtx(config: Record<string, unknown>) {
     registerHook: (event: string, cb: (h: unknown) => Promise<{ continue: boolean }>) => { hooks.push(event); cbs[event] = cb; },
     registerWebhook: (route: string) => void routes.push(route),
   } as unknown as PluginContext;
-  return { ctx, hooks, routes, cbs, fetches: () => fetches };
+  return { ctx, hooks, routes, cbs, fetches: () => fetches, storageMap };
 }
 
 const goodConfig = { baseUrl: 'https://chat.acme.com', apiToken: 'tok', accountId: 3, inboxId: 7 };
@@ -49,6 +56,39 @@ test('relayOwnMessages=false gates the message:sent handler off (no Chatwoot API
   await new Promise(res => setImmediate(res)); // let any detached work settle (there should be none)
   assert.deepEqual(r, { continue: true });
   assert.equal(fetches(), 0);
+});
+
+test('healthCheck reports the pending retry backlog (healthy — pending is transient)', async () => {
+  const { ctx, storageMap } = fakeCtx(goodConfig);
+  storageMap.set('retry:sess:m1', { sessionId: 'sess', chatId: 'c@wa', msg: { id: 'm1' }, attempts: 1, enqueuedAt: 1 });
+  const adapter = new ChatwootAdapter();
+  await adapter.onEnable(ctx);
+  const h = await adapter.healthCheck();
+  assert.equal(h.healthy, true);
+  assert.match(h.message ?? '', /1 inbound message\(s\) pending retry/);
+  await adapter.onDisable();
+});
+
+test('healthCheck is UNHEALTHY when the retry queue is saturated (at capacity → dropping oldest)', async () => {
+  const { ctx, storageMap } = fakeCtx(goodConfig);
+  for (let i = 0; i < MAX_PENDING_RETRIES; i++) {
+    storageMap.set(`retry:sess:m${i}`, { sessionId: 'sess', chatId: 'c', msg: { id: `m${i}` }, attempts: 1, enqueuedAt: i });
+  }
+  const adapter = new ChatwootAdapter();
+  await adapter.onEnable(ctx);
+  const h = await adapter.healthCheck();
+  assert.equal(h.healthy, false); // active data loss must not read as healthy
+  assert.match(h.message ?? '', /queue full, dropping oldest/);
+  await adapter.onDisable();
+});
+
+test('healthCheck is healthy with an empty queue; onDisable/onUnload run cleanly (timer cleared)', async () => {
+  const { ctx } = fakeCtx(goodConfig);
+  const adapter = new ChatwootAdapter();
+  await adapter.onEnable(ctx);
+  assert.deepEqual(await adapter.healthCheck(), { healthy: true, message: undefined });
+  await adapter.onDisable();
+  await adapter.onUnload();
 });
 
 test('onEnable throws on missing / invalid config', async () => {

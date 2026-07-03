@@ -38,6 +38,16 @@ function deps(over: { client?: Record<string, unknown>; store?: Record<string, u
   return { deps: d, counts: () => ({ contacts, convs }), posted };
 }
 
+test('a failed relay queues the message for retry (at-least-once), not dropped', async () => {
+  const enqueued: string[] = [];
+  const { deps: d } = deps({
+    client: { postText: async () => { throw new Error('chatwoot 503'); } },
+    store: { enqueueRetry: async (e: { msg: { id: string } }) => void enqueued.push(e.msg.id) },
+  });
+  await handleInbound(d, 'sess', 'Engine', msg);
+  assert.deepEqual(enqueued, ['m1']); // conversation resolved, post failed → queued (not silently dropped)
+});
+
 test('creates contact + conversation and posts an incoming message', async () => {
   const { deps: d, posted, counts } = deps();
   await handleInbound(d, 'sess', 'Engine', msg);
