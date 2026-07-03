@@ -9,7 +9,7 @@ const msg = {
   timestamp: 0, fromMe: false, isGroup: false, senderPhone: '+621', contact: { pushName: 'Budi' },
 } as IncomingMessage;
 
-function deps(over: { client?: Record<string, unknown>; store?: Record<string, unknown> } = {}) {
+function deps(over: { client?: Record<string, unknown>; store?: Record<string, unknown>; engine?: Record<string, unknown> } = {}) {
   let contacts = 0;
   let convs = 0;
   const posted: Array<{ id: number; c: string }> = [];
@@ -31,12 +31,64 @@ function deps(over: { client?: Record<string, unknown>; store?: Record<string, u
     markSeen: async () => {},
     ...over.store,
   };
+  // Default: identity canonicalization (@lid resolution exercised explicitly below).
+  const engine = { canonicalChatId: async (_s: string, c: string) => c, ...over.engine };
   const d = {
-    lock: new KeyedAsyncLock(), client, store: mapping, instanceId: 'inst',
+    lock: new KeyedAsyncLock(), client, store: mapping, engine, instanceId: 'inst',
     relayGroups: true, relayMedia: true, log: () => {},
   } as unknown as InboundDeps;
   return { deps: d, counts: () => ({ contacts, convs }), posted };
 }
+
+test('a migrated contact (@lid inbound, @c.us-keyed conversation) reuses the EXISTING conversation via dual-lookup, no split', async () => {
+  const { deps: d, posted, counts } = deps({
+    engine: { canonicalChatId: async (_s: string, c: string) => (c === '621@lid' ? '621@c.us' : c) },
+    store: {
+      getByChat: async (_s: string, c: string) =>
+        c === '621@c.us' ? { conversationId: 77, contactId: 9, sourceId: 'src', name: 'Budi' } : null,
+    },
+  });
+  const lidMsg = { ...msg, id: 'x1', chatId: '621@lid' } as IncomingMessage;
+  await handleInbound(d, 'sess', 'Engine', lidMsg);
+  assert.deepEqual(posted, [{ id: 77, c: 'hello' }]); // posted into the existing @c.us conversation
+  assert.deepEqual(counts(), { contacts: 0, convs: 0 }); // no duplicate conversation created
+});
+
+test('cold lid (@lid unresolvable) still creates — documented residual closed by RESOLVE_LID_TO_PHONE', async () => {
+  const { deps: d, posted, counts } = deps({
+    engine: { canonicalChatId: async (_s: string, c: string) => c }, // cold: @lid stays @lid
+  });
+  const lidMsg = { ...msg, id: 'x2', chatId: '621@lid' } as IncomingMessage;
+  await handleInbound(d, 'sess', 'Engine', lidMsg);
+  assert.equal(posted.length, 1);
+  assert.deepEqual(counts(), { contacts: 1, convs: 1 }); // no @c.us mapping resolvable while cold → creates
+});
+
+test('canonicalChatId throwing (session down) falls back to the raw id and still relays — never drops the message', async () => {
+  const { deps: d, posted } = deps({
+    engine: { canonicalChatId: async () => { throw new Error('session not active'); } },
+  });
+  await handleInbound(d, 'sess', 'Engine', msg);
+  assert.equal(posted.length, 1); // relayed via the raw fallback, not lost before markSeen/enqueue
+});
+
+test('reusing a @c.us mapping via @lid dual-lookup patches the name under the @c.us key (no repeated updateContact)', async () => {
+  const patches: Array<[string, { name?: string }]> = [];
+  const renames: string[] = [];
+  const { deps: d } = deps({
+    engine: { canonicalChatId: async (_s: string, c: string) => (c === '621@lid' ? '621@c.us' : c) },
+    store: {
+      getByChat: async (_s: string, c: string) =>
+        c === '621@c.us' ? { conversationId: 77, contactId: 9, sourceId: 'src', name: 'Old Name' } : null,
+      patch: async (_s: string, c: string, p: { name?: string }) => void patches.push([c, p]),
+    },
+    client: { updateContact: async (_id: number, name: string) => void renames.push(name) },
+  });
+  const lidMsg = { ...msg, id: 'x3', chatId: '621@lid', contact: { pushName: 'Budi' } } as IncomingMessage;
+  await handleInbound(d, 'sess', 'Engine', lidMsg);
+  assert.deepEqual(renames, ['Budi']); // the @c.us contact is renamed correctly
+  assert.deepEqual(patches, [['621@c.us', { name: 'Budi' }]]); // and the name is recorded under the @c.us key
+});
 
 test('a failed relay queues the message for retry (at-least-once), not dropped', async () => {
   const enqueued: string[] = [];

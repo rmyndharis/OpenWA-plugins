@@ -6,6 +6,17 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-07-03
+
+### Fixed
+
+- **A contact who migrates to `@lid` no longer splits into a duplicate Chatwoot conversation on inbound.**
+  Their `@lid` messages now resolve to the existing `<phone>@c.us` conversation (via the host
+  `canonicalChatId` resolver + a dual lookup), mirroring the outbound fix in 0.4.0. Best-effort — it
+  applies whenever the lid→phone mapping is known: after any reply to the contact, or on every inbound
+  when OpenWA's `RESOLVE_LID_TO_PHONE=true` is set (recommended to fully close the gap; it also helps the
+  outbound path).
+
 ## [0.5.0] — 2026-07-03
 
 ### Added
