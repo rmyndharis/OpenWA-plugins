@@ -1003,6 +1003,33 @@
     }
   },
   {
+    "id": "typebot-connector",
+    "name": "Typebot Connector",
+    "version": "0.1.0",
+    "type": "extension",
+    "status": "beta",
+    "description": "Runs a Typebot flow as the brain of a WhatsApp bot: inbound messages drive a Typebot chat session via the live Chat API, and the bot's text/media bubbles and inputs (rendered as numbered choices) are sent back to WhatsApp. Auto-starts every chat, supports media and file-upload steps, and resets when the flow ends or after an idle timeout. Runs sandboxed in the plugin worker; no public URL or webhook required.",
+    "author": "Yudhi Armyndharis <yudhi@rmyndharis.com>",
+    "license": "MIT",
+    "keywords": [
+      "typebot",
+      "chatbot",
+      "flow",
+      "bot",
+      "no-code",
+      "two-way",
+      "whatsapp",
+      "openwa"
+    ],
+    "minOpenWAVersion": "0.8.0",
+    "testedOpenWAVersion": "0.8.1",
+    "releasedAt": "2026-07-03",
+    "repoPath": "typebot-connector",
+    "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
+    "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/typebot-connector",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/typebot-connector-v0.1.0/typebot-connector.zip"
+  },
+  {
     "id": "voice-transcription",
     "name": "Voice Note Transcription",
     "version": "1.0.1",

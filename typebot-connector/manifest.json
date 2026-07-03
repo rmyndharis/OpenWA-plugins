@@ -1,0 +1,70 @@
+{
+  "id": "typebot-connector",
+  "name": "Typebot Connector",
+  "version": "0.1.0",
+  "type": "extension",
+  "main": "dist/index.js",
+  "description": "Runs a Typebot flow as the brain of a WhatsApp bot: inbound messages drive a Typebot chat session via the live Chat API, and the bot's text/media bubbles and inputs (rendered as numbered choices) are sent back to WhatsApp. Auto-starts every chat, supports media and file-upload steps, and resets when the flow ends or after an idle timeout. Runs sandboxed in the plugin worker; no public URL or webhook required.",
+  "author": "Yudhi Armyndharis <yudhi@rmyndharis.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/typebot-connector",
+  "repository": "https://github.com/rmyndharis/OpenWA-plugins",
+  "keywords": ["typebot", "chatbot", "flow", "bot", "no-code", "two-way", "whatsapp", "openwa"],
+  "status": "beta",
+  "minOpenWAVersion": "0.8.0",
+  "testedOpenWAVersion": "0.8.1",
+  "sdkVersion": "1",
+  "permissions": ["net:fetch", "conversation:send"],
+  "net": { "allow": [], "allowConfigHosts": ["apiHost", "mediaHost"] },
+  "sessionScoped": true,
+  "sessions": ["*"],
+  "hooks": ["message:received"],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "apiHost": {
+        "type": "string",
+        "title": "Typebot host URL",
+        "default": "https://typebot.io",
+        "required": true,
+        "description": "Public https URL of your Typebot (Cloud https://typebot.io, or a public-domain self-hosted install). Its host is auto-added to this plugin's outbound allowlist. Private/LAN hosts are not supported."
+      },
+      "publicId": {
+        "type": "string",
+        "title": "Typebot public ID",
+        "required": true,
+        "description": "The published bot's public identifier (from its Share settings). The bot must be published."
+      },
+      "apiToken": {
+        "type": "string",
+        "title": "API token",
+        "secret": true,
+        "description": "Only needed for a restricted or preview bot. Leave empty for a public published bot."
+      },
+      "respondInGroups": {
+        "type": "boolean",
+        "title": "Respond in group chats",
+        "default": true,
+        "description": "Run the flow in group chats too. Each sender in a group gets their own flow; replies are quoted."
+      },
+      "sessionTimeoutMinutes": {
+        "type": "number",
+        "title": "Idle reset (minutes)",
+        "default": 30,
+        "min": 1,
+        "description": "If a chat is idle this long, the next message starts a fresh flow."
+      },
+      "passContactVariables": {
+        "type": "boolean",
+        "title": "Pass contact variables",
+        "default": true,
+        "description": "Send the contact's number/name/chat id to the flow as prefilled variables named waNumber, waName, waChatId."
+      },
+      "mediaHost": {
+        "type": "string",
+        "title": "Media/upload host",
+        "description": "Only for older self-hosted Typebot that uploads files to a separate S3/MinIO host. Leave empty for Typebot main (same-origin upload proxy)."
+      }
+    }
+  }
+}
