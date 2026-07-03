@@ -48,3 +48,25 @@ test('postText posts an incoming message with the api token header', async () =>
   assert.deepEqual(JSON.parse(last.init!.body as string), { content: 'hello', message_type: 'incoming', private: false });
   assert.equal(last.init!.headers!['api_access_token'], 'tok');
 });
+
+test('postText forwards source_id and the in_reply_to_external_id thread pointer when given', async () => {
+  const { fn, calls } = fakeFetch({ 'POST /api/v1/accounts/3/conversations/55/messages': { body: { id: 1 } } });
+  await new ChatwootClient(fn, cfg).postText(55, '..', { sourceId: 'wa1', inReplyToExternalId: 'wa0' });
+  const body = JSON.parse(calls.at(-1)!.init!.body as string);
+  assert.equal(body.source_id, 'wa1');
+  assert.deepEqual(body.content_attributes, { in_reply_to_external_id: 'wa0' });
+});
+
+test('postMedia marks a voice note and threads it (is_voice_message + source_id in the multipart body)', async () => {
+  const { fn, calls } = fakeFetch({ 'POST /api/v1/accounts/3/conversations/55/messages': { body: { id: 2 } } });
+  await new ChatwootClient(fn, cfg).postMedia(
+    55,
+    '',
+    { filename: 'voice.ogg', contentType: 'audio/ogg', data: new Uint8Array([1, 2, 3]) },
+    { sourceId: 'wa5', isVoiceMessage: true },
+  );
+  const raw = Buffer.from(calls.at(-1)!.init!.body as Uint8Array).toString('latin1');
+  assert.match(raw, /name="is_voice_message"\r\n\r\ntrue/);
+  assert.match(raw, /name="source_id"\r\n\r\nwa5/);
+  assert.match(raw, /filename="voice.ogg"/);
+});

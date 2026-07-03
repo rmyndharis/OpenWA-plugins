@@ -17,6 +17,7 @@ export interface ChatwootWebhookMessage {
   conversation?: { id?: number; status?: string; meta?: { assignee?: { id?: number } | null } };
   inbox?: { id?: number };
   sender?: { type?: string };
+  attachments?: Array<{ id?: number; file_type?: string; data_url?: string }>;
   changed_attributes?: Array<Record<string, { current_value?: unknown; previous_value?: unknown }>>;
 }
 
