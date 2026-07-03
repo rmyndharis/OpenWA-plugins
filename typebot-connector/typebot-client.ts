@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { PluginNetRequestInit, PluginNetResponse } from '../types/openwa';
 import type { TypebotConfig, NormalizedResponse, Bubble, InputSpec, ChoiceItem } from './typebot-types.ts';
 import { buildMultipartBody } from './multipart.ts';
@@ -58,7 +59,7 @@ export class TypebotClient {
       if (!put.ok) throw new TypebotHttpError(put.status, put.body);
     } else {
       // Older S3 presigned-POST: multipart form with the policy fields, then `file` LAST.
-      const boundary = `----typebot${bytes.length.toString(16)}${presignedUrl.length.toString(16)}`;
+      const boundary = `----typebot${randomBytes(16).toString('hex')}`;
       const body = buildMultipartBody(
         boundary,
         entries.map(([name, value]) => ({ name, value })),
