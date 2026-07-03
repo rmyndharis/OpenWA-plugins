@@ -2,12 +2,26 @@ import type { IncomingMessage } from '../types/openwa';
 import { shouldRelayInbound } from './filters.ts';
 import { relayMessage, ensureConversation, refreshContactName, type InboundDeps } from './relay.ts';
 import { backfillHistory } from './backfill.ts';
+import { MAX_PENDING_RETRIES, slimForRetry } from './retry.ts';
 
 export type { InboundDeps };
 
+// The resolve + backfill + relay core, lock-free, that THROWS on failure. Shared by the live inbound
+// handler and the retry drain (retry.ts) so a retried message follows the exact same path.
+export async function relayInbound(deps: InboundDeps, sessionId: string, msg: IncomingMessage): Promise<void> {
+  const { conversationId, created } = await resolveConversation(deps, sessionId, msg);
+  // Lazy backfill: the first time this chat maps, replay its recent history (older messages, both
+  // directions, deduped) BEFORE posting this one — so the thread reads chronologically and this message's
+  // quote resolves against a just-posted source_id. This message is already markSeen, so backfill skips it.
+  if (created && deps.backfillLimit > 0) {
+    await backfillHistory(deps, sessionId, msg.chatId, conversationId);
+  }
+  await relayMessage(deps, conversationId, msg, 'incoming');
+}
+
 // WhatsApp → Chatwoot. Filter, then run resolve+post under the per-chat lock so two near-simultaneous
-// first messages can't create duplicate Chatwoot contacts/conversations. Dedup is a mark-before-act
-// check-and-set inside the lock (at-most-once; a failed post won't re-relay).
+// first messages can't create duplicate Chatwoot contacts/conversations. Inbound is AT-LEAST-ONCE: a
+// failed relay is queued for retry (retry.ts drains it) rather than dropped.
 export async function handleInbound(
   deps: InboundDeps,
   sessionId: string,
@@ -16,22 +30,25 @@ export async function handleInbound(
 ): Promise<void> {
   if (!shouldRelayInbound(msg, source, deps.relayGroups)) return;
   await deps.lock.run(`${sessionId}:${msg.chatId}`, async () => {
+    // markSeen stays BEFORE the relay: it dedups WA re-deliveries and makes backfill skip this live
+    // message. It is NOT the "relayed" signal — a failed relay is enqueued below, and the pending-queue
+    // entry is what drives retry, independent of this marker. Scoped by session so two tenants' WA message
+    // ids can't collide in the shared plugin store.
+    if (await deps.store.hasSeen('wa', msg.id, sessionId)) return;
+    await deps.store.markSeen('wa', msg.id, sessionId);
     try {
-      // Mark-before-act: inbound is deliberately at-most-once (a failed post won't re-relay). Scoped by
-      // session so two tenants' WA message ids can't collide in the shared plugin store.
-      if (await deps.store.hasSeen('wa', msg.id, sessionId)) return;
-      await deps.store.markSeen('wa', msg.id, sessionId);
-      const { conversationId, created } = await resolveConversation(deps, sessionId, msg);
-      // Lazy backfill: the first time this chat maps, replay its recent history (older messages, both
-      // directions, deduped) BEFORE posting this one — so the thread reads chronologically and this
-      // message's quote resolves against a just-posted source_id. This message is already markSeen, so
-      // backfill skips it and it posts last, below.
-      if (created && deps.backfillLimit > 0) {
-        await backfillHistory(deps, sessionId, msg.chatId, conversationId);
-      }
-      await relayMessage(deps, conversationId, msg, 'incoming');
+      await relayInbound(deps, sessionId, msg);
     } catch (err) {
-      deps.log('inbound relay failed', err);
+      deps.log('inbound relay failed; queued for retry', err);
+      // Strip an oversized media blob before persisting so a huge value can't be rejected by the storage
+      // layer (which would lose the message — it's already markSeen); the retry then posts a placeholder.
+      const dropped = await deps.store
+        .enqueueRetry({ sessionId, chatId: msg.chatId, msg: slimForRetry(msg), enqueuedAt: Date.now() }, MAX_PENDING_RETRIES)
+        .catch(e => {
+          deps.log('enqueue retry failed', e);
+          return null;
+        });
+      if (dropped) deps.log(`retry queue full; dropped oldest pending inbound (msg ${dropped})`);
     }
   });
 }

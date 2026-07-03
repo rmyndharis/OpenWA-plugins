@@ -1,4 +1,14 @@
-import type { PluginStorage, PluginMappingsCapability } from '../types/openwa';
+import type { PluginStorage, PluginMappingsCapability, IncomingMessage } from '../types/openwa';
+
+// A failed inbound relay held for retry. The full message (incl. media) is stored so the retry re-posts
+// it faithfully. `enqueuedAt` is a wall-clock ms used only to pick the oldest entry to drop on overflow.
+export interface RetryEntry {
+  sessionId: string;
+  chatId: string;
+  msg: IncomingMessage;
+  attempts: number;
+  enqueuedAt: number;
+}
 
 export interface ChatLink {
   conversationId: number;
@@ -84,5 +94,82 @@ export class MappingStore {
   }
   async setBulkBackfilled(sessionId: string): Promise<void> {
     await this.storage.set(`backfill:all:${sessionId}`, 1);
+  }
+
+  // ---- Inbound retry queue (durable, over ctx.storage) --------------------------------------------
+  // Individual keys `retry:<sessionId>:<msgId>` — one per failed relay — so concurrent enqueues never
+  // read-modify-write a shared array. The list is filtered by the `retry:` prefix defensively (the host
+  // list(prefix) already narrows, but a fake that ignores the arg would otherwise leak other keys).
+
+  private retryKey(sessionId: string, msgId: string): string {
+    return `retry:${sessionId}:${msgId}`;
+  }
+
+  private async retryKeys(): Promise<string[]> {
+    return (await this.storage.list('retry:')).filter(k => k.startsWith('retry:'));
+  }
+
+  private async readRetries(keys: string[]): Promise<Array<RetryEntry & { key: string }>> {
+    const out: Array<RetryEntry & { key: string }> = [];
+    for (const key of keys) {
+      const e = await this.storage.get<RetryEntry>(key);
+      if (e) out.push({ ...e, key });
+    }
+    return out;
+  }
+
+  // Enqueue a failed inbound relay. No-op if this message id is already queued (never resets its attempt
+  // count). When the queue is at `maxPending`, drop the OLDEST entry (returns its msg id so the caller can
+  // log the loss) to bound storage. `attempts` starts at 0.
+  async enqueueRetry(entry: Omit<RetryEntry, 'attempts'>, maxPending: number): Promise<string | null> {
+    const key = this.retryKey(entry.sessionId, entry.msg.id);
+    if (await this.storage.get(key)) return null;
+    const keys = await this.retryKeys();
+    let oldestKey: string | null = null;
+    let dropped: string | null = null;
+    if (keys.length >= maxPending) {
+      // Only NOW load the values (to pick the oldest). The common under-cap path never deserializes any
+      // queued blob — counting by key length keeps enqueue O(1) in payload size.
+      const pending = await this.readRetries(keys);
+      if (pending.length) {
+        const oldest = pending.reduce((a, b) => (a.enqueuedAt <= b.enqueuedAt ? a : b));
+        oldestKey = oldest.key;
+        dropped = oldest.msg.id;
+      }
+    }
+    // Write the NEW entry BEFORE deleting the oldest: if the set rejects (e.g. an oversized value), the
+    // oldest is preserved instead of both being lost, and no drop is reported.
+    await this.storage.set(key, { ...entry, attempts: 0 } satisfies RetryEntry);
+    if (oldestKey) await this.storage.delete(oldestKey);
+    return dropped;
+  }
+
+  async listRetries(): Promise<Array<RetryEntry & { key: string }>> {
+    return this.readRetries(await this.retryKeys());
+  }
+
+  // Streaming primitives for the drain: list keys (a directory scan, no value loads), then fetch one
+  // entry at a time — so a saturated queue of media messages is never all resident in memory at once.
+  listRetryKeys(): Promise<string[]> {
+    return this.retryKeys();
+  }
+
+  async getRetry(key: string): Promise<(RetryEntry & { key: string }) | null> {
+    const e = await this.storage.get<RetryEntry>(key);
+    return e ? { ...e, key } : null;
+  }
+
+  async bumpRetryAttempts(key: string, attempts: number): Promise<void> {
+    const e = await this.storage.get<RetryEntry>(key);
+    if (e) await this.storage.set(key, { ...e, attempts });
+  }
+
+  async deleteRetry(key: string): Promise<void> {
+    await this.storage.delete(key);
+  }
+
+  // Count by key only — never load the (media-bearing) values, so a large backlog can't spike memory.
+  async countRetries(): Promise<number> {
+    return (await this.retryKeys()).length;
   }
 }
