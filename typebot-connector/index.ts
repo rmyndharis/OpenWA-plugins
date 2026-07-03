@@ -8,9 +8,13 @@ import { handleTurn } from './turn.ts';
 // Read + validate config. Fail-fast on a bad apiHost so a misconfigured plugin never silently no-ops (the
 // host net allowlist only admits an https, credential-free host).
 export function readConfig(raw: Record<string, unknown>): TypebotConfig {
-  const apiHost = String(raw.apiHost ?? 'https://typebot.io').trim();
+  // No code-side default for apiHost: the core net-allowlist gate resolves the allowed host from the RAW
+  // config, so a code default would enable the plugin while every outbound call is gated into a silent
+  // no-op. Require it (the manifest keeps a `default` for the dashboard pre-fill).
+  const apiHost = String(raw.apiHost ?? '').trim();
   const publicId = String(raw.publicId ?? '').trim();
   if (!publicId) throw new Error('typebot-connector: publicId is required');
+  if (!apiHost) throw new Error('typebot-connector: apiHost is required');
   let parsed: URL;
   try {
     parsed = new URL(apiHost);

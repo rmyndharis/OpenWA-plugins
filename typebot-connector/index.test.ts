@@ -4,12 +4,13 @@ import type { PluginContext, HookHandler, HookContext } from '../types/openwa';
 import Plugin, { readConfig } from './index.ts';
 
 test('readConfig: defaults, normalization, and fail-fast', () => {
-  const c = readConfig({ publicId: 'bot' });
+  const c = readConfig({ publicId: 'bot', apiHost: 'https://typebot.io' });
   assert.equal(c.apiHost, 'https://typebot.io');
   assert.equal(c.respondInGroups, true);
   assert.equal(c.sessionTimeoutMinutes, 30);
   assert.equal(readConfig({ publicId: 'bot', apiHost: 'https://my.host/' }).apiHost, 'https://my.host');
   assert.throws(() => readConfig({}), /publicId/);
+  assert.throws(() => readConfig({ publicId: 'bot' }), /apiHost is required/);
   assert.throws(() => readConfig({ publicId: 'b', apiHost: 'http://x' }), /https/);
   assert.throws(() => readConfig({ publicId: 'b', apiHost: 'https://u:p@x' }), /credentials/);
 });
@@ -17,7 +18,7 @@ test('readConfig: defaults, normalization, and fail-fast', () => {
 test('onEnable registers a message:received hook that returns {continue:true}', async () => {
   let registered: { event: string; handler: HookHandler } | undefined;
   const ctx = {
-    config: { publicId: 'bot' },
+    config: { publicId: 'bot', apiHost: 'https://typebot.io' },
     logger: { log() {}, debug() {}, warn() {}, error() {} },
     storage: { get: async () => null, set: async () => {}, delete: async () => {}, list: async () => [] },
     net: { fetch: async () => ({ ok: true, status: 200, headers: {}, body: '{}' }) },
@@ -34,7 +35,7 @@ test('onEnable registers a message:received hook that returns {continue:true}', 
 test('message:received hook returns {continue:true} without awaiting a hanging Typebot turn', async () => {
   let registered: { event: string; handler: HookHandler } | undefined;
   const ctx = {
-    config: { publicId: 'bot' },
+    config: { publicId: 'bot', apiHost: 'https://typebot.io' },
     logger: { log() {}, debug() {}, warn() {}, error() {} },
     storage: { get: async () => null, set: async () => {}, delete: async () => {}, list: async () => [] },
     net: { fetch: () => new Promise(() => {}) },
