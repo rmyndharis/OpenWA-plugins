@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { PluginContext, HookHandler } from '../types/openwa';
+import type { PluginContext, HookHandler, HookContext } from '../types/openwa';
 import Plugin, { readConfig } from './index.ts';
 
 test('readConfig: defaults, normalization, and fail-fast', () => {
@@ -29,4 +29,29 @@ test('onEnable registers a message:received hook that returns {continue:true}', 
   assert.equal(registered?.event, 'message:received');
   const result = await registered!.handler({ event: 'message:received', data: undefined, timestamp: new Date(), source: 'Engine' });
   assert.deepEqual(result, { continue: true });
+});
+
+test('message:received hook returns {continue:true} without awaiting a hanging Typebot turn', async () => {
+  let registered: { event: string; handler: HookHandler } | undefined;
+  const ctx = {
+    config: { publicId: 'bot' },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    storage: { get: async () => null, set: async () => {}, delete: async () => {}, list: async () => [] },
+    net: { fetch: () => new Promise(() => {}) },
+    conversations: { send: async () => {} },
+    registerHook: (event: string, handler: HookHandler) => void (registered = { event, handler }),
+  } as unknown as PluginContext;
+
+  await new Plugin().onEnable(ctx);
+  const populated = {
+    event: 'message:received',
+    sessionId: 'sess',
+    source: 'Engine',
+    timestamp: new Date(),
+    data: {
+      id: 'm', from: 'x', to: 'y', chatId: 'c@c.us', body: 'hi', type: 'chat',
+      timestamp: 0, fromMe: false, isGroup: false,
+    },
+  } as unknown as HookContext;
+  assert.deepEqual(await registered!.handler(populated), { continue: true });
 });
