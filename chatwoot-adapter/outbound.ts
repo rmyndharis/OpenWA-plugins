@@ -41,7 +41,10 @@ export async function handleOutbound(deps: OutboundDeps, req: WebhookRequest): P
 async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: ChatwootWebhookMessage): Promise<void> {
   const conversationId = evt.conversation?.id;
   const text = evt.content;
-  if (!conversationId || !text) return;
+  const media = firstMediaAttachment(evt);
+  // A media-only agent reply (voice note, image, …) has no `content`, so gate on either text or media —
+  // the old text-only guard dropped every attachment silently (#607).
+  if (!conversationId || (!text && !media)) return;
   const target = await deps.store.getByConversation(conversationId, sessionId);
   if (!target) {
     deps.log(`no WA mapping for conversation ${conversationId}`);
@@ -52,9 +55,33 @@ async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: Cha
     // Dedup, but mark only AFTER a successful send: a transient send failure must retry the reply, not be
     // silently suppressed as "already seen". Scope the marker by the delivery's session (F-02/F-03).
     if (id && (await deps.store.hasSeen('cw', id, sessionId))) return;
-    await deps.conversations.send({ sessionId: target.sessionId, chatId: target.chatId, type: 'text', text });
+    if (media) {
+      await deps.conversations.send({
+        sessionId: target.sessionId,
+        chatId: target.chatId,
+        type: media.type,
+        mediaUrl: media.url,
+        text: text || undefined,
+      });
+    } else {
+      await deps.conversations.send({ sessionId: target.sessionId, chatId: target.chatId, type: 'text', text });
+    }
     if (id) await deps.store.markSeen('cw', id, sessionId);
   });
+}
+
+// First attachment with a downloadable URL wins (a WhatsApp message carries one media). The host fetches
+// the URL by its SSRF-guarded media-by-URL path, so no bytes cross the sandbox. Audio relays as a PTT
+// voice note — the common agent action is recording voice; a plain audio file is a rare exception.
+function firstMediaAttachment(
+  evt: ChatwootWebhookMessage,
+): { type: 'image' | 'video' | 'voice' | 'file'; url: string } | undefined {
+  for (const a of evt.attachments ?? []) {
+    if (!a?.data_url) continue;
+    const type = a.file_type === 'image' ? 'image' : a.file_type === 'video' ? 'video' : a.file_type === 'audio' ? 'voice' : 'file';
+    return { type, url: a.data_url };
+  }
+  return undefined;
 }
 
 // Human handover is driven by the assignee_id transition, NOT by status (status:'open' is not a human

@@ -57,6 +57,34 @@ test('relays an outgoing agent reply with an explicit chatId', async () => {
   assert.deepEqual(sent, [{ sessionId: 'sess', chatId: 'c@wa', type: 'text', text: 'hi' }]);
 });
 
+test('relays an outbound audio attachment as a WhatsApp voice note (#607)', async () => {
+  const { deps: d, sent } = deps();
+  await handleOutbound(
+    d,
+    req({
+      event: 'message_created', message_type: 'outgoing', private: false, id: 8, inbox: { id: 7 }, conversation: { id: 55 },
+      attachments: [{ id: 1, file_type: 'audio', data_url: 'https://chat.acme.com/blob/a.ogg' }],
+    }),
+  );
+  assert.deepEqual(sent, [
+    { sessionId: 'sess', chatId: 'c@wa', type: 'voice', mediaUrl: 'https://chat.acme.com/blob/a.ogg', text: undefined },
+  ]);
+});
+
+test('relays an outbound image attachment with its caption (#607)', async () => {
+  const { deps: d, sent } = deps();
+  await handleOutbound(
+    d,
+    req({
+      event: 'message_created', message_type: 'outgoing', private: false, id: 9, content: 'look', inbox: { id: 7 }, conversation: { id: 55 },
+      attachments: [{ id: 1, file_type: 'image', data_url: 'https://chat.acme.com/blob/x.jpg' }],
+    }),
+  );
+  assert.deepEqual(sent, [
+    { sessionId: 'sess', chatId: 'c@wa', type: 'image', mediaUrl: 'https://chat.acme.com/blob/x.jpg', text: 'look' },
+  ]);
+});
+
 test('drops the incoming echo and private notes', async () => {
   const { deps: d, sent } = deps();
   await handleOutbound(d, req({ message_type: 'incoming', inbox: { id: 7 }, conversation: { id: 55 }, content: 'x' }));

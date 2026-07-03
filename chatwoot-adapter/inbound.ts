@@ -27,14 +27,25 @@ export async function handleInbound(deps: InboundDeps, sessionId: string, source
       await deps.store.markSeen('wa', msg.id, sessionId);
       const conversationId = await resolveConversation(deps, sessionId, msg);
       const content = prefixSender(msg);
+      // source_id lets a later reply thread against this message; in_reply_to_external_id forwards the
+      // quote context (#606) so a short reply like ".." keeps the bubble it answered.
+      const post = { sourceId: msg.id, inReplyToExternalId: msg.quotedMessage?.id };
+      const isVoice = msg.type === 'voice';
       if (deps.relayMedia && msg.media?.data && !msg.media.omitted) {
-        await deps.client.postMedia(conversationId, content, {
-          filename: msg.media.filename ?? 'file',
-          contentType: msg.media.mimetype,
-          data: Buffer.from(msg.media.data, 'base64'),
-        });
+        await deps.client.postMedia(
+          conversationId,
+          content,
+          {
+            filename: isVoice ? 'voice.ogg' : msg.media.filename ?? 'file',
+            contentType: msg.media.mimetype || (isVoice ? 'audio/ogg' : 'application/octet-stream'),
+            data: Buffer.from(msg.media.data, 'base64'),
+          },
+          { ...post, isVoiceMessage: isVoice },
+        );
       } else {
-        await deps.client.postText(conversationId, content);
+        // No relayable blob (plain text, or media dropped/omitted). Never post an empty bubble for a
+        // media message — surface a short placeholder so the agent knows something arrived (#607).
+        await deps.client.postText(conversationId, msg.body?.trim() ? content : placeholderFor(msg), post);
       }
     } catch (err) {
       deps.log('inbound relay failed', err);
@@ -46,6 +57,14 @@ function prefixSender(msg: IncomingMessage): string {
   if (!msg.isGroup) return msg.body;
   const who = msg.contact?.pushName || msg.senderPhone || msg.author || 'unknown';
   return `*${who}:* ${msg.body}`;
+}
+
+// A short stand-in for a bodyless message we couldn't relay as media (e.g. a voice note whose blob was
+// omitted for size), so Chatwoot shows a meaningful line instead of an empty bubble.
+function placeholderFor(msg: IncomingMessage): string {
+  if (msg.type === 'voice') return '🎤 Voice message';
+  if (msg.media) return `📎 ${msg.media.filename ?? 'Attachment'}`;
+  return msg.body;
 }
 
 async function resolveConversation(deps: InboundDeps, sessionId: string, msg: IncomingMessage): Promise<number> {

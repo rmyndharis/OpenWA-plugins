@@ -6,6 +6,19 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-07-03
+
+### Added
+
+- **Reply/quote context is forwarded to Chatwoot.** Every relayed message now carries its WhatsApp id as
+  `source_id`, and a reply carries `content_attributes.in_reply_to_external_id`, so a swipe-to-reply shows
+  its quoted bubble in Chatwoot instead of a bare, context-less line. (#606)
+- **Voice notes relay both ways.** Inbound WhatsApp voice notes are uploaded as Chatwoot voice messages
+  (`is_voice_message`, `voice.ogg`); a voice note whose blob was dropped for size posts a short
+  placeholder instead of an empty bubble. Outbound audio attachments from Chatwoot are sent back to
+  WhatsApp as PTT voice notes, and image/video/file attachments are relayed as their native media type —
+  previously any attachment without text was silently dropped. Requires OpenWA 0.8.3+. (#607)
+
 ## [0.1.1] — 2026-07-02
 
 ### Fixed

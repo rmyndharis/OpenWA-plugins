@@ -7,6 +7,13 @@ export interface ChatwootConfig {
   inboxId: number;
 }
 
+// Threading metadata for a relayed message. `sourceId` is the WhatsApp message id (so later replies can
+// reference it); `inReplyToExternalId` is the quoted message's WA id when this message is a reply.
+export interface MessagePostOptions {
+  sourceId?: string;
+  inReplyToExternalId?: string;
+}
+
 // The slice of ctx.net.fetch this client needs (host-proxied, SSRF-guarded). Injectable for tests.
 export type NetFetch = (
   url: string,
@@ -99,10 +106,13 @@ export class ChatwootClient {
     return data.id;
   }
 
-  async postText(conversationId: number, content: string): Promise<{ id: number }> {
+  async postText(conversationId: number, content: string, opts: MessagePostOptions = {}): Promise<{ id: number }> {
+    const payload: Record<string, unknown> = { content, message_type: 'incoming', private: false };
+    if (opts.sourceId) payload.source_id = opts.sourceId;
+    if (opts.inReplyToExternalId) payload.content_attributes = { in_reply_to_external_id: opts.inReplyToExternalId };
     const { data } = await this.json<{ id: number }>(`${this.base()}/conversations/${conversationId}/messages`, {
       method: 'POST',
-      body: JSON.stringify({ content, message_type: 'incoming', private: false }),
+      body: JSON.stringify(payload),
     });
     return data;
   }
@@ -111,14 +121,22 @@ export class ChatwootClient {
     conversationId: number,
     content: string,
     file: { filename: string; contentType: string; data: Uint8Array },
+    opts: MessagePostOptions & { isVoiceMessage?: boolean } = {},
   ): Promise<{ id: number }> {
     const boundary = `----cw${conversationId}${file.data.byteLength}`;
+    const fields = [
+      { name: 'content', value: content },
+      { name: 'message_type', value: 'incoming' },
+    ];
+    // Rails parses bracket notation into nested params; source_id + in_reply_to_external_id give Chatwoot
+    // the threading it uses for the native WhatsApp integration, is_voice_message renders a voice bubble.
+    if (opts.sourceId) fields.push({ name: 'source_id', value: opts.sourceId });
+    if (opts.inReplyToExternalId)
+      fields.push({ name: 'content_attributes[in_reply_to_external_id]', value: opts.inReplyToExternalId });
+    if (opts.isVoiceMessage) fields.push({ name: 'is_voice_message', value: 'true' });
     const body = buildMultipartBody(
       boundary,
-      [
-        { name: 'content', value: content },
-        { name: 'message_type', value: 'incoming' },
-      ],
+      fields,
       [{ name: 'attachments[]', filename: file.filename, contentType: file.contentType, data: file.data }],
     );
     const res = await this.fetch(`${this.base()}/conversations/${conversationId}/messages`, {

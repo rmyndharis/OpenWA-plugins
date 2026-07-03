@@ -11,13 +11,13 @@ mirror it. Runs sandboxed in the plugin worker; no server, no extra port.
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chatwoot-adapter` |
-| **Version** | 0.1.1 |
-| **Released** | 2026-07-02 |
+| **Version** | 0.2.0 |
+| **Released** | 2026-07-03 |
 | **Status** | beta |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.0 (tested 0.8.1) |
+| **Requires OpenWA** | ≥ 0.8.3 (tested 0.8.3) |
 | **Keywords** | chatwoot, helpdesk, inbox, handover, two-way, agent, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/chatwoot-adapter](https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter) |
 <!-- END DETAILS -->

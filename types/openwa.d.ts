@@ -207,7 +207,7 @@ export interface ConversationSendEnvelope {
   sessionId?: string;
   instanceId?: string;
   chatId?: string;
-  type: 'text' | 'image' | 'file' | 'audio' | 'video' | 'location';
+  type: 'text' | 'image' | 'file' | 'audio' | 'video' | 'voice' | 'location';
   text?: string;
   mediaUrl?: string;
   replyTo?: string;
@@ -263,4 +263,7 @@ export interface IncomingMessage {
     omitted?: boolean;
     sizeBytes?: number;
   };
+  // The message this one replies to (swipe-to-reply / quote), when present. `id` is the quoted WhatsApp
+  // message id; `body` is its text. Carried on the inbound hook payload for reply-threading relays.
+  quotedMessage?: { id: string; body: string };
 }
