@@ -70,14 +70,17 @@ export async function handleTurn(deps: TurnDeps, sessionId: string, source: stri
       }
     }
 
-    for (const part of renderResponse(resp)) await send(deps, sessionId, msg, part);
-
+    // Persist BEFORE sending: startChat/continueChat already advanced the server irreversibly, so local
+    // `awaiting` must track the server even if a WhatsApp send then fails — otherwise the next reply would be
+    // mapped against a stale input.
     const sid = resp.sessionId ?? state?.sessionId;
     if (resp.input && sid) {
       await deps.store.set(key, { sessionId: sid, awaiting: resp.input, lastActivity: deps.now() });
     } else {
       await deps.store.clear(key); // flow ended
     }
+
+    for (const part of renderResponse(resp)) await send(deps, sessionId, msg, part);
   });
 }
 
