@@ -41,11 +41,18 @@ export async function handleTurn(deps: TurnDeps, sessionId: string, source: stri
       }
       let message: ContinueMessage;
       if (intent.kind === 'file') {
-        const url = await deps.client.uploadFile(state.sessionId, state.awaiting.blockId, {
-          mime: intent.mime,
-          filename: intent.filename,
-          data: intent.data,
-        });
+        let url: string;
+        try {
+          url = await deps.client.uploadFile(state.sessionId, state.awaiting.blockId, {
+            mime: intent.mime,
+            filename: intent.filename,
+            data: intent.data,
+          });
+        } catch (e) {
+          deps.log('typebot upload failed', e);
+          await send(deps, sessionId, msg, { type: 'text', text: 'Sorry, that upload failed — please try sending the file again.' });
+          return; // state stays intact so the user can retry
+        }
         message = { type: 'text', text: '', attachedFileUrls: [url] };
       } else {
         message = intent.message;
