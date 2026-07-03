@@ -125,13 +125,17 @@ export async function refreshContactName(
   sessionId: string,
   msg: IncomingMessage,
   link: ChatLink,
+  chatKey: string,
 ): Promise<void> {
   if (msg.isGroup) return; // a group contact is named for the group, not whoever sent this message
   const desired = msg.contact?.pushName || msg.contact?.name;
   if (!desired || desired === link.name) return;
   try {
     await deps.client.updateContact(link.contactId, desired);
-    await deps.store.patch(sessionId, msg.chatId, { name: desired });
+    // Patch under the key the mapping ACTUALLY lives under (`chatKey`), not msg.chatId: on the @lid dual-
+    // lookup path the mapping is keyed @c.us while msg.chatId is @lid, so patching msg.chatId would be a
+    // no-op and the name would never be recorded — re-issuing updateContact on every later inbound.
+    await deps.store.patch(sessionId, chatKey, { name: desired });
   } catch (err) {
     deps.log('contact name refresh failed', err);
   }

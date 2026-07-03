@@ -11,7 +11,7 @@ mirror it. Runs sandboxed in the plugin worker; no server, no extra port.
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chatwoot-adapter` |
-| **Version** | 0.5.0 |
+| **Version** | 0.5.1 |
 | **Released** | 2026-07-03 |
 | **Status** | beta |
 | **Author** | Yudhi Armyndharis |
@@ -87,9 +87,14 @@ public host is added to the outbound allowlist). To use a self-hosted Chatwoot:
 
 ## Compatibility
 
-- **OpenWA** ≥ 0.8.6 — needs Integration SDK v1 (webhook ingress, `ctx.mappings`, the session+chat handover
-  gate, `net.allowConfigHosts`), the `conversation.send` media/voice types for outbound attachments, and the
-  sandbox-bridged `engine.getChatHistory` for the history backfill.
+- **OpenWA** ≥ 0.8.7 — needs Integration SDK v1 (webhook ingress, `ctx.mappings`, the session+chat handover
+  gate, `net.allowConfigHosts`), the `conversation.send` media/voice types for outbound attachments, the
+  sandbox-bridged `engine.getChatHistory` for the history backfill, and `engine.canonicalChatId` for `@lid`
+  resolution.
+- **`@lid` migration** — when a contact migrates to WhatsApp's `@lid` addressing, their conversation is kept
+  from splitting as long as the lid→phone mapping is known (after any reply to them). To resolve it on
+  every inbound too — closing the gap for a contact you've only ever received from — set
+  `RESOLVE_LID_TO_PHONE=true` in OpenWA.
 - **Chatwoot** — account-level webhooks with timestamped HMAC signing (see Setup).
 
 ## Security

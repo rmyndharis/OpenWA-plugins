@@ -45,6 +45,8 @@ export async function drainRetries(
   for (const key of keys) {
     const e = await deps.store.getRetry(key);
     if (!e) continue; // key vanished since the scan (already drained/dropped) — nothing to do
+    // Lock on the RAW chatId, same deterministic key live inbound uses for this chat. @lid canonicalization
+    // is a lookup concern handled inside relayInbound (best-effort), not a lock concern.
     await deps.lock.run(`${e.sessionId}:${e.chatId}`, async () => {
       let relayed = false;
       try {
