@@ -77,4 +77,12 @@ export class MappingStore {
   async markSeen(kind: 'wa' | 'cw', id: string, scope?: string): Promise<void> {
     await this.storage.set(this.seenKey(kind, id, scope), 1);
   }
+
+  // Durable run-once marker for the one-time bulk history sweep, per WA session.
+  async isBulkBackfilled(sessionId: string): Promise<boolean> {
+    return Boolean(await this.storage.get(`backfill:all:${sessionId}`));
+  }
+  async setBulkBackfilled(sessionId: string): Promise<void> {
+    await this.storage.set(`backfill:all:${sessionId}`, 1);
+  }
 }

@@ -12,6 +12,9 @@ export interface ChatwootConfig {
 export interface MessagePostOptions {
   sourceId?: string;
   inReplyToExternalId?: string;
+  // Chatwoot direction. Live inbound is always 'incoming'; history backfill posts business-side
+  // (fromMe) messages as 'outgoing' so the reconstructed thread reads correctly. Default 'incoming'.
+  messageType?: 'incoming' | 'outgoing';
 }
 
 // The slice of ctx.net.fetch this client needs (host-proxied, SSRF-guarded). Injectable for tests.
@@ -111,7 +114,7 @@ export class ChatwootClient {
   }
 
   async postText(conversationId: number, content: string, opts: MessagePostOptions = {}): Promise<{ id: number }> {
-    const payload: Record<string, unknown> = { content, message_type: 'incoming', private: false };
+    const payload: Record<string, unknown> = { content, message_type: opts.messageType ?? 'incoming', private: false };
     if (opts.sourceId) payload.source_id = opts.sourceId;
     if (opts.inReplyToExternalId) payload.content_attributes = { in_reply_to_external_id: opts.inReplyToExternalId };
     const { data } = await this.json<{ id: number }>(`${this.base()}/conversations/${conversationId}/messages`, {
@@ -130,7 +133,7 @@ export class ChatwootClient {
     const boundary = `----cw${conversationId}${file.data.byteLength}`;
     const fields = [
       { name: 'content', value: content },
-      { name: 'message_type', value: 'incoming' },
+      { name: 'message_type', value: opts.messageType ?? 'incoming' },
     ];
     // Rails parses bracket notation into nested params; source_id + in_reply_to_external_id give Chatwoot
     // the threading it uses for the native WhatsApp integration, is_voice_message renders a voice bubble.

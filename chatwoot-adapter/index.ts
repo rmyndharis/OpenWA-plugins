@@ -3,6 +3,7 @@ import { ChatwootClient } from './chatwoot-client.ts';
 import { MappingStore } from './mapping-store.ts';
 import { KeyedAsyncLock } from './chat-lock.ts';
 import { handleInbound } from './inbound.ts';
+import { backfillAllChats } from './backfill.ts';
 import { handleOutbound } from './outbound.ts';
 
 interface ChatwootFullConfig {
@@ -12,6 +13,8 @@ interface ChatwootFullConfig {
   inboxId: number;
   relayGroups: boolean;
   relayMedia: boolean;
+  backfillLimit: number;
+  backfillAllOnce: boolean;
 }
 
 function readConfig(raw: Record<string, unknown>): ChatwootFullConfig {
@@ -38,7 +41,17 @@ function readConfig(raw: Record<string, unknown>): ChatwootFullConfig {
   if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
     throw new Error('chatwoot-adapter: baseUrl must be an https URL without embedded credentials');
   }
-  return { baseUrl, apiToken, accountId, inboxId, relayGroups: raw.relayGroups !== false, relayMedia: raw.relayMedia !== false };
+  const rawLimit = Number(raw.backfillLimit);
+  return {
+    baseUrl,
+    apiToken,
+    accountId,
+    inboxId,
+    relayGroups: raw.relayGroups !== false,
+    relayMedia: raw.relayMedia !== false,
+    backfillLimit: Number.isFinite(rawLimit) ? Math.max(0, Math.trunc(rawLimit)) : 0,
+    backfillAllOnce: raw.backfillAllOnce === true,
+  };
 }
 
 export default class ChatwootAdapter implements IPlugin {
@@ -54,22 +67,26 @@ export default class ChatwootAdapter implements IPlugin {
       const msg = h.data as IncomingMessage;
       if (sessionId && msg) {
         const cfg = readConfig(ctx.config);
+        const deps = {
+          lock,
+          client: clientFor(),
+          store,
+          engine: ctx.engine,
+          instanceId: sessionId,
+          relayGroups: cfg.relayGroups,
+          relayMedia: cfg.relayMedia,
+          backfillLimit: cfg.backfillLimit,
+          backfillAllOnce: cfg.backfillAllOnce,
+          log: (m: string, e?: unknown) => ctx.logger.error(m, e),
+        };
         // Fire-and-forget off the hook so a slow/failing Chatwoot API never blocks the WA pipeline. The
         // mapping mirror is keyed on sessionId (a session-scoped instance is 1:1 with its session).
-        void handleInbound(
-          {
-            lock,
-            client: clientFor(),
-            store,
-            instanceId: sessionId,
-            relayGroups: cfg.relayGroups,
-            relayMedia: cfg.relayMedia,
-            log: (m, e) => ctx.logger.error(m, e),
-          },
-          sessionId,
-          h.source,
-          msg,
-        ).catch(e => ctx.logger.error('inbound hook failed', e));
+        void handleInbound(deps, sessionId, h.source, msg).catch(e => ctx.logger.error('inbound hook failed', e));
+        // Opt-in one-time bulk history sweep. Fired off the hook (outside handleInbound's per-chat lock),
+        // guarded internally so it runs once per session; a no-op after the first sweep completes.
+        if (cfg.backfillAllOnce && cfg.backfillLimit > 0) {
+          void backfillAllChats(deps, sessionId).catch(e => ctx.logger.error('bulk backfill failed', e));
+        }
       }
       return { continue: true };
     });

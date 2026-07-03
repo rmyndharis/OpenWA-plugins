@@ -1,7 +1,7 @@
 {
   "id": "chatwoot-adapter",
   "name": "Chatwoot Adapter",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Two-way sync between a WhatsApp session and a Chatwoot inbox: relays WhatsApp messages (1:1 and groups, with media) into Chatwoot as an API-channel inbox, sends agent replies back to WhatsApp, and hands a chat over to a human agent — silencing other OpenWA bots — when an agent takes it in Chatwoot. First consumer of the OpenWA Integration SDK v1; runs sandboxed in the plugin worker.",
@@ -11,8 +11,8 @@
   "repository": "https://github.com/rmyndharis/OpenWA-plugins",
   "keywords": ["chatwoot", "helpdesk", "inbox", "handover", "two-way", "agent", "whatsapp", "openwa"],
   "status": "beta",
-  "minOpenWAVersion": "0.8.3",
-  "testedOpenWAVersion": "0.8.3",
+  "minOpenWAVersion": "0.8.5",
+  "testedOpenWAVersion": "0.8.5",
   "sdkVersion": "1",
   "permissions": ["net:fetch", "conversation:send", "webhook:ingress"],
   "net": { "allow": [], "allowConfigHosts": ["baseUrl"] },
@@ -77,6 +77,18 @@
         "title": "Relay inbound media to Chatwoot",
         "default": true,
         "description": "Upload inbound WhatsApp media (images, files, audio) to Chatwoot as attachments."
+      },
+      "backfillLimit": {
+        "type": "number",
+        "title": "History backfill (messages per chat)",
+        "default": 0,
+        "description": "When a chat first opens in Chatwoot, import this many recent messages (both directions, with media) so agents see prior context. 0 disables it. Clamped to 100 host-side. Requires OpenWA 0.8.5+."
+      },
+      "backfillAllOnce": {
+        "type": "boolean",
+        "title": "Bulk-import all chats once on setup",
+        "default": false,
+        "description": "In addition to the per-conversation backfill, run a one-time sweep that imports the history of every existing chat. Needs 'History backfill' above > 0. Runs once per session; large inboxes may take a while."
       }
     }
   }
