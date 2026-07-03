@@ -99,3 +99,45 @@ test('enqueueRetry drops the OLDEST entry (by enqueuedAt) when the queue is at c
   const ids = (await store.listRetries()).map(e => e.msg.id).sort();
   assert.deepEqual(ids, ['mid', 'new']);
 });
+
+test('markSeen stores a timestamped marker and hasSeen stays truthy', async () => {
+  const storage = fakeStorage();
+  const store = new MappingStore(storage, fakeMappings());
+  await store.markSeen('wa', 'm1', 'sess', 1000);
+  assert.equal(await store.hasSeen('wa', 'm1', 'sess'), true);
+  assert.deepEqual(await storage.get('seen:sess:wa:m1'), { t: 1000 });
+});
+
+test('pruneSeen deletes markers older than the TTL and keeps recent ones', async () => {
+  const store = new MappingStore(fakeStorage(), fakeMappings());
+  const TTL = 1000;
+  await store.markSeen('wa', 'old', 'sess', 0); // age 5000 > TTL → pruned
+  await store.markSeen('wa', 'fresh', 'sess', 4500); // age 500 < TTL → kept
+  const { pruned, adopted } = await store.pruneSeen(5000, TTL);
+  assert.equal(pruned, 1);
+  assert.equal(adopted, 0);
+  assert.equal(await store.hasSeen('wa', 'old', 'sess'), false);
+  assert.equal(await store.hasSeen('wa', 'fresh', 'sess'), true);
+});
+
+test('pruneSeen adopts a legacy marker (stamps a timestamp, does not delete)', async () => {
+  const storage = fakeStorage();
+  const store = new MappingStore(storage, fakeMappings());
+  await storage.set('seen:sess:wa:legacy', 1); // pre-0.5.2 bare marker
+  const { pruned, adopted } = await store.pruneSeen(9000, 1000);
+  assert.equal(pruned, 0);
+  assert.equal(adopted, 1);
+  assert.equal(await store.hasSeen('wa', 'legacy', 'sess'), true); // still present
+  assert.deepEqual(await storage.get('seen:sess:wa:legacy'), { t: 9000 }); // now timestamped
+});
+
+test('pruneSeen leaves non-seen keys untouched', async () => {
+  const store = new MappingStore(fakeStorage(), fakeMappings());
+  await store.link('sess', 'c@wa', 'inst', { conversationId: 1, contactId: 2, sourceId: 'x' });
+  await store.enqueueRetry({ sessionId: 'sess', chatId: 'c@wa', msg: msg('r1'), enqueuedAt: 0 }, 500);
+  await store.markSeen('wa', 'old', 'sess', 0);
+  await store.pruneSeen(10_000, 1000);
+  assert.equal(await store.hasSeen('wa', 'old', 'sess'), false); // pruned
+  assert.equal(await store.countRetries(), 1); // retry untouched
+  assert.deepEqual(await store.getByChat('sess', 'c@wa'), { conversationId: 1, contactId: 2, sourceId: 'x' });
+});

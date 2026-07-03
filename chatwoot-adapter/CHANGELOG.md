@@ -6,6 +6,18 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-07-04
+
+### Fixed
+
+- **The internal de-duplication markers no longer grow without bound.** The adapter keeps one marker per
+  relayed message — to skip WhatsApp re-deliveries and its own echoed sends — and these were never cleaned
+  up, so the plugin's storage grew for the life of the install and the inbound-retry timer's periodic scan
+  got progressively slower on a long-running instance. Markers now carry a timestamp and are pruned once
+  they pass a 3-day retention window, which comfortably outlasts any realistic WhatsApp re-delivery or
+  own-send echo, so normal live de-duplication is unaffected. No configuration or action is needed;
+  existing markers are migrated automatically.
+
 ## [0.5.1] — 2026-07-03
 
 ### Fixed

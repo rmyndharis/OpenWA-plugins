@@ -11,8 +11,8 @@ mirror it. Runs sandboxed in the plugin worker; no server, no extra port.
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chatwoot-adapter` |
-| **Version** | 0.5.1 |
-| **Released** | 2026-07-03 |
+| **Version** | 0.5.2 |
+| **Released** | 2026-07-04 |
 | **Status** | beta |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |

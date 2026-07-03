@@ -27,6 +27,12 @@ export interface ChatLink {
 // are therefore scoped by the WA sessionId (the one identity both the inbound hook and the outbound
 // ingress delivery share). A session-scoped legacy reverse key is ALSO written so a delivery that arrives
 // without a session scope (or a pre-scope row) still resolves — unscoped, so single-tenant is unaffected.
+// Retention window for `seen:` de-dup markers, and how often expired ones are pruned. Hardcoded (mirroring
+// the retry-timer constants in retry.ts) — a generous default that outlasts any realistic WhatsApp message
+// re-delivery, so pruning never re-posts a duplicate. Bumping the TTL is a one-line change.
+export const SEEN_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+export const SEEN_PRUNE_INTERVAL_MS = 60 * 60 * 1000; // hourly
+
 export class MappingStore {
   constructor(
     private readonly storage: PluginStorage,
@@ -84,8 +90,37 @@ export class MappingStore {
   async hasSeen(kind: 'wa' | 'cw', id: string, scope?: string): Promise<boolean> {
     return Boolean(await this.storage.get(this.seenKey(kind, id, scope)));
   }
-  async markSeen(kind: 'wa' | 'cw', id: string, scope?: string): Promise<void> {
-    await this.storage.set(this.seenKey(kind, id, scope), 1);
+  async markSeen(kind: 'wa' | 'cw', id: string, scope?: string, nowMs: number = Date.now()): Promise<void> {
+    // Store a timestamp (not a bare `1`) so pruneSeen can age the marker out. hasSeen only checks presence.
+    await this.storage.set(this.seenKey(kind, id, scope), { t: nowMs });
+  }
+
+  // Prune expired `seen:` markers so ctx.storage doesn't grow without bound (one file per marker) and the
+  // retry drain's directory scan stays cheap. Streams keys one at a time (matching the drain's OOM-safe
+  // discipline). A pre-0.5.2 marker stored as a bare `1` has no timestamp: it is ADOPTED (stamped with the
+  // current time) rather than deleted, so it can never re-post a duplicate and ages out one TTL from here.
+  // Touches only `seen:`-prefixed keys — the list() prefix is filtered defensively (a fake ignoring the
+  // arg would otherwise return every key).
+  async pruneSeen(nowMs: number, ttlMs: number): Promise<{ pruned: number; adopted: number }> {
+    const keys = (await this.storage.list('seen:')).filter(k => k.startsWith('seen:'));
+    let pruned = 0;
+    let adopted = 0;
+    for (const key of keys) {
+      const v = await this.storage.get<unknown>(key);
+      if (v == null) continue; // vanished since the scan — nothing to do
+      const t =
+        typeof v === 'object' && v !== null && typeof (v as { t?: unknown }).t === 'number'
+          ? (v as { t: number }).t
+          : undefined;
+      if (t === undefined) {
+        await this.storage.set(key, { t: nowMs }); // legacy/malformed marker → adopt
+        adopted++;
+      } else if (nowMs - t > ttlMs) {
+        await this.storage.delete(key);
+        pruned++;
+      }
+    }
+    return { pruned, adopted };
   }
 
   // Durable run-once marker for the one-time bulk history sweep, per WA session.

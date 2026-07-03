@@ -1,6 +1,6 @@
 import type { IPlugin, PluginContext, IncomingMessage, HookContext, HookResult, WebhookRequest } from '../types/openwa';
 import { ChatwootClient } from './chatwoot-client.ts';
-import { MappingStore } from './mapping-store.ts';
+import { MappingStore, SEEN_TTL_MS, SEEN_PRUNE_INTERVAL_MS } from './mapping-store.ts';
 import { KeyedAsyncLock } from './chat-lock.ts';
 import { handleInbound, relayInbound } from './inbound.ts';
 import { handleSent } from './sent.ts';
@@ -63,6 +63,8 @@ export default class ChatwootAdapter implements IPlugin {
   private store: MappingStore | null = null;
   private deadLetterCount = 0;
   private draining = false;
+  private lastSeenPruneAt = 0;
+  private seenPruning = false;
 
   async onEnable(ctx: PluginContext): Promise<void> {
     this.clearRetryTimer(); // idempotent re-enable: never leak a timer from a prior enable
@@ -166,7 +168,32 @@ export default class ChatwootAdapter implements IPlugin {
         )
         .finally(() => void (this.draining = false));
     };
-    this.retryTimer = setInterval(() => void drain(), RETRY_INTERVAL_MS);
+    // Bound the `seen:` de-dup markers: hourly, expire any past the retention window. Piggybacks this same
+    // timer (no second timer), independent of the drain's single-flight so a slow prune never blocks a
+    // retry. Runs regardless of config validity — it neither reads config nor relays. lastSeenPruneAt = 0
+    // so the first prune (and the one-time legacy adopt) fires on the first tick after enable. Best-effort:
+    // a failure is logged and retried next tick that is due.
+    const maybePruneSeen = (): void => {
+      if (this.seenPruning) return;
+      const now = Date.now();
+      if (now - this.lastSeenPruneAt < SEEN_PRUNE_INTERVAL_MS) return;
+      this.lastSeenPruneAt = now;
+      this.seenPruning = true;
+      void store
+        .pruneSeen(now, SEEN_TTL_MS)
+        .then(({ pruned, adopted }) => {
+          if (pruned || adopted) {
+            ctx.logger.log(`chatwoot-adapter: pruned ${pruned} expired seen-marker(s), adopted ${adopted} legacy`);
+          }
+        })
+        .catch(e => ctx.logger.error('seen-marker prune failed', e))
+        .finally(() => void (this.seenPruning = false));
+    };
+
+    this.retryTimer = setInterval(() => {
+      void drain();
+      maybePruneSeen();
+    }, RETRY_INTERVAL_MS);
     this.retryTimer.unref?.();
 
     ctx.logger.log('chatwoot-adapter enabled');
