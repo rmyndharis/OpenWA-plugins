@@ -23,8 +23,9 @@ Typebot chat session; the bot's replies (text, media, and menu choices) are sent
 - The first message in a chat starts a Typebot session (`startChat`); each later message advances it
   (`continueChat`). Typebot holds the session state; this plugin stores only the session id and what the
   bot is waiting for.
-- Text bubbles are converted to WhatsApp formatting; image/video/audio bubbles are sent as media; a
-  `choice` step is shown as a numbered list and your numeric reply is mapped back to the option.
+- Text bubbles are converted to WhatsApp formatting; image/video/audio bubbles are sent as media where the
+  OpenWA host supports it, otherwise as a link (the 0.8.x send API is text-only); a `choice` step is shown as
+  a numbered list and your numeric reply is mapped back to the option.
 - Typed inputs (email, number, date, …) are validated by Typebot — a bad value is re-asked. A `file input`
   step accepts a photo/file you send and uploads it to Typebot.
 - The session resets when the flow ends or after the idle timeout.

@@ -45,7 +45,9 @@ export interface SessionState {
 // ── render output (turn.ts fills in sessionId/chatId/replyTo) ──────────────────────────
 export type OutgoingPart =
   | { type: 'text'; text: string }
-  | { type: 'image' | 'video' | 'audio'; mediaUrl: string };
+  // media carries `text` (the URL) as a fallback: OpenWA 0.8.x send() ignores mediaUrl, so text keeps the
+  // message from being empty; a host that wires mediaUrl sends native media.
+  | { type: 'image' | 'video' | 'audio'; mediaUrl: string; text: string };
 
 // ── reply-map output ──────────────────────────────────────────────────────────────────
 export type ReplyIntent =

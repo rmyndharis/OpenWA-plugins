@@ -15,7 +15,8 @@ test('renders text (markdown→WA), media, and a numbered choice list', () => {
   };
   assert.deepEqual(renderResponse(resp), [
     { type: 'text', text: '*Hi*' },
-    { type: 'image', mediaUrl: 'https://x/i.png' },
+    // media carries mediaUrl for hosts that support it + text (the URL) as a fallback for text-only hosts
+    { type: 'image', mediaUrl: 'https://x/i.png', text: 'https://x/i.png' },
     { type: 'text', text: '1. Sales\n2. Support' },
   ]);
 });

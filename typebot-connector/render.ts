@@ -7,7 +7,9 @@ export function renderResponse(resp: NormalizedResponse): OutgoingPart[] {
   for (const b of resp.bubbles) {
     if (b.kind === 'text') parts.push({ type: 'text', text: mdToWhatsApp(b.markdown) });
     else if (b.kind === 'link') parts.push({ type: 'text', text: b.url });
-    else parts.push({ type: b.kind, mediaUrl: b.url });
+    // Belt-and-suspenders: OpenWA 0.8.x send() ignores mediaUrl and would deliver an empty message, so carry
+    // the URL as text too. A host that wires mediaUrl sends native media; on 0.8.x the user still gets the link.
+    else parts.push({ type: b.kind, mediaUrl: b.url, text: b.url });
   }
   if (resp.input) {
     const prompt = renderInputPrompt(resp.input);
