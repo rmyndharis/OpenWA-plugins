@@ -266,4 +266,6 @@ export interface IncomingMessage {
   // The message this one replies to (swipe-to-reply / quote), when present. `id` is the quoted WhatsApp
   // message id; `body` is its text. Carried on the inbound hook payload for reply-threading relays.
   quotedMessage?: { id: string; body: string };
+  // Shared location (`type: 'location'`), when present.
+  location?: { latitude: number; longitude: number; description?: string; address?: string; url?: string };
 }

@@ -25,6 +25,9 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 - **Self-hosted Chatwoot guidance** in the README: `baseUrl` must be a public `https` URL (LAN/`localhost`
   are rejected by the SSRF guard), how to expose a self-hosted instance, and how to avoid 502/530 on large
   media uploads through a tunnel. (#609)
+- **Locations and stickers relay as first-class types.** A shared location posts as a Chatwoot text bubble
+  with its coordinates and an openable maps link (previously an empty message); a sticker is uploaded as a
+  `image/webp` attachment named `sticker.webp` so it renders. (#609)
 
 ## [0.1.1] — 2026-07-02
 
