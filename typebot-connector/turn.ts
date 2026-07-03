@@ -94,6 +94,8 @@ function contactVars(msg: IncomingMessage): Record<string, string> {
 
 async function send(deps: TurnDeps, sessionId: string, msg: IncomingMessage, part: OutgoingPart): Promise<void> {
   const env: ConversationSendEnvelope = { sessionId, chatId: msg.chatId, ...part };
-  if (msg.isGroup) env.replyTo = msg.id;
+  // Quote the sender in groups to disambiguate — but only for text parts: OpenWA rejects replyTo on a media
+  // envelope (the engine media path can't quote a message).
+  if (msg.isGroup && part.type === 'text') env.replyTo = msg.id;
   await deps.conversations.send(env);
 }

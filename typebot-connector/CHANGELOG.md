@@ -13,8 +13,8 @@ Initial release — a WhatsApp ↔ Typebot bridge that runs a Typebot flow as th
 - **Auto-start:** every in-scope chat (1:1 and, by default, groups) starts a Typebot session on the first
   message and advances it on each reply, via Typebot's live Chat API (`startChat` / `continueChat`).
 - **Rendering:** text bubbles (Markdown → WhatsApp formatting), image/video/audio bubbles (sent as native
-  media where the host supports it, otherwise as a link — the OpenWA 0.8.x send API is text-only), and
-  `choice` / `picture choice` inputs rendered as a numbered list. A numeric reply is mapped back to the option.
+  media), and `choice` / `picture choice` inputs rendered as a numbered list. A numeric reply is mapped back
+  to the chosen option.
 - **Inputs:** typed inputs (email/number/url/date/time/phone/rating) are passed through and validated by
   Typebot; `file input` accepts a WhatsApp media reply, uploads it to Typebot, and submits the file URL.
 - **Lifecycle:** the session resets when the flow ends (no further input) or after an idle timeout;
@@ -22,4 +22,5 @@ Initial release — a WhatsApp ↔ Typebot bridge that runs a Typebot flow as th
 - **Runtime:** runs sandboxed in the plugin worker; the Typebot call is off-dispatch (never blocks the WA
   pipeline) and serialized per chat. No public URL or webhook required.
 
-Requires an OpenWA host with Integration SDK v1 (`net:fetch` + `conversation:send`).
+Requires OpenWA **≥ 0.8.2** with Integration SDK v1 (`net:fetch` + `conversation:send`) — media bubbles use
+the media-send support added to `conversation.send` in 0.8.2.

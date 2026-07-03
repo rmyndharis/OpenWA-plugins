@@ -1008,7 +1008,7 @@
     "version": "0.1.0",
     "type": "extension",
     "status": "beta",
-    "description": "Runs a Typebot flow as the brain of a WhatsApp bot: inbound messages drive a Typebot chat session via the live Chat API, and the bot's replies — text, media (sent as a link where the host's send API is text-only), and numbered-choice inputs — are sent back to WhatsApp. Auto-starts every chat, handles file-upload steps, and resets when the flow ends or after an idle timeout. Runs sandboxed in the plugin worker; no public URL or webhook required.",
+    "description": "Runs a Typebot flow as the brain of a WhatsApp bot: inbound messages drive a Typebot chat session via the live Chat API, and the bot's replies — text, media, and numbered-choice inputs — are sent back to WhatsApp. Auto-starts every chat, handles file-upload steps, and resets when the flow ends or after an idle timeout. Runs sandboxed in the plugin worker; no public URL or webhook required.",
     "author": "Yudhi Armyndharis <yudhi@rmyndharis.com>",
     "license": "MIT",
     "keywords": [
@@ -1021,8 +1021,8 @@
       "whatsapp",
       "openwa"
     ],
-    "minOpenWAVersion": "0.8.0",
-    "testedOpenWAVersion": "0.8.1",
+    "minOpenWAVersion": "0.8.2",
+    "testedOpenWAVersion": "0.8.2",
     "releasedAt": "2026-07-03",
     "repoPath": "typebot-connector",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",

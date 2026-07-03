@@ -67,6 +67,20 @@ test('group message replies with a quote (replyTo set)', async () => {
   assert.equal(sent[0].replyTo, 'm');
 });
 
+test('group: media parts omit replyTo (OpenWA rejects replyTo on media); text parts keep it', async () => {
+  const startChat: NormalizedResponse = {
+    sessionId: 'S1',
+    bubbles: [{ kind: 'text', markdown: 'Hi' }, { kind: 'image', url: 'https://x/i.png' }],
+  };
+  const { d, sent } = deps({ startChat });
+  await handleTurn(d, 'sess', 'Engine', msg({ isGroup: true, chatId: 'g@g.us', author: 'a@c.us' }));
+  const textPart = sent.find(s => s.type === 'text');
+  const mediaPart = sent.find(s => s.type === 'image');
+  assert.equal(textPart?.replyTo, 'm'); // text is quoted to disambiguate the sender
+  assert.equal(mediaPart?.mediaUrl, 'https://x/i.png');
+  assert.equal(mediaPart?.replyTo, undefined); // media MUST NOT carry replyTo (0.8.2 throws)
+});
+
 test('upload failure → fallback text sent, continueChat not called, state intact', async () => {
   let continueChatCalls = 0;
   const { d, sent, store } = deps({
