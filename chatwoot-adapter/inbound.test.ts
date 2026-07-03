@@ -68,7 +68,7 @@ test('forwards the quote context (source_id + in_reply_to_external_id) on a repl
   });
   const reply = { ...msg, id: 'r1', quotedMessage: { id: 'orig', body: 'earlier' } } as IncomingMessage;
   await handleInbound(d, 'sess', 'Engine', reply);
-  assert.deepEqual(opts, { sourceId: 'r1', inReplyToExternalId: 'orig' });
+  assert.deepEqual(opts, { sourceId: 'r1', inReplyToExternalId: 'orig', messageType: 'incoming' });
 });
 
 test('relays an inbound voice note as a Chatwoot voice message (#607)', async () => {

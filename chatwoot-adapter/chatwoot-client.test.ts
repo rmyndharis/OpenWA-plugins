@@ -49,6 +49,16 @@ test('postText posts an incoming message with the api token header', async () =>
   assert.equal(last.init!.headers!['api_access_token'], 'tok');
 });
 
+test('postText and postMedia honor an outgoing message_type (backfilled business messages)', async () => {
+  const { fn, calls } = fakeFetch({ 'POST /api/v1/accounts/3/conversations/55/messages': { body: { id: 1 } } });
+  const c = new ChatwootClient(fn, cfg);
+  await c.postText(55, 'sent by agent', { messageType: 'outgoing' });
+  assert.equal(JSON.parse(calls.at(-1)!.init!.body as string).message_type, 'outgoing');
+  await c.postMedia(55, '', { filename: 'x.jpg', contentType: 'image/jpeg', data: new Uint8Array([1]) }, { messageType: 'outgoing' });
+  const raw = Buffer.from(calls.at(-1)!.init!.body as Uint8Array).toString('latin1');
+  assert.match(raw, /name="message_type"\r\n\r\noutgoing/);
+});
+
 test('updateContact PUTs the new name to the contact', async () => {
   const { fn, calls } = fakeFetch({ 'PUT /api/v1/accounts/3/contacts/9': { body: { id: 9 } } });
   await new ChatwootClient(fn, cfg).updateContact(9, 'Budi');

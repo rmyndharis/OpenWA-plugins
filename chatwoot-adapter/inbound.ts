@@ -1,23 +1,19 @@
 import type { IncomingMessage } from '../types/openwa';
-import type { ChatwootClient } from './chatwoot-client.ts';
-import type { MappingStore, ChatLink } from './mapping-store.ts';
-import type { KeyedAsyncLock } from './chat-lock.ts';
 import { shouldRelayInbound } from './filters.ts';
+import { relayMessage, ensureConversation, refreshContactName, type InboundDeps } from './relay.ts';
+import { backfillHistory } from './backfill.ts';
 
-export interface InboundDeps {
-  lock: KeyedAsyncLock;
-  client: ChatwootClient;
-  store: MappingStore;
-  instanceId: string;
-  relayGroups: boolean;
-  relayMedia: boolean;
-  log: (m: string, e?: unknown) => void;
-}
+export type { InboundDeps };
 
-// WhatsApp → Chatwoot. Filter, then run the whole resolve+post+persist under the per-chat lock so two
-// near-simultaneous first messages can't create duplicate Chatwoot contacts/conversations. Dedup is a
-// mark-before-act check-and-set inside the lock (at-most-once; a failed post won't re-relay).
-export async function handleInbound(deps: InboundDeps, sessionId: string, source: string, msg: IncomingMessage): Promise<void> {
+// WhatsApp → Chatwoot. Filter, then run resolve+post under the per-chat lock so two near-simultaneous
+// first messages can't create duplicate Chatwoot contacts/conversations. Dedup is a mark-before-act
+// check-and-set inside the lock (at-most-once; a failed post won't re-relay).
+export async function handleInbound(
+  deps: InboundDeps,
+  sessionId: string,
+  source: string,
+  msg: IncomingMessage,
+): Promise<void> {
   if (!shouldRelayInbound(msg, source, deps.relayGroups)) return;
   await deps.lock.run(`${sessionId}:${msg.chatId}`, async () => {
     try {
@@ -25,99 +21,37 @@ export async function handleInbound(deps: InboundDeps, sessionId: string, source
       // session so two tenants' WA message ids can't collide in the shared plugin store.
       if (await deps.store.hasSeen('wa', msg.id, sessionId)) return;
       await deps.store.markSeen('wa', msg.id, sessionId);
-      const conversationId = await resolveConversation(deps, sessionId, msg);
-      const content = prefixSender(msg);
-      // source_id lets a later reply thread against this message; in_reply_to_external_id forwards the
-      // quote context (#606) so a short reply like ".." keeps the bubble it answered.
-      const post = { sourceId: msg.id, inReplyToExternalId: msg.quotedMessage?.id };
-      const isVoice = msg.type === 'voice';
-      const isSticker = msg.type === 'sticker';
-      if (msg.type === 'location' && msg.location) {
-        // A location carries no media blob; relay it as a text bubble with coordinates + a maps link the
-        // agent can open, threaded like any other message.
-        await deps.client.postText(conversationId, locationText(msg), post);
-      } else if (deps.relayMedia && msg.media?.data && !msg.media.omitted) {
-        await deps.client.postMedia(
-          conversationId,
-          content,
-          {
-            filename: isVoice ? 'voice.ogg' : isSticker ? 'sticker.webp' : msg.media.filename ?? 'file',
-            contentType:
-              msg.media.mimetype || (isVoice ? 'audio/ogg' : isSticker ? 'image/webp' : 'application/octet-stream'),
-            data: Buffer.from(msg.media.data, 'base64'),
-          },
-          { ...post, isVoiceMessage: isVoice },
-        );
-      } else {
-        // No relayable blob (plain text, or media dropped/omitted). Never post an empty bubble for a
-        // media message — surface a short placeholder so the agent knows something arrived (#607).
-        await deps.client.postText(conversationId, msg.body?.trim() ? content : placeholderFor(msg), post);
+      const { conversationId, created } = await resolveConversation(deps, sessionId, msg);
+      // Lazy backfill: the first time this chat maps, replay its recent history (older messages, both
+      // directions, deduped) BEFORE posting this one — so the thread reads chronologically and this
+      // message's quote resolves against a just-posted source_id. This message is already markSeen, so
+      // backfill skips it and it posts last, below.
+      if (created && deps.backfillLimit > 0) {
+        await backfillHistory(deps, sessionId, msg.chatId, conversationId);
       }
+      await relayMessage(deps, conversationId, msg, 'incoming');
     } catch (err) {
       deps.log('inbound relay failed', err);
     }
   });
 }
 
-function senderLabel(msg: IncomingMessage): string {
-  return msg.contact?.pushName || msg.senderPhone || msg.author || 'unknown';
-}
-
-function prefixSender(msg: IncomingMessage): string {
-  if (!msg.isGroup) return msg.body;
-  return `*${senderLabel(msg)}:* ${msg.body}`;
-}
-
-// A shared location rendered for Chatwoot: a pin line (description/address when present) plus a link the
-// agent can open (the message's own url, else a maps query). Group messages keep the sender prefix.
-function locationText(msg: IncomingMessage): string {
-  const loc = msg.location!;
-  const link = loc.url || `https://maps.google.com/?q=${loc.latitude},${loc.longitude}`;
-  const label = [loc.description, loc.address].filter(Boolean).join(' — ');
-  const body = label ? `📍 ${label}\n${link}` : `📍 ${link}`;
-  return msg.isGroup ? `*${senderLabel(msg)}:* ${body}` : body;
-}
-
-// A short stand-in for a bodyless message we couldn't relay as media (e.g. a voice note or sticker whose
-// blob was omitted for size), so Chatwoot shows a meaningful line instead of an empty bubble.
-function placeholderFor(msg: IncomingMessage): string {
-  if (msg.type === 'voice') return '🎤 Voice message';
-  if (msg.type === 'sticker') return '🎨 Sticker';
-  if (msg.media) return `📎 ${msg.media.filename ?? 'Attachment'}`;
-  return msg.body;
-}
-
-async function resolveConversation(deps: InboundDeps, sessionId: string, msg: IncomingMessage): Promise<number> {
+async function resolveConversation(
+  deps: InboundDeps,
+  sessionId: string,
+  msg: IncomingMessage,
+): Promise<{ conversationId: number; created: boolean }> {
   const existing = await deps.store.getByChat(sessionId, msg.chatId); // re-read inside the lock
   if (existing) {
     await refreshContactName(deps, sessionId, msg, existing);
-    return existing.conversationId;
+    return { conversationId: existing.conversationId, created: false };
   }
-  const identifier = msg.chatId; // WA JID — individual @c.us/@lid or group JID (stable across @lid migration)
-  const name = msg.isGroup ? `Group ${msg.chatId}` : msg.contact?.pushName || msg.contact?.name || msg.senderPhone || identifier;
-  const phone = msg.isGroup ? undefined : msg.senderPhone ?? undefined;
-  const found = await deps.client.searchContact(identifier);
-  const contact = found?.sourceId
-    ? { id: found.id, sourceId: found.sourceId }
-    : await deps.client.createContact(identifier, name, phone);
-  const conversationId =
-    (await deps.client.findOpenConversation(contact.id)) ?? (await deps.client.createConversation(contact.id, contact.sourceId));
-  await deps.store.link(sessionId, msg.chatId, deps.instanceId, { conversationId, contactId: contact.id, sourceId: contact.sourceId, name });
-  return conversationId;
-}
-
-// A 1:1 chat first seen from an @lid sender is seeded with the bare JID as its Chatwoot name (no pushName
-// yet). Once a real pushName arrives, update the contact so agents see a human name instead of an id
-// (#609 P1). Best-effort and only when the name actually changed — never blocks the relay, never overwrites
-// a real name with a fallback (only pushName/name qualify, not senderPhone/JID).
-async function refreshContactName(deps: InboundDeps, sessionId: string, msg: IncomingMessage, link: ChatLink): Promise<void> {
-  if (msg.isGroup) return; // a group contact is named for the group, not whoever sent this message
-  const desired = msg.contact?.pushName || msg.contact?.name;
-  if (!desired || desired === link.name) return;
-  try {
-    await deps.client.updateContact(link.contactId, desired);
-    await deps.store.patch(sessionId, msg.chatId, { name: desired });
-  } catch (err) {
-    deps.log('contact name refresh failed', err);
-  }
+  const name = msg.isGroup
+    ? `Group ${msg.chatId}`
+    : msg.contact?.pushName || msg.contact?.name || msg.senderPhone || msg.chatId;
+  const conversationId = await ensureConversation(deps, sessionId, msg.chatId, {
+    name,
+    phone: msg.isGroup ? undefined : msg.senderPhone ?? undefined,
+  });
+  return { conversationId, created: true };
 }

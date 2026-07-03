@@ -6,7 +6,19 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
-## [0.2.0] — 2026-07-03
+## [0.3.0] — 2026-07-03
+
+### Added
+
+- **History backfill** so agents see prior WhatsApp context in Chatwoot instead of a conversation that
+  starts mid-thread (#609). Two composable modes, both off by default:
+  - **Lazy (`backfillLimit`)** — when a chat first opens as a Chatwoot conversation, its recent messages
+    (both directions, with media) are replayed oldest→newest before the triggering message, so the thread
+    reads in order. Deduped against the live path, so nothing double-posts.
+  - **Bulk (`backfillAllOnce`)** — a one-time sweep that imports the history of every existing chat on
+    setup, for mirroring a whole inbox. Sequential, best-effort, runs once per session.
+  - Business-side (`fromMe`) messages post as Chatwoot `outgoing`, contact messages as `incoming`.
+  - Requires OpenWA 0.8.5+ (the new `engine.getChatHistory` capability).
 
 ### Added
 

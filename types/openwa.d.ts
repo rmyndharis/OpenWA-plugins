@@ -54,12 +54,23 @@ export interface PluginMessagingCapability {
   reply(sessionId: string, chatId: string, quotedMessageId: string, text: string): Promise<MessageResponseDto>;
 }
 
+export interface ChatSummary {
+  id: string;
+  name: string;
+  isGroup: boolean;
+  unreadCount: number;
+  timestamp: number;
+  lastMessage?: string;
+}
+
 export interface PluginEngineReadCapability {
   getGroupInfo(sessionId: string, groupId: string): Promise<unknown>;
   getContacts(sessionId: string): Promise<unknown>;
   getContactById(sessionId: string, contactId: string): Promise<unknown>;
   checkNumberExists(sessionId: string, phone: string): Promise<unknown>;
   getChats(sessionId: string): Promise<unknown>;
+  /** Recent messages for a chat, both directions (v0.8.5+). The host clamps `limit` (max 100). */
+  getChatHistory(sessionId: string, chatId: string, limit?: number, includeMedia?: boolean): Promise<IncomingMessage[]>;
 }
 
 // ── v0.7: host-proxied, SSRF-guarded outbound HTTP ──────────────────────────────────────────────
