@@ -1,7 +1,7 @@
 {
   "id": "chatwoot-adapter",
   "name": "Chatwoot Adapter",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Two-way sync between a WhatsApp session and a Chatwoot inbox: relays WhatsApp messages (1:1 and groups, with media) into Chatwoot as an API-channel inbox, sends agent replies back to WhatsApp, and hands a chat over to a human agent — silencing other OpenWA bots — when an agent takes it in Chatwoot. First consumer of the OpenWA Integration SDK v1; runs sandboxed in the plugin worker.",
@@ -11,14 +11,14 @@
   "repository": "https://github.com/rmyndharis/OpenWA-plugins",
   "keywords": ["chatwoot", "helpdesk", "inbox", "handover", "two-way", "agent", "whatsapp", "openwa"],
   "status": "beta",
-  "minOpenWAVersion": "0.8.6",
-  "testedOpenWAVersion": "0.8.6",
+  "minOpenWAVersion": "0.8.7",
+  "testedOpenWAVersion": "0.8.7",
   "sdkVersion": "1",
   "permissions": ["net:fetch", "conversation:send", "webhook:ingress", "engine:read"],
   "net": { "allow": [], "allowConfigHosts": ["baseUrl"] },
   "sessionScoped": true,
   "sessions": ["*"],
-  "hooks": ["message:received"],
+  "hooks": ["message:received", "message:sent"],
   "ingress": [
     {
       "route": "chatwoot",
@@ -77,6 +77,12 @@
         "title": "Relay inbound media to Chatwoot",
         "default": true,
         "description": "Upload inbound WhatsApp media (images, files, audio) to Chatwoot as attachments."
+      },
+      "relayOwnMessages": {
+        "type": "boolean",
+        "title": "Relay your own outbound sends",
+        "default": true,
+        "description": "Mirror messages you send from a linked phone / the WhatsApp app / the OpenWA API into Chatwoot as outgoing messages, so the thread isn't one-sided. Your Chatwoot agent replies are never duplicated. Turn off to keep phone-composed messages out of the helpdesk."
       },
       "backfillLimit": {
         "type": "number",

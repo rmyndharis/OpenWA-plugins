@@ -6,6 +6,19 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-07-03
+
+### Added
+
+- **Relay your own outbound sends** into Chatwoot, so a conversation isn't one-sided when you reply from a
+  linked phone, the WhatsApp app, or the OpenWA API (#615). These mirror into the contact's **existing**
+  mapped Chatwoot conversation as `outgoing` messages (a send to a chat not yet in Chatwoot is skipped —
+  it appears once the contact replies, never as a duplicate conversation). Replies you send from within
+  Chatwoot are recognized and never duplicated. New `relayOwnMessages` setting, **on by default**; turn it
+  off to keep phone-composed messages out of the helpdesk. When the `@lid` mapping is resolvable, own
+  sends to a contact WhatsApp has migrated to `@lid` land in their existing conversation instead of a
+  duplicate, via the new host `canonicalChatId` resolver. Requires OpenWA 0.8.7+.
+
 ## [0.3.0] — 2026-07-03
 
 ### Added

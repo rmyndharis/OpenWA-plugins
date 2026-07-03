@@ -71,6 +71,12 @@ export interface PluginEngineReadCapability {
   getChats(sessionId: string): Promise<unknown>;
   /** Recent messages for a chat, both directions (v0.8.5+). The host clamps `limit` (max 100). */
   getChatHistory(sessionId: string, chatId: string, limit?: number, includeMedia?: boolean): Promise<IncomingMessage[]>;
+  /**
+   * Canonical (neutral) form of a chat id: resolves a `@lid` privacy id to its stable `<phone>@c.us` when
+   * the mapping is known, else returns the id unchanged. Lets a plugin key a chat by one identity across
+   * WhatsApp's `@lid` migration (best-effort). Available on OpenWA 0.8.7+.
+   */
+  canonicalChatId(sessionId: string, chatId: string): Promise<string>;
 }
 
 // ── v0.7: host-proxied, SSRF-guarded outbound HTTP ──────────────────────────────────────────────
