@@ -69,7 +69,7 @@ export class FlowEngine {
       if (!expired(await context.storage.get<UserState>(k))) continue;
       // Re-read immediately before deleting: a message may have re-created fresh state for this key since
       // the scan. Only delete if it is STILL expired, so a live flow isn't wiped.
-      // ponytail: this narrows the check→delete race to a tiny window; a per-key lock would close it fully
+      // This narrows the check→delete race to a tiny window; a per-key lock would close it fully
       // but isn't worth it for a 30-min GC of already-stale state that self-heals on the next message.
       if (expired(await context.storage.get<UserState>(k))) {
         await context.storage.delete(k);
