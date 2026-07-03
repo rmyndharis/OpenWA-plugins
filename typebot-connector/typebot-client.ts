@@ -9,6 +9,7 @@ type FetchFn = (url: string, init?: PluginNetRequestInit) => Promise<PluginNetRe
 export class TypebotHttpError extends Error {
   constructor(public readonly status: number, public readonly bodyText: string) {
     super(`Typebot HTTP ${status}`);
+    this.name = 'TypebotHttpError';
   }
 }
 

@@ -1,6 +1,7 @@
 import type { IncomingMessage, PluginConversationsCapability, ConversationSendEnvelope } from '../types/openwa';
 import type { TypebotConfig, OutgoingPart } from './typebot-types.ts';
-import { TypebotClient, TypebotHttpError, type ContinueMessage } from './typebot-client.ts';
+import { TypebotHttpError } from './typebot-client.ts';
+import type { TypebotClient, ContinueMessage } from './typebot-client.ts';
 import type { SessionStore } from './session-store.ts';
 import type { KeyedAsyncLock } from './chat-lock.ts';
 import { inScope, sessionKey } from './filters.ts';
