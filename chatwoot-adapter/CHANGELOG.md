@@ -18,7 +18,9 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
   - **Bulk (`backfillAllOnce`)** — a one-time sweep that imports the history of every existing chat on
     setup, for mirroring a whole inbox. Sequential, best-effort, runs once per session.
   - Business-side (`fromMe`) messages post as Chatwoot `outgoing`, contact messages as `incoming`.
-  - Requires OpenWA 0.8.5+ (the new `engine.getChatHistory` capability).
+  - Requires OpenWA 0.8.6+ (the `engine.getChatHistory` capability, bridged to sandboxed plugins) and the
+    `engine:read` permission. History that can't be fetched (e.g. the Baileys engine, which doesn't support
+    it, or a chat with no fetchable history) is skipped — the bulk sweep never creates empty conversations.
 
 ### Added
 

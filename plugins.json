@@ -385,8 +385,8 @@
       "whatsapp",
       "openwa"
     ],
-    "minOpenWAVersion": "0.8.5",
-    "testedOpenWAVersion": "0.8.5",
+    "minOpenWAVersion": "0.8.6",
+    "testedOpenWAVersion": "0.8.6",
     "releasedAt": "2026-07-03",
     "repoPath": "chatwoot-adapter",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",

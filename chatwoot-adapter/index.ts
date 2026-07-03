@@ -50,7 +50,7 @@ function readConfig(raw: Record<string, unknown>): ChatwootFullConfig {
     relayGroups: raw.relayGroups !== false,
     relayMedia: raw.relayMedia !== false,
     backfillLimit: Number.isFinite(rawLimit) ? Math.max(0, Math.trunc(rawLimit)) : 0,
-    backfillAllOnce: raw.backfillAllOnce === true,
+    backfillAllOnce: raw.backfillAllOnce === true || raw.backfillAllOnce === 'true',
   };
 }
 

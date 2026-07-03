@@ -17,7 +17,7 @@ mirror it. Runs sandboxed in the plugin worker; no server, no extra port.
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.5 (tested 0.8.5) |
+| **Requires OpenWA** | ≥ 0.8.6 (tested 0.8.6) |
 | **Keywords** | chatwoot, helpdesk, inbox, handover, two-way, agent, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/chatwoot-adapter](https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter) |
 <!-- END DETAILS -->
@@ -66,7 +66,7 @@ sees it.
 | `inboxId` | number | yes | The API-channel inbox id this adapter posts into and relays replies from. |
 | `relayGroups` | boolean | no (default `true`) | Relay group chats (one synthetic contact per group, sender-prefixed). |
 | `relayMedia` | boolean | no (default `true`) | Upload inbound media to Chatwoot as attachments. |
-| `backfillLimit` | number | no (default `0`) | When a chat first opens in Chatwoot, import this many recent messages (both directions, with media) so agents see prior context. `0` disables it; clamped to 100 host-side. Needs OpenWA 0.8.5+. |
+| `backfillLimit` | number | no (default `0`) | When a chat first opens in Chatwoot, import this many recent messages (both directions, with media) so agents see prior context. `0` disables it; clamped to 100 host-side. Needs OpenWA 0.8.6+ and the whatsapp-web.js engine (Baileys has no history support). |
 | `backfillAllOnce` | boolean | no (default `false`) | Also run a one-time sweep importing every existing chat's history on setup. Needs `backfillLimit` > 0. Runs once per session. |
 
 The Chatwoot webhook **secret** and the instance's **session scope** are set when you mint the instance (they
@@ -87,9 +87,9 @@ public host is added to the outbound allowlist). To use a self-hosted Chatwoot:
 
 ## Compatibility
 
-- **OpenWA** ≥ 0.8.5 — needs Integration SDK v1 (webhook ingress, `ctx.mappings`, the session+chat handover
-  gate, `net.allowConfigHosts`), the `conversation.send` media/voice types for outbound attachments, and
-  `engine.getChatHistory` for the history backfill.
+- **OpenWA** ≥ 0.8.6 — needs Integration SDK v1 (webhook ingress, `ctx.mappings`, the session+chat handover
+  gate, `net.allowConfigHosts`), the `conversation.send` media/voice types for outbound attachments, and the
+  sandbox-bridged `engine.getChatHistory` for the history backfill.
 - **Chatwoot** — account-level webhooks with timestamped HMAC signing (see Setup).
 
 ## Security
