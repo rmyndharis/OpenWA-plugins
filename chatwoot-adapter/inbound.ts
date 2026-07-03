@@ -31,13 +31,19 @@ export async function handleInbound(deps: InboundDeps, sessionId: string, source
       // quote context (#606) so a short reply like ".." keeps the bubble it answered.
       const post = { sourceId: msg.id, inReplyToExternalId: msg.quotedMessage?.id };
       const isVoice = msg.type === 'voice';
-      if (deps.relayMedia && msg.media?.data && !msg.media.omitted) {
+      const isSticker = msg.type === 'sticker';
+      if (msg.type === 'location' && msg.location) {
+        // A location carries no media blob; relay it as a text bubble with coordinates + a maps link the
+        // agent can open, threaded like any other message.
+        await deps.client.postText(conversationId, locationText(msg), post);
+      } else if (deps.relayMedia && msg.media?.data && !msg.media.omitted) {
         await deps.client.postMedia(
           conversationId,
           content,
           {
-            filename: isVoice ? 'voice.ogg' : msg.media.filename ?? 'file',
-            contentType: msg.media.mimetype || (isVoice ? 'audio/ogg' : 'application/octet-stream'),
+            filename: isVoice ? 'voice.ogg' : isSticker ? 'sticker.webp' : msg.media.filename ?? 'file',
+            contentType:
+              msg.media.mimetype || (isVoice ? 'audio/ogg' : isSticker ? 'image/webp' : 'application/octet-stream'),
             data: Buffer.from(msg.media.data, 'base64'),
           },
           { ...post, isVoiceMessage: isVoice },
@@ -53,16 +59,30 @@ export async function handleInbound(deps: InboundDeps, sessionId: string, source
   });
 }
 
-function prefixSender(msg: IncomingMessage): string {
-  if (!msg.isGroup) return msg.body;
-  const who = msg.contact?.pushName || msg.senderPhone || msg.author || 'unknown';
-  return `*${who}:* ${msg.body}`;
+function senderLabel(msg: IncomingMessage): string {
+  return msg.contact?.pushName || msg.senderPhone || msg.author || 'unknown';
 }
 
-// A short stand-in for a bodyless message we couldn't relay as media (e.g. a voice note whose blob was
-// omitted for size), so Chatwoot shows a meaningful line instead of an empty bubble.
+function prefixSender(msg: IncomingMessage): string {
+  if (!msg.isGroup) return msg.body;
+  return `*${senderLabel(msg)}:* ${msg.body}`;
+}
+
+// A shared location rendered for Chatwoot: a pin line (description/address when present) plus a link the
+// agent can open (the message's own url, else a maps query). Group messages keep the sender prefix.
+function locationText(msg: IncomingMessage): string {
+  const loc = msg.location!;
+  const link = loc.url || `https://maps.google.com/?q=${loc.latitude},${loc.longitude}`;
+  const label = [loc.description, loc.address].filter(Boolean).join(' — ');
+  const body = label ? `📍 ${label}\n${link}` : `📍 ${link}`;
+  return msg.isGroup ? `*${senderLabel(msg)}:* ${body}` : body;
+}
+
+// A short stand-in for a bodyless message we couldn't relay as media (e.g. a voice note or sticker whose
+// blob was omitted for size), so Chatwoot shows a meaningful line instead of an empty bubble.
 function placeholderFor(msg: IncomingMessage): string {
   if (msg.type === 'voice') return '🎤 Voice message';
+  if (msg.type === 'sticker') return '🎨 Sticker';
   if (msg.media) return `📎 ${msg.media.filename ?? 'Attachment'}`;
   return msg.body;
 }

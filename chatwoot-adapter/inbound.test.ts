@@ -92,6 +92,26 @@ test('a voice note with an omitted blob posts a placeholder, not an empty bubble
   assert.deepEqual(posted, [{ id: 55, c: '🎤 Voice message' }]);
 });
 
+test('relays a shared location as a text bubble with a maps link (#609 P2)', async () => {
+  const { deps: d, posted } = deps();
+  const loc = { ...msg, id: 'loc1', body: '', type: 'location', location: { latitude: -6.2, longitude: 106.8, description: 'Office' } } as IncomingMessage;
+  await handleInbound(d, 'sess', 'Engine', loc);
+  assert.equal(posted.length, 1);
+  assert.match(posted[0].c, /📍 Office/);
+  assert.match(posted[0].c, /maps\.google\.com\/\?q=-6\.2,106\.8/);
+});
+
+test('relays a sticker as a webp image attachment (#609 P2)', async () => {
+  let file: { filename: string; contentType: string } | undefined;
+  const { deps: d } = deps({
+    client: { postMedia: async (_id: number, _c: string, f: never) => { file = f; return { id: 2 }; } },
+  });
+  const sticker = { ...msg, id: 's1', body: '', type: 'sticker', media: { mimetype: 'image/webp', data: 'AAA' } } as IncomingMessage;
+  await handleInbound(d, 'sess', 'Engine', sticker);
+  assert.equal(file!.filename, 'sticker.webp');
+  assert.equal(file!.contentType, 'image/webp');
+});
+
 test('refreshes an @lid contact name once a real pushName arrives (#609)', async () => {
   const updates: Array<[number, string]> = [];
   const patches: Array<{ name?: string }> = [];
