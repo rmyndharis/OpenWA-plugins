@@ -1,0 +1,69 @@
+{
+  "id": "supabase-otp-hook",
+  "name": "Supabase Auth OTP",
+  "version": "0.1.0",
+  "type": "extension",
+  "main": "dist/index.js",
+  "description": "Deliver Supabase Auth phone OTPs over WhatsApp.",
+  "author": "maplerichie",
+  "license": "MIT",
+  "homepage": "https://github.com/maplerichie/OpenWA-plugins/tree/main/supabase-otp-hook",
+  "repository": "https://github.com/maplerichie/OpenWA-plugins",
+  "keywords": ["supabase", "auth", "otp", "sms", "whatsapp", "verification", "standard-webhooks", "openwa"],
+  "status": "beta",
+  "minOpenWAVersion": "0.8.11",
+  "testedOpenWAVersion": "0.8.11",
+  "sdkVersion": "1",
+  "permissions": ["webhook:ingress", "messages:send", "engine:read"],
+  "sessionScoped": true,
+  "sessions": ["*"],
+  "ingress": [
+    {
+      "route": "send-sms",
+      "mode": "sync-reply",
+      "verify": "core",
+      "maxBodyBytes": 20480,
+      "signature": {
+        "scheme": "none",
+        "dedupHeader": "webhook-id"
+      },
+      "conversationId": { "jsonPointer": "/user/id" }
+    }
+  ],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "appName": {
+        "type": "string",
+        "title": "App name",
+        "required": true,
+        "description": "Your app name, inserted into the message template's {appName} placeholder."
+      },
+      "webhookSecret": {
+        "type": "string",
+        "title": "Supabase webhook secret",
+        "secret": true,
+        "required": true,
+        "min": 16,
+        "description": "The Send SMS hook secret from Supabase (Authentication → Auth Hooks → Add hook → Send SMS hook → HTTPS → Generate secret), in its full v1,whsec_<base64> form. Used to verify the Standard Webhooks signature."
+      },
+      "messageTemplate": {
+        "type": "textarea",
+        "default": "{appName} | Your verification code is {otp}",
+        "title": "Message template",
+        "description": "WhatsApp message body. {appName} and {otp} are replaced with the app name and one-time code. Keep it short; WhatsApp may require an approved template for business-initiated messages."
+      },
+      "fallbackSessionId": {
+        "type": "string",
+        "title": "Fallback WhatsApp session",
+        "description": "The WhatsApp session id to send from when the instance is not bound to a specific session (sessionScope is empty). Either bind the instance to a session OR set this fallback; otherwise the plugin cannot send messages."
+      },
+      "debug": {
+        "type": "boolean",
+        "default": false,
+        "title": "Debug mode",
+        "description": "Log every inbound request (signature verdict, headers, body), the resolved session + chatId, each outbound send, and send failures. Never blocks or skips WhatsApp sending."
+      }
+    }
+  }
+}
