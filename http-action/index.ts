@@ -5,6 +5,7 @@ import { readConfig, type HttpActionConfig } from './config.ts';
 import { matchAction } from './matcher.ts';
 import { renderText, type TemplateContext } from './url-template.ts';
 import { HttpActionClient, type FetchLike } from './client.ts';
+import { claim, prune, allowCooldown, type StorageLike, DEDUP_TTL_MS, PRUNE_INTERVAL_MS } from './reliability.ts';
 
 const PLUGIN = 'http-action';
 const REPLY_MAX = 4000;
@@ -16,6 +17,9 @@ export interface HandleDeps {
   cfg: HttpActionConfig;
   fetch: FetchLike;
   conversations: { send(env: ConversationSendEnvelope): Promise<unknown> };
+  storage: StorageLike;
+  cooldown: Map<string, number>;
+  now: () => number;
   logger: { log(m: string): void; warn(m: string, e?: unknown): void; error(m: string, e?: unknown): void };
 }
 
@@ -41,6 +45,16 @@ function buildCtx(msg: IncomingMessage, sessionId: string, args: string[], respo
 export async function handleMessage(deps: HandleDeps, sessionId: string, msg: IncomingMessage): Promise<void> {
   const hit = matchAction(deps.cfg.actions, msg.body);
   if (!hit) return; // no trigger matched → silent
+
+  // Dedup (fail-closed): drop a redelivered message id within the TTL window (WhatsApp redelivers).
+  if (!(await claim(deps.storage, sessionId, msg.id, DEDUP_TTL_MS, deps.now()))) return;
+  // Best-effort prune of expired markers (throttled hourly); never blocks the reply.
+  void prune(deps.storage, deps.now(), DEDUP_TTL_MS, PRUNE_INTERVAL_MS).catch((e) =>
+    deps.logger.warn(`${PLUGIN}: prune failed`, e),
+  );
+  // Cooldown (fail-open): one reply per chat per cooldown window.
+  const cooldownMs = Math.max(0, deps.cfg.cooldownSeconds) * 1000;
+  if (!allowCooldown(deps.cooldown, `${sessionId}:${msg.chatId}`, deps.now(), cooldownMs)) return;
 
   const { action, args } = hit;
   const client = new HttpActionClient(deps.fetch, deps.cfg);
@@ -77,6 +91,7 @@ export default class HttpActionPlugin implements IPlugin {
   async onEnable(ctx: PluginContext): Promise<void> {
     this.ctx = ctx;
     const cfg = readConfig(ctx.config); // fail-fast: a bad config aborts enable
+    const cooldown = new Map<string, number>(); // per-chat cooldown, lives for the enabled lifetime
 
     ctx.registerHook('message:received', async (h: HookContext): Promise<HookResult> => {
       const sessionId = h.sessionId;
@@ -99,7 +114,15 @@ export default class HttpActionPlugin implements IPlugin {
       // Off-dispatch (§1.2 #2): return {continue:true} synchronously and float handleMessage, so a slow
       // or blocked upstream never stalls the WA hook (the ~5s host hook budget is sync-return only).
       void handleMessage(
-        { cfg: liveCfg, fetch: ctx.net.fetch.bind(ctx.net), conversations: ctx.conversations, logger: ctx.logger },
+        {
+          cfg: liveCfg,
+          fetch: ctx.net.fetch.bind(ctx.net),
+          conversations: ctx.conversations,
+          storage: ctx.storage,
+          cooldown,
+          now: () => Date.now(),
+          logger: ctx.logger,
+        },
         sessionId,
         msg,
       ).catch((e) => ctx.logger.error(`${PLUGIN}: handler failed`, e));
