@@ -62,6 +62,17 @@ test('action header values are rendered', async () => {
   assert.equal(cap.init?.headers?.['X-Trace'], 'm1');
 });
 
+test('a header value with CR/LF (via an attacker-controlled arg) is rejected, never sent', async () => {
+  const { config, action } = cfgWith();
+  const cap: Captured = {};
+  // action.request.headers = { 'X-Trace': '{{message.id}}' }; send a body whose id carries a newline
+  await assert.rejects(
+    () => new HttpActionClient(fakeFetch(cap, { body: '{}' }), config).run(action, { args: ['X'], message: { id: 'm1\nInjected: evil' } }),
+    /CR\/LF|header/i,
+  );
+  assert.equal(cap.url, undefined); // fetch was never called
+});
+
 test('bearer auth adds Authorization: Bearer <token>', async () => {
   const { config, action } = cfgWith({ authType: 'bearer', authToken: 'tok123' });
   const cap: Captured = {};

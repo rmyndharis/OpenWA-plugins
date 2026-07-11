@@ -1,7 +1,11 @@
 // Reliability gates for HTTP Action Bot: idempotency (dedup) + per-chat cooldown + storage pruning.
-// Dedup is storage-backed (survives worker restart, since WhatsApp redelivers the same message id) and
-// FAIL-CLOSED — a storage error drops the message rather than risk a double-fire. Cooldown is in-memory
-// and FAIL-OPEN (it never throws, so it can never wrongly block). Pure modulo the injected storage.
+//
+// Dedup is split into a read-only presence CHECK (hasSeen, fail-closed) and a MARK written only AFTER a
+// successful reply (markSeen) — mirroring chatwoot's hasSeen/markSeen split, so a transient send failure
+// leaves the message un-marked and a WhatsApp redelivery retries instead of being silently dropped. The
+// marker is an object {t} and the dup decision is presence-based, so it does not hinge on the storage
+// bridge preserving a bare number type. Cooldown is in-memory and FAIL-OPEN (it never throws, so it can
+// never wrongly block). Pure modulo the injected storage.
 
 export interface StorageLike {
   get<T = unknown>(key: string): Promise<T | null>;
@@ -17,28 +21,29 @@ const PRUNE_KEY = 'dedup:__prune__';
 export const DEDUP_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 export const PRUNE_INTERVAL_MS = 60 * 60 * 1000; // hourly
 
-/** Check-and-mark `msgId` as seen for `sessionId`. True if newly claimed; false if a dup or storage error. */
-export async function claim(
-  storage: StorageLike,
-  sessionId: string,
-  msgId: string,
-  ttlMs: number,
-  now: number,
-): Promise<boolean> {
-  const key = `${KEY_PREFIX}${sessionId}:${msgId}`;
-  let seen: unknown;
+interface Marker {
+  t?: unknown;
+}
+
+const dedupKey = (sessionId: string, msgId: string): string => `${KEY_PREFIX}${sessionId}:${msgId}`;
+
+/** Read-only presence check. True if `msgId` is already marked (or on storage error → fail-closed drop). */
+export async function hasSeen(storage: StorageLike, sessionId: string, msgId: string): Promise<boolean> {
   try {
-    seen = await storage.get<number>(key);
+    const v = await storage.get<Marker>(dedupKey(sessionId, msgId));
+    return v !== null && v !== undefined;
   } catch {
-    return false; // fail-closed: can't read → drop rather than risk a double-fire
+    return true; // fail-closed: can't read → drop rather than risk a double-fire
   }
-  if (typeof seen === 'number' && now - seen < ttlMs) return false; // within TTL → duplicate
+}
+
+/** Record a marker AFTER a successful reply so a failed send retries on redelivery. Best-effort. */
+export async function markSeen(storage: StorageLike, sessionId: string, msgId: string, now: number): Promise<void> {
   try {
-    await storage.set(key, now);
+    await storage.set(dedupKey(sessionId, msgId), { t: now });
   } catch {
-    return false; // fail-closed: couldn't mark → drop
+    /* best-effort: a redelivery may re-fire, which is the safer failure mode */
   }
-  return true;
 }
 
 /** Delete dedup markers older than `ttlMs`. Throttled by a persisted last-prune timestamp; best-effort. */
@@ -48,15 +53,17 @@ export async function prune(
   ttlMs: number,
   intervalMs: number,
 ): Promise<{ ran: boolean; pruned: number }> {
-  let last: unknown;
+  let last: Marker | null;
   try {
-    last = await storage.get<number>(PRUNE_KEY);
+    last = await storage.get<Marker>(PRUNE_KEY);
   } catch {
-    last = 0;
+    last = null;
   }
-  if (typeof last === 'number' && now - last < intervalMs) return { ran: false, pruned: 0 };
+  if (last !== null && typeof last.t === 'number' && now - last.t < intervalMs) {
+    return { ran: false, pruned: 0 };
+  }
   try {
-    await storage.set(PRUNE_KEY, now);
+    await storage.set(PRUNE_KEY, { t: now });
   } catch {
     /* best-effort: still attempt the sweep */
   }
@@ -70,13 +77,13 @@ export async function prune(
 
   let pruned = 0;
   for (const k of keys) {
-    let t: unknown;
+    let m: Marker | null;
     try {
-      t = await storage.get<number>(k);
+      m = await storage.get<Marker>(k);
     } catch {
       continue;
     }
-    if (typeof t === 'number' && now - t > ttlMs) {
+    if (m !== null && typeof m.t === 'number' && now - m.t > ttlMs) {
       try {
         await storage.delete(k);
         pruned++;

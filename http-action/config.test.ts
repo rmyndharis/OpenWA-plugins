@@ -54,6 +54,15 @@ test('baseUrl: no fragment', () => {
   assert.throws(() => readConfig(base({ baseUrl: 'https://erp.example.com#x' })), /fragment/);
 });
 
+test('baseUrl: no query string (origin/path only)', () => {
+  assert.throws(() => readConfig(base({ baseUrl: 'https://erp.example.com/api?key=ABC' })), /query string/);
+});
+
+test('apiKeyHeader: reserved/dangerous header name rejected', () => {
+  assert.throws(() => readConfig(base({ authType: 'apikey', authToken: 'k', apiKeyHeader: 'Host' })), /reserved\/dangerous/);
+  assert.throws(() => readConfig(base({ authType: 'apikey', authToken: 'k', apiKeyHeader: 'X-Forwarded-For' })), /reserved\/dangerous/);
+});
+
 test('auth: bearer/apikey require authToken', () => {
   assert.throws(() => readConfig(base({ authType: 'bearer' })), /authToken: is required/);
   assert.throws(() => readConfig(base({ authType: 'apikey' })), /authToken: is required/);

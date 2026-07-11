@@ -9,7 +9,7 @@
 // the POST body is JSON-escaped by renderJson and re-parsed before send. Response capped at 256 KiB.
 
 import type { HttpAction, HttpActionConfig } from './config.ts';
-import { renderPath, renderText, renderJson, type TemplateContext } from './url-template.ts';
+import { renderPath, renderText, renderJson, renderHeader, type TemplateContext } from './url-template.ts';
 
 const MAX_RESPONSE_BYTES = 256 * 1024;
 
@@ -23,7 +23,7 @@ export interface FetchInit {
 export interface FetchResponse {
   ok: boolean;
   status: number;
-  statusText: string;
+  statusText?: string;
   headers: Record<string, string>;
   body: string;
 }
@@ -70,7 +70,7 @@ export class HttpActionClient {
 
     const headers: Record<string, string> = {};
     if (action.request.headers) {
-      for (const [k, v] of Object.entries(action.request.headers)) headers[k] = renderText(v, ctx);
+      for (const [k, v] of Object.entries(action.request.headers)) headers[k] = renderHeader(v, ctx);
     }
 
     // Auth — authToken is a configSchema secret; never logged by the caller.

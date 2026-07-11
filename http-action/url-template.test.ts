@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderText, renderPath, renderJson, getPath } from './url-template.ts';
+import { renderText, renderPath, renderJson, renderHeader, getPath } from './url-template.ts';
 
 const ctx = (over: Record<string, unknown> = {}) => ({
   args: ['INV-001'],
@@ -110,4 +110,26 @@ test('getPath returns undefined for a missing path (no throw)', () => {
 test('getPath rejects a prototype key segment', () => {
   assert.throws(() => getPath({}, '__proto__'), /prototype|__proto__/i);
   assert.throws(() => getPath({ a: {} }, 'a.constructor'), /prototype|constructor/i);
+});
+
+// ---- renderPath: '..' traversal block ----
+
+test('renderPath rejects a ".." segment (same-origin traversal blocked)', () => {
+  assert.throws(() => renderPath('/orders/{{args.0}}', { args: ['..'] }), /traversal|\.\./i);
+  assert.throws(() => renderPath('/orders/{{args.0}}', { args: ['../..'] }), /traversal|\.\./i);
+});
+
+test('renderPath keeps benign dotted values (version numbers, no "..")', () => {
+  assert.equal(renderPath('/v/{{args.0}}', { args: ['1.0.3'] }), '/v/1.0.3');
+});
+
+// ---- renderHeader: CR/LF/NUL injection block ----
+
+test('renderHeader rejects a rendered value containing CR/LF (header injection blocked)', () => {
+  assert.throws(() => renderHeader('{{args.0}}', { args: ['a\nb'] }), /CR\/LF|header/i);
+  assert.throws(() => renderHeader('{{args.0}}', { args: ['a\r\nInjected: x'] }), /CR\/LF|header/i);
+});
+
+test('renderHeader accepts a clean value', () => {
+  assert.equal(renderHeader('X-Trace: {{message.id}}', { args: [], message: { id: 'm1' } }), 'X-Trace: m1');
 });

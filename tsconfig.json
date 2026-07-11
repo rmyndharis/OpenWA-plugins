@@ -18,6 +18,7 @@
     "voice-transcription/**/*.ts",
     "chatwoot-adapter/**/*.ts",
     "typebot-connector/**/*.ts",
+    "http-action/**/*.ts",
     "types/**/*.d.ts"
   ]
 }

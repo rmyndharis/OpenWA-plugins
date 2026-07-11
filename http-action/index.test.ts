@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { handleMessage, type HandleDeps } from './index.ts';
 import { readConfig } from './config.ts';
-import type { StorageLike } from './reliability.ts';
+import { hasSeen, type StorageLike } from './reliability.ts';
 import type { IncomingMessage } from '../types/openwa';
 
 function cfgWith(over: Record<string, unknown> = {}) {
@@ -23,7 +23,7 @@ function fakeStore(): StorageLike & { m: Map<string, unknown> } {
   const m = new Map<string, unknown>();
   return {
     m,
-    get: async (k: string) => (m.has(k) ? m.get(k) : null),
+    get: async <T>(k: string): Promise<T | null> => (m.has(k) ? (m.get(k) as T) : null),
     set: async (k: string, v: unknown) => { m.set(k, v); },
     delete: async (k: string) => { m.delete(k); },
     list: async (prefix?: string) => [...m.keys()].filter((k) => (prefix ? k.startsWith(prefix) : true)),
@@ -39,7 +39,7 @@ interface Opts { body?: string; status?: number; ok?: boolean; reject?: boolean;
 
 function makeDeps(o: Opts = {}) {
   const sendCalls: { env: unknown }[] = [];
-  const warns: string[] = [];
+  const errors: unknown[] = [];
   const d: HandleDeps = {
     cfg: cfgWith(),
     storage: fakeStore(),
@@ -50,9 +50,9 @@ function makeDeps(o: Opts = {}) {
       return { ok: o.ok ?? true, status: o.status ?? 200, statusText: 'OK', headers: {}, body: o.body ?? '{}' };
     },
     conversations: { send: async (env: unknown) => { sendCalls.push({ env }); } },
-    logger: { log() {}, warn: (m: string) => warns.push(m), error() {} },
+    logger: { log() {}, warn() {}, error: (m: string, e?: unknown) => errors.push([m, e]) },
   };
-  return { d, sendCalls, warns };
+  return { d, sendCalls, errors };
 }
 
 test('2xx: renders the reply template from the JSON response and sends it quoting the inbound', async () => {
@@ -76,11 +76,11 @@ test('500: sends the errorTemplate', async () => {
   assert.equal((sendCalls[0].env as { text: string }).text, 'ERR');
 });
 
-test('fetch failure: sends the errorTemplate and logs a warning', async () => {
-  const { d, sendCalls, warns } = makeDeps({ reject: true });
+test('fetch failure: sends the errorTemplate and logs an error', async () => {
+  const { d, sendCalls, errors } = makeDeps({ reject: true });
   await handleMessage(d, 's1', msg('cek X'));
   assert.equal((sendCalls[0].env as { text: string }).text, 'ERR');
-  assert.ok(warns.length >= 1);
+  assert.ok(errors.length >= 1); // routed through logger.error (not warn) so the Error context is kept
 });
 
 test('no trigger match: nothing is sent (silent)', async () => {
@@ -167,4 +167,28 @@ test('dedup fail-closed: a storage error drops the message (no reply, no double-
     logger: { log() {}, warn() {}, error() {} },
   }, 's1', msg('cek X', 'm1'));
   assert.equal(sendCalls.length, 0); // dropped, not processed
+});
+
+test('send failure leaves the message un-marked: a redelivery after the cooldown window retries', async () => {
+  let now = 1000;
+  let sendAttempts = 0;
+  const sendCalls: { env: unknown }[] = [];
+  const send = async (env: unknown): Promise<void> => {
+    sendAttempts++;
+    if (sendAttempts === 1) throw new Error('transient WA failure');
+    sendCalls.push({ env });
+  };
+  const storage = fakeStore();
+  const d: HandleDeps = {
+    cfg: cfgWith(), storage, cooldown: new Map(), now: () => now,
+    fetch: async () => ({ ok: true, status: 200, statusText: 'OK', headers: {}, body: JSON.stringify({ status: 'ok' }) }),
+    conversations: { send }, logger: { log() {}, warn() {}, error() {} },
+  };
+  await handleMessage(d, 's1', msg('cek X', 'm1')).catch(() => {}); // send rejects → no mark
+  assert.equal(sendCalls.length, 0); // first send failed → no reply
+  assert.equal(await hasSeen(storage, 's1', 'm1'), false); // un-marked → redelivery can retry
+  now += cfgWith().cooldownSeconds * 1000 + 1; // past the cooldown window
+  await handleMessage(d, 's1', msg('cek X', 'm1')); // redelivery retries
+  assert.equal(sendCalls.length, 1); // retried send succeeded
+  assert.equal(await hasSeen(storage, 's1', 'm1'), true); // marked only after the successful send
 });

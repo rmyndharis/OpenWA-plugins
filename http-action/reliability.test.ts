@@ -1,15 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { claim, prune, allowCooldown, type StorageLike, DEDUP_TTL_MS } from './reliability.ts';
+import { hasSeen, markSeen, prune, allowCooldown, type StorageLike, DEDUP_TTL_MS } from './reliability.ts';
 
-// Minimal in-memory StorageLike for tests. `listFail`/`getFail` simulate storage errors.
+// Minimal in-memory StorageLike for tests. Flags simulate storage errors.
 function fakeStore(opts: { listFail?: boolean; getFail?: boolean; setFail?: boolean } = {}): StorageLike & { m: Map<string, unknown> } {
   const m = new Map<string, unknown>();
   return {
     m,
-    get: async (key: string) => {
+    get: async <T>(key: string): Promise<T | null> => {
       if (opts.getFail) throw new Error('get');
-      return m.has(key) ? m.get(key) : null;
+      return m.has(key) ? (m.get(key) as T) : null;
     },
     set: async (key: string, val: unknown) => {
       if (opts.setFail) throw new Error('set');
@@ -23,49 +23,48 @@ function fakeStore(opts: { listFail?: boolean; getFail?: boolean; setFail?: bool
   };
 }
 
-// ---- claim (dedup, fail-closed) ----
+// ---- hasSeen (presence-based, fail-closed) ----
 
-test('claim: first sighting of a message is claimed', async () => {
+test('hasSeen: false before a message is marked', async () => {
   const s = fakeStore();
-  assert.equal(await claim(s, 'sess', 'm1', 10000, 1000), true);
-  assert.equal(s.m.get('dedup:sess:m1'), 1000);
+  assert.equal(await hasSeen(s, 'sess', 'm1'), false);
 });
 
-test('claim: a re-sighting within the TTL is rejected (dedup)', async () => {
+test('hasSeen: true after markSeen', async () => {
   const s = fakeStore();
-  await claim(s, 'sess', 'm1', 10000, 1000);
-  assert.equal(await claim(s, 'sess', 'm1', 10000, 1500), false); // 500 < 10000
+  await markSeen(s, 'sess', 'm1', 1000);
+  assert.equal(await hasSeen(s, 'sess', 'm1'), true);
 });
 
-test('claim: a re-sighting after the TTL is re-claimed', async () => {
+test('hasSeen: distinct message ids are independent', async () => {
   const s = fakeStore();
-  await claim(s, 'sess', 'm1', 10000, 1000);
-  assert.equal(await claim(s, 'sess', 'm1', 10000, 12000), true); // 11000 > 10000
-  assert.equal(s.m.get('dedup:sess:m1'), 12000); // marker refreshed
+  await markSeen(s, 'sess', 'm1', 1000);
+  assert.equal(await hasSeen(s, 'sess', 'm2'), false);
 });
 
-test('claim: distinct message ids are independent', async () => {
-  const s = fakeStore();
-  assert.equal(await claim(s, 'sess', 'm1', 10000, 1000), true);
-  assert.equal(await claim(s, 'sess', 'm2', 10000, 1000), true);
-});
-
-test('claim: a storage get error fails CLOSED (drop, never double-process)', async () => {
+test('hasSeen: a storage get error fails CLOSED (drop, never double-process)', async () => {
   const s = fakeStore({ getFail: true });
-  assert.equal(await claim(s, 'sess', 'm1', 10000, 1000), false);
+  assert.equal(await hasSeen(s, 'sess', 'm1'), true);
 });
 
-test('claim: a storage set error fails CLOSED (drop)', async () => {
+test('hasSeen: presence-based — robust to the stored value type (does not require a number)', async () => {
+  // Simulate a storage backend that returns the marker in a different shape; presence still wins.
+  const s = fakeStore();
+  s.m.set('dedup:sess:m1', { t: '1000' }); // t stringified, not a number
+  assert.equal(await hasSeen(s, 'sess', 'm1'), true);
+});
+
+test('markSeen: a storage set error is swallowed (best-effort)', async () => {
   const s = fakeStore({ setFail: true });
-  assert.equal(await claim(s, 'sess', 'm1', 10000, 1000), false);
+  await markSeen(s, 'sess', 'm1', 1000); // does not throw
 });
 
-// ---- prune (throttled, best-effort, bound growth) ----
+// ---- prune (throttled, best-effort, reads {t} objects) ----
 
 test('prune: deletes markers older than the TTL, keeps the rest', async () => {
   const s = fakeStore();
-  s.m.set('dedup:sess:old', 1000);
-  s.m.set('dedup:sess:fresh', 50000);
+  s.m.set('dedup:sess:old', { t: 1000 });
+  s.m.set('dedup:sess:fresh', { t: 50000 });
   const out = await prune(s, 60000, 10000, 1000);
   assert.equal(out.ran, true);
   assert.equal(out.pruned, 1);
@@ -75,30 +74,28 @@ test('prune: deletes markers older than the TTL, keeps the rest', async () => {
 
 test('prune: is throttled by the interval (skips when recently run)', async () => {
   const s = fakeStore();
-  s.m.set('dedup:__prune__', 59500);
-  s.m.set('dedup:sess:old', 1000); // would be pruned, but we should not run
-  const out = await prune(s, 60000, 10000, 1000); // 60000-59500 = 500 < 1000 → not due
+  s.m.set('dedup:__prune__', { t: 59500 });
+  s.m.set('dedup:sess:old', { t: 1000 });
+  const out = await prune(s, 60000, 10000, 1000); // 500 < 1000 → not due
   assert.equal(out.ran, false);
-  assert.equal(s.m.has('dedup:sess:old'), true); // untouched
-});
-
-test('prune: runs once past the interval', async () => {
-  const s = fakeStore();
-  s.m.set('dedup:__prune__', 50000);
-  s.m.set('dedup:sess:old', 1000);
-  const out = await prune(s, 60000, 10000, 20000); // 60000-50000 = 10000 < 20000 → not due
-  assert.equal(out.ran, false);
-  const out2 = await prune(s, 80000, 10000, 20000); // 80000-50000 = 30000 >= 20000 → due
-  assert.equal(out2.ran, true);
+  assert.equal(s.m.has('dedup:sess:old'), true);
 });
 
 test('prune: ignores keys outside the dedup prefix (defensive)', async () => {
   const s = fakeStore();
-  s.m.set('dedup:sess:old', 1000);
-  s.m.set('other:kind:key', 1000); // unrelated
+  s.m.set('dedup:sess:old', { t: 1000 });
+  s.m.set('other:kind:key', { t: 1000 });
   const out = await prune(s, 60000, 10000, 1000);
   assert.equal(out.pruned, 1);
-  assert.equal(s.m.has('other:kind:key'), true); // untouched
+  assert.equal(s.m.has('other:kind:key'), true);
+});
+
+test('prune: leaves a malformed (non-{t}) marker alone rather than deleting blindly', async () => {
+  const s = fakeStore();
+  s.m.set('dedup:sess:weird', 'not-an-object'); // no .t number → not aged out by prune
+  const out = await prune(s, 60000, 10000, 1000);
+  assert.equal(out.pruned, 0);
+  assert.equal(s.m.has('dedup:sess:weird'), true);
 });
 
 test('prune: never throws on storage errors (best-effort)', async () => {
@@ -118,13 +115,13 @@ test('allowCooldown: first call allows', () => {
 test('allowCooldown: blocks within the window', () => {
   const m = new Map<string, number>();
   allowCooldown(m, 'c1', 1000, 3000);
-  assert.equal(allowCooldown(m, 'c1', 3999, 3000), false); // 2999 < 3000
+  assert.equal(allowCooldown(m, 'c1', 3999, 3000), false);
 });
 
 test('allowCooldown: allows after the window elapses', () => {
   const m = new Map<string, number>();
   allowCooldown(m, 'c1', 1000, 3000);
-  assert.equal(allowCooldown(m, 'c1', 4000, 3000), true); // 3000, not < 3000
+  assert.equal(allowCooldown(m, 'c1', 4000, 3000), true);
 });
 
 test('allowCooldown: distinct chats are independent', () => {

@@ -155,6 +155,7 @@ export function readConfig(raw: Record<string, unknown>): HttpActionConfig {
   if (origin.protocol !== 'https:') fail('baseUrl', 'must be https');
   if (origin.username || origin.password) fail('baseUrl', 'must not contain embedded credentials');
   if (origin.hash) fail('baseUrl', 'must not contain a fragment');
+  if (origin.search) fail('baseUrl', 'must not contain a query string (origin/path only)');
   const baseUrl = baseUrlRaw.replace(/\/+$/, '');
 
   const authType: AuthType = raw.authType === 'bearer' || raw.authType === 'apikey' ? raw.authType : 'none';
@@ -163,6 +164,7 @@ export function readConfig(raw: Record<string, unknown>): HttpActionConfig {
 
   const apiKeyHeader = String(raw.apiKeyHeader ?? 'X-API-Key').trim() || 'X-API-Key';
   if (/[\r\n]/.test(apiKeyHeader)) fail('apiKeyHeader', 'must not contain CR/LF');
+  if (isDangerousHeader(apiKeyHeader)) fail('apiKeyHeader', 'must not be a reserved/dangerous header (host/connection/x-forwarded-*/…)');
 
   const timeoutNum = Number(raw.timeoutMs);
   const timeoutMs = Number.isFinite(timeoutNum) && timeoutNum >= 500 ? timeoutNum : 3000;

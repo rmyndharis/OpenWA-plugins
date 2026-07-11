@@ -5,7 +5,7 @@ import { readConfig, type HttpActionConfig } from './config.ts';
 import { matchAction } from './matcher.ts';
 import { renderText, type TemplateContext } from './url-template.ts';
 import { HttpActionClient, type FetchLike } from './client.ts';
-import { claim, prune, allowCooldown, type StorageLike, DEDUP_TTL_MS, PRUNE_INTERVAL_MS } from './reliability.ts';
+import { hasSeen, markSeen, prune, allowCooldown, type StorageLike, DEDUP_TTL_MS, PRUNE_INTERVAL_MS } from './reliability.ts';
 
 const PLUGIN = 'http-action';
 const REPLY_MAX = 4000;
@@ -23,8 +23,20 @@ export interface HandleDeps {
   logger: { log(m: string): void; warn(m: string, e?: unknown): void; error(m: string, e?: unknown): void };
 }
 
+/** Strip C0 control chars (except \n, \t) so an attacker-influenced upstream value can't smuggle them into the reply. */
+function sanitize(s: string): string {
+  return s.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+}
+
+/** Truncate to REPLY_MAX code units without splitting a UTF-16 surrogate pair. */
 function truncate(s: string): string {
-  return s.length > REPLY_MAX ? `${s.slice(0, REPLY_MAX - 1)}…` : s;
+  if (s.length <= REPLY_MAX) return s;
+  let cut = REPLY_MAX - 1;
+  if (cut > 0) {
+    const code = s.charCodeAt(cut - 1);
+    if (code >= 0xd800 && code <= 0xdbff) cut -= 1; // last included char is a high surrogate → back off
+  }
+  return `${s.slice(0, cut)}…`;
 }
 
 function buildCtx(msg: IncomingMessage, sessionId: string, args: string[], response?: unknown): TemplateContext {
@@ -39,46 +51,51 @@ function buildCtx(msg: IncomingMessage, sessionId: string, args: string[], respo
 }
 
 /**
- * Per-message work: match → fetch (fixed origin) → map status → render → send. Pure modulo the injected
- * deps. Roadmap §4.7 #4–#7. (#8 dedup/cooldown lands next; until then a redelivery re-fires.)
+ * Per-message work: match → dedup CHECK (fail-closed) → cooldown (fail-open) → fetch → map status →
+ * render → send → mark seen. The dedup MARK is written only after a successful send, so a transient send
+ * failure retries on redelivery instead of being silently dropped (mirrors chatwoot's hasSeen/markSeen).
  */
 export async function handleMessage(deps: HandleDeps, sessionId: string, msg: IncomingMessage): Promise<void> {
   const hit = matchAction(deps.cfg.actions, msg.body);
   if (!hit) return; // no trigger matched → silent
 
-  // Dedup (fail-closed): drop a redelivered message id within the TTL window (WhatsApp redelivers).
-  if (!(await claim(deps.storage, sessionId, msg.id, DEDUP_TTL_MS, deps.now()))) return;
+  // Dedup CHECK (read-only, fail-closed): drop a redelivery of an already-processed message id.
+  if (await hasSeen(deps.storage, sessionId, msg.id)) return;
   // Best-effort prune of expired markers (throttled hourly); never blocks the reply.
   void prune(deps.storage, deps.now(), DEDUP_TTL_MS, PRUNE_INTERVAL_MS).catch((e) =>
-    deps.logger.warn(`${PLUGIN}: prune failed`, e),
+    deps.logger.error(`${PLUGIN}: prune failed`, e),
   );
-  // Cooldown (fail-open): one reply per chat per cooldown window.
+  // Cooldown (fail-open): one reply per chat per window. Checked before the mark so a blocked message
+  // consumes nothing and a later message (after the window) still goes through.
   const cooldownMs = Math.max(0, deps.cfg.cooldownSeconds) * 1000;
   if (!allowCooldown(deps.cooldown, `${sessionId}:${msg.chatId}`, deps.now(), cooldownMs)) return;
 
   const { action, args } = hit;
   const client = new HttpActionClient(deps.fetch, deps.cfg);
-  const baseCtx = () => buildCtx(msg, sessionId, args);
+  const ctxWith = (response?: unknown): TemplateContext => buildCtx(msg, sessionId, args, response);
 
   let text: string;
   try {
-    const out = await client.run(action, baseCtx());
+    const out = await client.run(action, ctxWith());
     if (out.status === 404) {
-      text = renderText(action.notFoundTemplate ?? DEFAULT_NOT_FOUND, baseCtx());
+      text = renderText(action.notFoundTemplate ?? DEFAULT_NOT_FOUND, ctxWith(out.data));
     } else if (out.status >= 200 && out.status < 300) {
-      text = renderText(action.replyTemplate, buildCtx(msg, sessionId, args, out.data));
+      text = renderText(action.replyTemplate, ctxWith(out.data));
     } else {
-      text = renderText(action.errorTemplate ?? DEFAULT_ERROR, baseCtx());
+      text = renderText(action.errorTemplate ?? DEFAULT_ERROR, ctxWith(out.data));
     }
   } catch (e) {
-    text = renderText(action.errorTemplate ?? DEFAULT_ERROR, baseCtx());
-    deps.logger.warn(`${PLUGIN}: request failed`, e);
+    text = renderText(action.errorTemplate ?? DEFAULT_ERROR, ctxWith());
+    deps.logger.error(`${PLUGIN}: request failed`, e);
   }
 
   // replyTo is safe here — replies are always text (media is a non-goal). See §1.4.
+  // A send rejection propagates out of handleMessage (to the hook's .catch) BEFORE markSeen runs, so the
+  // message stays un-marked and a redelivery retries — no silently-dropped reply.
   await deps.conversations.send({
-    sessionId, chatId: msg.chatId, type: 'text', text: truncate(text), replyTo: msg.id,
+    sessionId, chatId: msg.chatId, type: 'text', text: truncate(sanitize(text)), replyTo: msg.id,
   });
+  await markSeen(deps.storage, sessionId, msg.id, deps.now());
 }
 
 /**

@@ -52,9 +52,22 @@ export function renderText(template: string, ctx: TemplateContext): string {
   return render(template, ctx, toStr);
 }
 
-/** Substitute {{...}} into a path template, URL-encoding each value (anti path-segment/origin injection). */
+/** Substitute {{...}} into a path template. URL-encodes each value and rejects '..' (same-origin traversal). */
 export function renderPath(template: string, ctx: TemplateContext): string {
-  return render(template, ctx, (v) => encodeURIComponent(toStr(v)));
+  return render(template, ctx, (v) => {
+    const s = toStr(v);
+    if (s.includes('..')) throw new TemplateError('path segment contains ".." (traversal blocked)');
+    return encodeURIComponent(s);
+  });
+}
+
+/** Substitute {{...}} into a header value, rejecting CR/LF/NUL so an attacker-controlled field can't inject headers. */
+export function renderHeader(template: string, ctx: TemplateContext): string {
+  return render(template, ctx, (v) => {
+    const s = toStr(v);
+    if (/[\r\n\0]/.test(s)) throw new TemplateError('header value contains CR/LF/NUL');
+    return s;
+  });
 }
 
 /** Substitute {{...}} into a JSON body template with JSON-safe string escaping. */
