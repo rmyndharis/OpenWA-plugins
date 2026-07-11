@@ -1,0 +1,38 @@
+{
+  "id": "http-action",
+  "name": "HTTP Action Bot",
+  "version": "0.1.0",
+  "type": "extension",
+  "main": "dist/index.js",
+  "description": "Triggers safe REST API requests from WhatsApp commands and renders JSON responses back to chat.",
+  "author": "Yudhi Armyndharis <yudhi@rmyndharis.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action",
+  "repository": "https://github.com/rmyndharis/OpenWA-plugins",
+  "keywords": ["api", "rest", "automation", "connector", "whatsapp", "openwa"],
+  "status": "development",
+  "sdkVersion": "1",
+  "provides": ["api-automation", "rest-connector", "dynamic-reply"],
+  "permissions": ["net:fetch", "conversation:send"],
+  "net": { "allow": [], "allowConfigHosts": ["baseUrl"] },
+  "sessionScoped": true,
+  "sessions": ["*"],
+  "hooks": ["message:received"],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "baseUrl": { "type": "string", "title": "Base URL", "required": true,
+        "description": "Origin API HTTPS, mis. https://erp.example.com. Host-nya auto-added ke allowlist outbound (allowConfigHosts). Wajib non-empty — tanpa ini setiap fetch diam-diam di-gate jadi no-op." },
+      "authType": { "type": "string", "enum": ["none", "bearer", "apikey"], "default": "none" },
+      "authToken": { "type": "string", "title": "Token / API key", "secret": true,
+        "description": "Bearer token atau API key (sesuai authType). Dimasking ***." },
+      "apiKeyHeader": { "type": "string", "default": "X-API-Key",
+        "description": "Nama header untuk authType=apikey." },
+      "respondInGroups": { "type": "boolean", "default": false },
+      "timeoutMs": { "type": "number", "default": 3000, "min": 500 },
+      "cooldownSeconds": { "type": "number", "default": 3, "min": 0 },
+      "actions": { "type": "textarea", "title": "Actions (JSON array)", "required": true,
+        "description": "Array action sebagai JSON string. Contoh: [{\"id\":\"check-order\",\"match\":{\"type\":\"prefix\",\"value\":\"cek-order \"},\"request\":{\"method\":\"GET\",\"path\":\"/orders/{{args.0}}\"},\"replyTemplate\":\"Pesanan {{response.orderId}}: {{response.status}}\"}]. Di-parse di config.ts." }
+    }
+  }
+}

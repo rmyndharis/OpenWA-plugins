@@ -1003,6 +1003,31 @@
     }
   },
   {
+    "id": "http-action",
+    "name": "HTTP Action Bot",
+    "version": "0.1.0",
+    "type": "extension",
+    "status": "development",
+    "description": "Triggers safe REST API requests from WhatsApp commands and renders JSON responses back to chat.",
+    "author": "Yudhi Armyndharis <yudhi@rmyndharis.com>",
+    "license": "MIT",
+    "keywords": [
+      "api",
+      "rest",
+      "automation",
+      "connector",
+      "whatsapp",
+      "openwa"
+    ],
+    "minOpenWAVersion": null,
+    "testedOpenWAVersion": null,
+    "releasedAt": "2026-07-11",
+    "repoPath": "http-action",
+    "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
+    "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/http-action-v0.1.0/http-action.zip"
+  },
+  {
     "id": "typebot-connector",
     "name": "Typebot Connector",
     "version": "0.1.0",
