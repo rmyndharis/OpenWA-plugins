@@ -7,7 +7,7 @@ const validActions = JSON.stringify([
     id: 'check-order',
     match: { type: 'prefix', value: 'cek-order ' },
     request: { method: 'GET', path: '/orders/{{args.0}}' },
-    replyTemplate: 'Pesanan {{response.orderId}}: {{response.status}}',
+    replyTemplate: 'Order {{response.orderId}}: {{response.status}}',
   },
 ]);
 
