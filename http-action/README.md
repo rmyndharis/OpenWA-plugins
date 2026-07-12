@@ -15,7 +15,7 @@
 | **Identifier** | `http-action` |
 | **Version** | 0.1.0 |
 | **Released** | 2026-07-11 |
-| **Status** | development |
+| **Status** | beta |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |

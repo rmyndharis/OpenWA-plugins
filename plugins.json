@@ -1007,7 +1007,7 @@
     "name": "HTTP Action Bot",
     "version": "0.1.0",
     "type": "extension",
-    "status": "development",
+    "status": "beta",
     "description": "Triggers safe REST API requests from WhatsApp commands and renders JSON responses back to chat.",
     "author": "Yudhi Armyndharis <yudhi@rmyndharis.com>",
     "license": "MIT",

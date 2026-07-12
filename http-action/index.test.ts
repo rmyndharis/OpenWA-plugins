@@ -192,3 +192,26 @@ test('send failure leaves the message un-marked: a redelivery after the cooldown
   assert.equal(sendCalls.length, 1); // retried send succeeded
   assert.equal(await hasSeen(storage, 's1', 'm1'), true); // marked only after the successful send
 });
+
+// ---- sentinel (DoD §7): the auth token is used in the header but never reaches logs or the reply ----
+test('sentinel: the auth token is sent in the header yet never appears in logs or the reply', async () => {
+  const SECRET = 'SENTINEL-do-not-leak-9f3k2';
+  const logged: unknown[] = [];
+  const sendCalls: { env: unknown }[] = [];
+  let capturedHeaders: Record<string, string> | undefined;
+  const cfg = cfgWith({ authType: 'bearer', authToken: SECRET });
+  const d: HandleDeps = {
+    cfg, storage: fakeStore(), cooldown: new Map(), now: () => 1000,
+    fetch: async (_u, init) => { capturedHeaders = init?.headers; throw new Error('upstream failure'); },
+    conversations: { send: async (env: unknown) => { sendCalls.push({ env }); } },
+    logger: {
+      log: (m: string) => logged.push(m),
+      warn: (m: string, e?: unknown) => logged.push([m, e]),
+      error: (m: string, e?: unknown) => logged.push([m, e]),
+    },
+  };
+  await handleMessage(d, 's1', msg('cek X'));
+  assert.ok(capturedHeaders?.Authorization?.includes(SECRET), 'sanity: secret is in the request header (used, not absent)');
+  const haystack = `${JSON.stringify(logged)}${JSON.stringify(sendCalls)}`;
+  assert.ok(!haystack.includes(SECRET), 'auth token must never appear in logs or the reply');
+});

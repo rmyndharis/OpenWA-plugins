@@ -10,7 +10,7 @@
   "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action",
   "repository": "https://github.com/rmyndharis/OpenWA-plugins",
   "keywords": ["api", "rest", "automation", "connector", "whatsapp", "openwa"],
-  "status": "development",
+  "status": "beta",
   "minOpenWAVersion": "0.8.7",
   "sdkVersion": "1",
   "provides": ["api-automation", "rest-connector", "dynamic-reply"],
