@@ -1019,7 +1019,7 @@
       "whatsapp",
       "openwa"
     ],
-    "minOpenWAVersion": null,
+    "minOpenWAVersion": "0.8.7",
     "testedOpenWAVersion": null,
     "releasedAt": "2026-07-11",
     "repoPath": "http-action",

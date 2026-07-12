@@ -50,6 +50,14 @@ Default prefix `/tr` (configurable). Read-only commands are open; the rest are a
 | `/tr ignore` · `/tr unignore [@user]` | admin | Skip / resume translating a participant |
 | `/tr grant` · `/tr revoke [@user]` | admin | Delegate / remove control to a non-admin participant |
 
+## Setup
+
+1. **Run a LibreTranslate instance.** The plugin calls its `/translate` endpoint over `ctx.net.fetch`.
+   Add the instance's `host:port` to the manifest `net.allow` before packaging, and — if it's on
+   `localhost`/a private host — also set `SSRF_ALLOWED_HOSTS` on the OpenWA host (see [Security](#security)).
+2. Have OpenWA **≥ 0.7.0** running with a logged-in WhatsApp session for the group(s) you want to translate.
+3. Install and enable the plugin (see [Install](#install)), then have a group admin run `/tr on`.
+
 ## Install
 
 ```bash

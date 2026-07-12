@@ -5,7 +5,7 @@
 
 ![type: extension](https://img.shields.io/badge/type-extension-blue.svg)
 ![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)
-![status: development](https://img.shields.io/badge/status-development-orange.svg)
+![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.8.7-25D366.svg)
 
 ## Details
 
@@ -19,7 +19,7 @@
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ null (tested null) |
+| **Requires OpenWA** | ≥ 0.8.7 (tested null) |
 | **Keywords** | api, rest, automation, connector, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/http-action](https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action) |
 <!-- END DETAILS -->
@@ -59,6 +59,13 @@
 Template variables: `args.0`, `args.1`, … plus `message.id`, `message.body`, `chat.id`, `sender.id`,
 `sender.phone`, `sender.name`, `session.id`, and `response.<path>` (the parsed JSON body).
 
+## Setup
+
+1. Have an **HTTPS API** you want to call from WhatsApp — its origin goes in `baseUrl`.
+2. Have OpenWA **≥ 0.8.7** running with a logged-in WhatsApp session.
+3. Install and enable the plugin (see [Install](#install)), then define your actions
+   (see [Configuration](#configuration)).
+
 ## Install
 
 ```bash
@@ -93,9 +100,10 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 
 ## Compatibility
 
-Status is **development**. `minOpenWAVersion` / `testedOpenWAVersion` are not yet set — the plugin needs
-install and runtime testing on a real OpenWA instance before being marked `beta`. Live config edits apply
-on the next inbound message (config is re-read per event).
+Status is **development**. It targets OpenWA **≥ 0.8.7** (`allowConfigHosts` + `conversation:send`);
+`testedOpenWAVersion` is not yet set — the plugin needs install and runtime testing on a real OpenWA
+instance before being marked `beta`. Live config edits apply on the next inbound message (config is
+re-read per event).
 
 ## Security
 

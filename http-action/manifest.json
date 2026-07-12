@@ -11,6 +11,7 @@
   "repository": "https://github.com/rmyndharis/OpenWA-plugins",
   "keywords": ["api", "rest", "automation", "connector", "whatsapp", "openwa"],
   "status": "development",
+  "minOpenWAVersion": "0.8.7",
   "sdkVersion": "1",
   "provides": ["api-automation", "rest-connector", "dynamic-reply"],
   "permissions": ["net:fetch", "conversation:send"],
