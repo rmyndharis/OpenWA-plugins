@@ -2,7 +2,7 @@
 
 Deliver Supabase Auth phone OTPs over WhatsApp. Supabase's [Send SMS hook](https://supabase.com/docs/guides/auth/auth-hooks/send-sms-hook)
 POSTs `{ user: { phone }, sms: { otp } }` signed with [Standard Webhooks](https://www.standardwebhooks.com/);
-this plugin verifies the signature and sends the OTP via an OpenWA WhatsApp session.
+the host verifies the signature and the plugin sends the OTP via an OpenWA WhatsApp session.
 
 ## Details
 
@@ -16,7 +16,7 @@ this plugin verifies the signature and sends the OTP via an OpenWA WhatsApp sess
 | **Author** | maplerichie |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.11 (tested 0.8.11) |
+| **Requires OpenWA** | ≥ 0.8.16 (tested 0.8.16) |
 | **Keywords** | supabase, auth, otp, sms, whatsapp, verification, standard-webhooks, openwa |
 | **Repository** | [OpenWA-plugins/supabase-otp-hook](https://github.com/maplerichie/OpenWA-plugins/tree/main/supabase-otp-hook) |
 <!-- END DETAILS -->
@@ -24,24 +24,27 @@ this plugin verifies the signature and sends the OTP via an OpenWA WhatsApp sess
 ## Features
 
 - **OTP over WhatsApp** — delivers Supabase phone OTPs as WhatsApp messages.
-- **Standard Webhooks verification** — `node:crypto` HMAC, constant-time compare, 5-min replay window.
+- **Standard Webhooks verification (host-side)** — `signature.scheme: "standard-webhooks"`; the host
+  verifies `webhook-id` / `webhook-timestamp` / `webhook-signature` (base64 HMAC-SHA256 over
+  `${webhook-id}.${webhook-timestamp}.${rawBody}`, constant-time, 5-min replay window) using the
+  instance secret before the plugin ever runs.
 - **Configurable message** — `{appName}` and `{otp}` placeholders.
-- **Sync-reply mode** — the host waits for the handler and returns its actual response to Supabase:
-  `200 application/json` after the liveness probe, `400/401` for client errors, `500` for operator
-  misconfiguration, `503` for a dead session, and `504` if the handler exceeds the host timeout.
-- **Session liveness probe** — verifies the bound/fallback session has an active engine via
-  `canonicalChatId` before sending.
-- **Fire-and-forget WhatsApp send** — Supabase's hook has a 5 s timeout and does not retry, so the
-  send runs in the background after the probe.
+- **Synchronous feedback** — the host verifies the signature (→ **401** on failure) and runs a
+  `session-alive` preflight (→ **503** on a dead WhatsApp session) before accepting, returning
+  **200 `application/json`** on success. Supabase learns immediately whether the OTP could be handed
+  off; a dead session no longer gets swallowed as a silent 202.
+- **Fire-and-forget WhatsApp send** — the ingress worker dispatch is bounded to 5 s, so the send runs
+  in the background to avoid a timeout-induced retry that would duplicate the OTP.
 - **Per-user ordering + dedup** — ordered per `user.id`, deduped on `webhook-id`.
 
 ## What it does
 
-Supabase calls the OpenWA ingress URL. The host persists the event for dedup, then dispatches to the
-sandboxed handler in `sync-reply` mode and returns the handler's response to Supabase. The handler
-verifies the signature, normalizes the phone to `<digits>@c.us`, probes session liveness via
-`canonicalChatId`, fires the WhatsApp send in the background, and immediately returns `200
-application/json`. Manifest declares `signature.scheme: "none"` — the plugin is the authenticator.
+Supabase calls the OpenWA ingress URL. The host verifies the Standard Webhooks signature against the
+instance secret (→ 401 on a mismatch), runs the `session-alive` preflight (→ 503 on a dead session),
+persists the event for dedup, fast-acks Supabase with **200 `application/json`**, then dispatches the
+sandboxed handler async from the ingress worker (retry + DLQ). The handler parses `{ user: { phone },
+sms: { otp } }`, normalizes the phone to `<digits>@c.us`, and fires the WhatsApp send in the background
+to stay within the worker's 5 s dispatch budget.
 
 ## Install
 
@@ -60,15 +63,18 @@ curl -X POST "$OPENWA/api/plugins/supabase-otp-hook/enable" \
 
 ## Setup
 
-Requires OpenWA v0.8.7+ with a logged-in WhatsApp session, and a Supabase project with phone auth.
+Requires OpenWA v0.8.16+ (the `standard-webhooks` signature scheme and the `response`/preflight
+ingress contract) with a logged-in WhatsApp session, and a Supabase project with phone auth.
 
-Wiring order: OpenWA mints the **ingress URL** → paste into Supabase → Supabase generates the **webhook secret** → paste back into OpenWA.
+Wiring order: OpenWA mints the **ingress URL** → paste into Supabase → Supabase generates the
+**webhook secret** → paste it back into OpenWA **as the instance secret** (the host uses it to verify
+the Standard Webhooks signature).
 
 **1. Mint an OpenWA instance.** Creates the ingress URL and binds the sending session.
 
 - **Option A — bind to a session.** Set `sessionScope` to a logged-in WhatsApp session id. Simplest.
 - **Option B — use a fallback.** Leave `sessionScope` blank, set `fallbackSessionId` in plugin config.
-- **Option C — misconfiguration.** Both blank → plugin throws `no session to send from`.
+- **Option C — misconfiguration.** Both blank → the handler drops the delivery (no session to send from).
 
 > The plugin's **Sessions** tab controls *activity*, not *which session sends*. Sending session = `sessionScope` or `fallbackSessionId`, in that order.
 
@@ -78,7 +84,7 @@ curl -X POST "$OPENWA/api/integration/plugins/supabase-otp-hook/instances" \
   -d '{
     "instanceId": "default",
     "sessionScope": "<whatsapp-session-id>",
-    "config": { "appName": "Acme", "webhookSecret": "FILL_IN_AFTER_STEP_3" }
+    "config": { "appName": "Acme" }
   }'
 ```
 
@@ -88,43 +94,44 @@ Copy the **ingress URL** from the response: `https://<host>/api/ingress/supabase
 
 **3. Generate the webhook secret.** On the Supabase hook form, click Generate secret. Copy the full `v1,whsec_<base64>` (include the prefix). Save the hook.
 
-**4. Set the secret in OpenWA.** Paste `v1,whsec_...` into `webhookSecret`. Config is re-read per delivery — no restart.
+**4. Set the secret as the OpenWA instance secret.** This is what the host verifies the signature against — it is *not* plugin config. Paste `v1,whsec_...` into the instance `secret`. The secret is re-read per delivery — no restart.
 
 ```bash
 curl -X PATCH "$OPENWA/api/integration/plugins/supabase-otp-hook/instances/default" \
   -H "Authorization: Bearer $ADMIN_KEY" -H "Content-Type: application/json" \
-  -d '{"config":{"appName":"Acme","webhookSecret":"v1,whsec_..."}}'
+  -d '{"secret":"v1,whsec_..."}'
 ```
 
 **5. Enable phone auth.** Supabase → Authentication → Providers → Phone → enable, set SMS provider to the hook.
 
-**6. Test.** Trigger a phone-OTP sign-in. OTP arrives in WhatsApp.
+**6. Test.** Trigger a phone-OTP sign-in. Supabase receives 200 and the OTP arrives in WhatsApp. A dead WhatsApp session yields 503 (visible to Supabase); a bad signature yields 401.
 
 ## Configuration
 
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
 | `appName` | string | yes | Inserted into the message template's `{appName}` placeholder. |
-| `webhookSecret` | string (secret) | yes | Supabase Send SMS hook secret, full `v1,whsec_<base64>` form (or bare `<base64>` / `whsec_<base64>`). |
 | `messageTemplate` | textarea | no (default `{appName} \| Your verification code is {otp}`) | WhatsApp message body. `{appName}` and `{otp}` are replaced. |
 | `fallbackSessionId` | string | yes if `sessionScope` blank | Sending session when the instance isn't bound. Ignored when `sessionScope` is set. |
-| `debug` | boolean | no (default `false`) | Log inbound requests, resolved session/chatId, sends, and failures. |
+| `debug` | boolean | no (default `false`) | Log inbound deliveries (resolved session/chatId), sends, and send failures. |
 
-Session scope (which session sends) is set at instance mint time, not in this config.
+The Supabase webhook secret is set as the **instance `secret`** (at mint time or via PATCH), not in
+this config — the host uses it to verify the Standard Webhooks signature before the handler runs.
+Session scope (which session sends) is also set at instance mint time, not in this config.
 
 ## Compatibility
 
-- **OpenWA** ≥ 0.8.11 — Integration SDK v1 with `sync-reply` ingress support
-  (`ctx.registerWebhook`, `webhook:ingress` permission).
+- **OpenWA** ≥ 0.8.16 — Integration SDK v1 with the `standard-webhooks` ingress signature scheme and
+  the `response`/preflight contract (`ctx.registerWebhook`, `webhook:ingress` permission).
 - **Supabase** — HTTP Send SMS hook with Standard Webhooks signing. SQL (Postgres function) hook variant not supported.
 - **WhatsApp** — may rate-limit or require an approved business template for business-initiated messages. Adjust `messageTemplate` to match your approved wording.
 
 ## Security
 
-- Webhook secret stored as plugin config secret (`secret: true`), masked on dashboard reads.
-- Signature verified **before** any send, constant-time compare, 5-min replay window.
-- `signature.scheme: "none"` means the host skips its check and the plugin is the authenticator. Mitigated by per-instance throttle, 20 KB body cap, `webhook-id` dedup, and worker sandboxing.
-- Permissions: `webhook:ingress` + `messages:send` + `engine:read` (liveness probe) only.
+- Webhook secret stored as the instance secret (masked on dashboard reads after mint).
+- Signature verified **host-side, before any send or plugin code runs**, constant-time compare, 5-min replay window.
+- A bad signature returns **401** synchronously; a dead session returns **503** synchronously (host-side preflight) — neither reaches the plugin.
+- Permissions: `webhook:ingress` + `messages:send` only (liveness is checked host-side, so no `engine:read`).
 
 ## Changelog
 

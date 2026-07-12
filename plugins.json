@@ -1021,8 +1021,8 @@
       "standard-webhooks",
       "openwa"
     ],
-    "minOpenWAVersion": "0.8.7",
-    "testedOpenWAVersion": "0.8.7",
+    "minOpenWAVersion": "0.8.16",
+    "testedOpenWAVersion": "0.8.16",
     "releasedAt": "2026-07-07",
     "repoPath": "supabase-otp-hook",
     "repoUrl": "https://github.com/maplerichie/OpenWA-plugins",

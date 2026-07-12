@@ -4,14 +4,13 @@ import { handleSendSms, readConfig } from './handler.ts';
 /**
  * Supabase Send SMS Hook.
  *
- * Receives Supabase Auth's Send SMS hook on the ingress route "send-sms". The host skips signature
- * verification (manifest signature.scheme: 'none'); this plugin self-verifies the Standard Webhooks
- * signature in the handler using node:crypto.
- *
- * Runs in `sync-reply` mode so the HTTP response returned to Supabase reflects the actual outcome:
- * 200 application/json after the liveness probe, 400/401 for client errors, 500 for
- * misconfiguration, 503 for a dead session, and 504 if the host timeout is exceeded. The WhatsApp
- * send is fire-and-forget because Supabase has a 5 s hook timeout and does not retry.
+ * Receives Supabase Auth's Send SMS hook on the ingress route "send-sms". The host verifies the
+ * Standard Webhooks signature (manifest signature.scheme: 'standard-webhooks', secret = instance.secret)
+ * and runs the `session-alive` preflight before dispatching this handler, so Supabase gets synchronous
+ * feedback: 401 on a bad signature, 503 on a dead session, and 200 application/json on accept. This
+ * handler runs async from the ingress worker (retry + DLQ) and only parses the payload + fires the
+ * WhatsApp send. The send is fire-and-forget to stay within the worker's 5 s dispatch budget (an
+ * awaited slow send would time out and retry into a duplicate OTP).
  */
 export default class SupabaseSmsHook implements IPlugin {
   async onEnable(ctx: PluginContext): Promise<void> {
@@ -26,9 +25,7 @@ export default class SupabaseSmsHook implements IPlugin {
         {
           config,
           messages: ctx.messages,
-          engine: ctx.engine,
           log: (m, meta) => ctx.logger.warn(m, meta),
-          now: () => Date.now(),
         },
         req,
       );

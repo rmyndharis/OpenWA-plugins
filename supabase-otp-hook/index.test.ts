@@ -1,20 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHmac, randomBytes } from 'node:crypto';
 import type { PluginContext, PluginManifest, WebhookRequest } from '../types/openwa';
 import SupabaseSmsHook from './index.ts';
 
-const keyBytes = randomBytes(32);
-const keyB64 = keyBytes.toString('base64');
-const secret = `v1,whsec_${keyB64}`;
-const TS = Math.floor(Date.now() / 1000);
-const ID = 'msg-integration';
+const TS = 1_700_000_000;
 
-function sign(t: number, body: string): string {
-  return 'v1,' + createHmac('sha256', keyBytes).update(`${ID}.${t}.${body}`).digest('base64');
-}
-
-test('onEnable reads config, registers the send-sms webhook, and handles a signed request', async () => {
+test('onEnable reads config, registers the send-sms webhook, and delivers the OTP', async () => {
   const registered: Array<{ route: string; handler: (req: WebhookRequest) => unknown }> = [];
   const sent: Array<{ sessionId: string; chatId: string; text: string }> = [];
   const logs: string[] = [];
@@ -32,7 +23,9 @@ test('onEnable reads config, registers the send-sms webhook, and handles a signe
   const ctx = {
     pluginId: 'supabase-otp-hook',
     manifest,
-    config: { webhookSecret: secret, appName: 'Acme', fallbackSessionId: 'fallback-sess' },
+    // The Standard Webhooks secret is NOT plugin config — it is `instance.secret`, which the host uses
+    // to verify the signature before this handler runs. Here the handler only needs appName + fallback.
+    config: { appName: 'Acme', fallbackSessionId: 'fallback-sess' },
     hookManager: {},
     logger: {
       log: (m: string) => { logs.push(m); },
@@ -49,15 +42,7 @@ test('onEnable reads config, registers the send-sms webhook, and handles a signe
       },
       reply: async () => ({ messageId: 'm1', timestamp: TS }),
     },
-    engine: {
-      getGroupInfo: async () => ({}),
-      getContacts: async () => [],
-      getContactById: async () => ({}),
-      checkNumberExists: async () => true,
-      getChats: async () => [],
-      getChatHistory: async () => [],
-      canonicalChatId: async (_s: string, chatId: string) => chatId,
-    } as PluginContext['engine'],
+    engine: {} as PluginContext['engine'],
     net: {} as PluginContext['net'],
     registerWebhook: (route: string, handler: (req: WebhookRequest) => unknown) => {
       registered.push({ route, handler });
@@ -78,11 +63,7 @@ test('onEnable reads config, registers the send-sms webhook, and handles a signe
     instanceId: 'inst',
     sessionId: 'fallback-sess',
     method: 'POST',
-    headers: {
-      'webhook-id': ID,
-      'webhook-timestamp': String(TS),
-      'webhook-signature': sign(TS, rawBody),
-    },
+    headers: {},
     query: {},
     body: rawBody,
     rawBody,
@@ -90,16 +71,14 @@ test('onEnable reads config, registers the send-sms webhook, and handles a signe
     deliveryId: 'd1',
   };
 
-  const r = await registered[0].handler(req);
-  assert.equal((r as { status?: number }).status, 200);
-  await new Promise<void>(resolve => setImmediate(resolve));
+  await registered[0].handler(req);
   assert.equal(sent.length, 1);
   assert.equal(sent[0].sessionId, 'fallback-sess');
   assert.equal(sent[0].chatId, '15551234567@c.us');
   assert.equal(sent[0].text, 'Acme | Your verification code is 654321');
 });
 
-test('onEnable throws when the base config is invalid', async () => {
+test('onEnable throws when appName is missing', async () => {
   const manifest: PluginManifest = {
     id: 'supabase-otp-hook',
     name: 'Supabase Auth OTP',
@@ -110,7 +89,7 @@ test('onEnable throws when the base config is invalid', async () => {
   const ctx = {
     pluginId: 'supabase-otp-hook',
     manifest,
-    config: { appName: 'Acme' }, // missing webhookSecret
+    config: {}, // missing appName
     hookManager: {},
     logger: { log: () => {}, debug: () => {}, warn: () => {}, error: () => {} },
     storage: {} as PluginContext['storage'],
@@ -125,5 +104,5 @@ test('onEnable throws when the base config is invalid', async () => {
   } satisfies PluginContext;
 
   const plugin = new SupabaseSmsHook();
-  await assert.rejects(plugin.onEnable(ctx), /webhookSecret is required/);
+  await assert.rejects(plugin.onEnable(ctx), /appName is required/);
 });

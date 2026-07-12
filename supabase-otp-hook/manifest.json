@@ -11,23 +11,31 @@
   "repository": "https://github.com/maplerichie/OpenWA-plugins",
   "keywords": ["supabase", "auth", "otp", "sms", "whatsapp", "verification", "standard-webhooks", "openwa"],
   "status": "beta",
-  "minOpenWAVersion": "0.8.11",
-  "testedOpenWAVersion": "0.8.11",
+  "minOpenWAVersion": "0.8.16",
+  "testedOpenWAVersion": "0.8.16",
   "sdkVersion": "1",
-  "permissions": ["webhook:ingress", "messages:send", "engine:read"],
+  "permissions": ["webhook:ingress", "messages:send"],
   "sessionScoped": true,
   "sessions": ["*"],
   "ingress": [
     {
       "route": "send-sms",
-      "mode": "sync-reply",
+      "mode": "async",
       "verify": "core",
       "maxBodyBytes": 20480,
       "signature": {
-        "scheme": "none",
+        "scheme": "standard-webhooks",
         "dedupHeader": "webhook-id"
       },
-      "conversationId": { "jsonPointer": "/user/id" }
+      "conversationId": { "jsonPointer": "/user/id" },
+      "response": {
+        "preflight": [{ "type": "session-alive" }],
+        "ack": {
+          "status": 200,
+          "headers": { "content-type": "application/json" },
+          "body": "{\"ok\":true}"
+        }
+      }
     }
   ],
   "configSchema": {
@@ -38,14 +46,6 @@
         "title": "App name",
         "required": true,
         "description": "Your app name, inserted into the message template's {appName} placeholder."
-      },
-      "webhookSecret": {
-        "type": "string",
-        "title": "Supabase webhook secret",
-        "secret": true,
-        "required": true,
-        "min": 16,
-        "description": "The Send SMS hook secret from Supabase (Authentication → Auth Hooks → Add hook → Send SMS hook → HTTPS → Generate secret), in its full v1,whsec_<base64> form. Used to verify the Standard Webhooks signature."
       },
       "messageTemplate": {
         "type": "textarea",
@@ -62,7 +62,7 @@
         "type": "boolean",
         "default": false,
         "title": "Debug mode",
-        "description": "Log every inbound request (signature verdict, headers, body), the resolved session + chatId, each outbound send, and send failures. Never blocks or skips WhatsApp sending."
+        "description": "Log every inbound request (resolved session + chatId), each outbound send, and send failures. Never blocks or skips WhatsApp sending. Signature verification and the session-liveness check happen host-side before this handler runs, so they are not logged here."
       }
     }
   }
