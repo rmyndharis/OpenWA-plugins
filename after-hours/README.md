@@ -45,6 +45,13 @@ absent day is also closed. Times are 24-hour, `open < close` (same-day):
   "thu": "09:00-17:00", "fri": "09:00-17:00", "sat": "09:00-13:00", "sun": null }
 ```
 
+## Setup
+
+1. Have OpenWA **≥ 0.6.2** running with a logged-in WhatsApp session.
+2. Install and enable the plugin (see [Install](#install)).
+3. Set your weekly schedule, timezone, and away message (see [Configuration](#configuration)) — the
+   schedule is interpreted in your `timezone` via `Intl`, independent of the host clock.
+
 ## Install
 
 ```bash
@@ -78,6 +85,12 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 
 Targets OpenWA **≥ 0.6.2** (sandboxed runtime with `Intl` timezone data and `onConfigChange` forwarding,
 so schedule edits apply live without a re-enable).
+
+## Security
+
+The plugin declares only `messages:send` and makes no outbound network calls. The away message is the
+operator's `awayMessage` config (operator-trusted text); a quoted reply is throttled to once per chat per
+`cooldownSec`, so a customer sending several after-hours messages isn't spammed.
 
 ## Changelog
 

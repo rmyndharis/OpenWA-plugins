@@ -63,6 +63,13 @@ user types, e.g. `"1"`), the reply `text`, and optional nested `options` (a subm
 Editing the tree by hand is optional — the plugin ships a **visual flow editor** the dashboard opens in a
 sandboxed frame. A reply that doesn't match any option re-sends the current menu.
 
+## Setup
+
+1. Have OpenWA **≥ 0.7.0** running with a logged-in WhatsApp session.
+2. Install and enable the plugin (see [Install](#install)).
+3. Design your menu tree — via the built-in visual editor or the JSON config
+   (see [Configuration](#configuration)).
+
 ## Install
 
 ```bash

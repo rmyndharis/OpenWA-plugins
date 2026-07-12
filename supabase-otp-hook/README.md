@@ -1,8 +1,12 @@
 # Supabase Auth OTP → WhatsApp
 
-Deliver Supabase Auth phone OTPs over WhatsApp. Supabase's [Send SMS hook](https://supabase.com/docs/guides/auth/auth-hooks/send-sms-hook)
-POSTs `{ user: { phone }, sms: { otp } }` signed with [Standard Webhooks](https://www.standardwebhooks.com/);
-the host verifies the signature and the plugin sends the OTP via an OpenWA WhatsApp session.
+> Deliver Supabase Auth phone OTPs over WhatsApp. Supabase's Send SMS hook (Standard Webhooks-signed) is
+> verified host-side, and the plugin sends the OTP via an OpenWA WhatsApp session — with synchronous
+> feedback to Supabase (401 on a bad signature, 503 on a dead session, 200 on accept).
+
+![type: extension](https://img.shields.io/badge/type-extension-blue.svg)
+![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)
+![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.8.16-25D366.svg)
 
 ## Details
 
@@ -46,25 +50,11 @@ sandboxed handler async from the ingress worker (retry + DLQ). The handler parse
 sms: { otp } }`, normalizes the phone to `<digits>@c.us`, and fires the WhatsApp send in the background
 to stay within the worker's 5 s dispatch budget.
 
-## Install
-
-**Option A — dashboard.** Download `supabase-otp-hook.zip` from the [Releases page](https://github.com/maplerichie/OpenWA-plugins/releases), then dashboard → Plugins → Install → upload.
-
-**Option B — CLI.**
-
-```bash
-node package.mjs supabase-otp-hook            # build the zip
-curl -X POST "$OPENWA/api/plugins/install" \
-  -H "Authorization: Bearer $ADMIN_KEY" \
-  -F "file=@supabase-otp-hook.zip"
-curl -X POST "$OPENWA/api/plugins/supabase-otp-hook/enable" \
-  -H "Authorization: Bearer $ADMIN_KEY"
-```
-
 ## Setup
 
 Requires OpenWA v0.8.16+ (the `standard-webhooks` signature scheme and the `response`/preflight
-ingress contract) with a logged-in WhatsApp session, and a Supabase project with phone auth.
+ingress contract) with a logged-in WhatsApp session, and a Supabase project with phone auth. **Install
+and enable the plugin first** (see [Install](#install) below), then wire the connection:
 
 Wiring order: OpenWA mints the **ingress URL** → paste into Supabase → Supabase generates the
 **webhook secret** → paste it back into OpenWA **as the instance secret** (the host uses it to verify
@@ -105,6 +95,21 @@ curl -X PATCH "$OPENWA/api/integration/plugins/supabase-otp-hook/instances/defau
 **5. Enable phone auth.** Supabase → Authentication → Providers → Phone → enable, set SMS provider to the hook.
 
 **6. Test.** Trigger a phone-OTP sign-in. Supabase receives 200 and the OTP arrives in WhatsApp. A dead WhatsApp session yields 503 (visible to Supabase); a bad signature yields 401.
+
+## Install
+
+**Option A — dashboard.** Download `supabase-otp-hook.zip` from the [Releases page](https://github.com/maplerichie/OpenWA-plugins/releases), then dashboard → Plugins → Install → upload.
+
+**Option B — CLI.**
+
+```bash
+node package.mjs supabase-otp-hook            # build the zip
+curl -X POST "$OPENWA/api/plugins/install" \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -F "file=@supabase-otp-hook.zip"
+curl -X POST "$OPENWA/api/plugins/supabase-otp-hook/enable" \
+  -H "Authorization: Bearer $ADMIN_KEY"
+```
 
 ## Configuration
 

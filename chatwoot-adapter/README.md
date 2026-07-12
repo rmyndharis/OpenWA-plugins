@@ -1,9 +1,12 @@
 # Chatwoot Adapter
 
-Two-way sync between a WhatsApp session (via OpenWA) and a [Chatwoot](https://www.chatwoot.com/) inbox, plus
-human handover. Relays WhatsApp messages into Chatwoot, sends agent replies back to WhatsApp, and — when a
-human agent takes a chat over in Chatwoot — silences other OpenWA bots on that chat while continuing to
-mirror it. Runs sandboxed in the plugin worker; no server, no extra port.
+> Two-way sync between a WhatsApp session (via OpenWA) and a [Chatwoot](https://www.chatwoot.com/) inbox,
+> with human handover — relay WhatsApp into Chatwoot, send agent replies back, and silence other OpenWA
+> bots on that chat while a human agent is in control.
+
+![type: extension](https://img.shields.io/badge/type-extension-blue.svg)
+![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)
+![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.8.7-25D366.svg)
 
 ## Details
 
@@ -55,6 +58,21 @@ sees it.
    paste the Chatwoot webhook **secret**, and fill the config (`baseUrl`, `apiToken`, `accountId`, `inboxId`).
    Copy the **ingress URL** it shows: `{BASE_URL}/api/ingress/chatwoot-adapter/{instanceId}/chatwoot`.
 4. **Chatwoot — set the webhook URL** to the ingress URL from step 3.
+
+## Install
+
+**Option A — dashboard.** Download `chatwoot-adapter.zip` from the [Releases page](https://github.com/rmyndharis/OpenWA-plugins/releases), then dashboard → Plugins → Install → upload.
+
+**Option B — CLI.**
+
+```bash
+node package.mjs chatwoot-adapter            # build the zip
+curl -X POST "$OPENWA/api/plugins/install" \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -F "file=@chatwoot-adapter.zip"
+curl -X POST "$OPENWA/api/plugins/chatwoot-adapter/enable" \
+  -H "Authorization: Bearer $ADMIN_KEY"
+```
 
 ## Configuration
 

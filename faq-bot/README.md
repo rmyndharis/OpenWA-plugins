@@ -48,6 +48,12 @@
 ]
 ```
 
+## Setup
+
+1. Have OpenWA **≥ 0.6.1** running with a logged-in WhatsApp session.
+2. Install and enable the plugin (see [Install](#install)).
+3. Add your FAQ rules (see [Configuration](#configuration)).
+
 ## Install
 
 ```bash
