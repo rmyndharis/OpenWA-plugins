@@ -89,20 +89,32 @@ export default class FaqBot implements IPlugin {
     if (hook.source !== 'Engine' || !hook.sessionId) return;
     const m = (hook.data ?? {}) as Partial<IncomingMessage>;
     if (m.fromMe || typeof m.body !== 'string' || !m.chatId || !m.id) return;
-    if (m.isGroup && !this.config.respondInGroups) return;
+
+    let liveCfg;
+    let liveRules;
+    try {
+      const parsed = parseConfig(this.ctx!.config);
+      liveCfg = parsed.config;
+      liveRules = parsed.rules;
+    } catch (e) {
+      this.ctx?.logger.warn(`faq-bot: skipping message, config invalid: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+
+    if (m.isGroup && !liveCfg.respondInGroups) return;
 
     const sessionId = hook.sessionId;
-    const rule = matchRule(this.rules, m.body);
+    const rule = matchRule(liveRules, m.body);
     try {
       if (rule) {
         await this.ctx?.messages.reply(sessionId, m.chatId, m.id, rule.reply);
         return;
       }
-      if (this.config.fallbackReply) {
+      if (liveCfg.fallbackReply) {
         const key = `${sessionId}:${m.chatId}`;
-        const cooldownMs = Math.max(0, this.config.fallbackCooldownSec) * 1000;
+        const cooldownMs = Math.max(0, liveCfg.fallbackCooldownSec) * 1000;
         if (allowFallback(this.fallbackAt, key, Date.now(), cooldownMs)) {
-          await this.ctx?.messages.reply(sessionId, m.chatId, m.id, this.config.fallbackReply);
+          await this.ctx?.messages.reply(sessionId, m.chatId, m.id, liveCfg.fallbackReply);
         }
       }
     } catch (err) {

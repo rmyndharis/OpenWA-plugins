@@ -83,15 +83,23 @@ export default class ChatFlow implements IPlugin {
   }
 
   private async onMessage(ctx: PluginContext, hook: HookContext<IncomingMessage>): Promise<HookResult> {
-    const cfg = this.config;
-    if (!cfg || hook.source !== 'Engine' || !hook.sessionId) return { continue: true };
+    if (hook.source !== 'Engine' || !hook.sessionId) return { continue: true };
     const m = hook.data;
     if (m.fromMe || typeof m.body !== 'string' || !m.chatId || !m.id) return { continue: true };
-    if (m.isGroup && !cfg.respondInGroups) return { continue: true };
+
+    let liveCfg;
+    try {
+      liveCfg = parseConfig(ctx.config);
+    } catch (e) {
+      ctx.logger.warn(`chat-flow: skipping message, config invalid: ${e instanceof Error ? e.message : String(e)}`);
+      return { continue: true };
+    }
+
+    if (m.isGroup && !liveCfg.respondInGroups) return { continue: true };
     try {
       // In a group, scope flow state to the sender so members don't clobber each other's menu position.
       const actor = m.isGroup ? m.author : undefined;
-      const handled = await FlowEngine.processMessage(ctx, cfg.flow, hook.sessionId, m.chatId, m.body, m.id, actor);
+      const handled = await FlowEngine.processMessage(ctx, liveCfg.flow, hook.sessionId, m.chatId, m.body, m.id, actor);
       return { continue: !handled };
     } catch (err) {
       ctx.logger.error('chat-flow: flow processing failed', err);

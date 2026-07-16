@@ -85,16 +85,28 @@ export default class AfterHours implements IPlugin {
     if (hook.source !== 'Engine' || !hook.sessionId) return;
     const m = (hook.data ?? {}) as Partial<IncomingMessage>;
     if (m.fromMe || typeof m.body !== 'string' || !m.chatId || !m.id) return;
-    if (m.isGroup && !this.config.respondInGroups) return;
-    if (!isAfterHours(new Date(), this.schedule, this.config.timezone)) return;
+
+    let liveCfg;
+    let liveSchedule;
+    try {
+      const parsed = parseConfig(this.ctx!.config);
+      liveCfg = parsed.config;
+      liveSchedule = parsed.schedule;
+    } catch (e) {
+      this.ctx?.logger.warn(`after-hours: skipping message, config invalid: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+
+    if (m.isGroup && !liveCfg.respondInGroups) return;
+    if (!isAfterHours(new Date(), liveSchedule, liveCfg.timezone)) return;
 
     const sessionId = hook.sessionId;
     const key = `${sessionId}:${m.chatId}`;
-    const cooldownMs = Math.max(0, this.config.cooldownSec) * 1000;
+    const cooldownMs = Math.max(0, liveCfg.cooldownSec) * 1000;
     if (!allowReply(this.repliedAt, key, Date.now(), cooldownMs)) return;
 
     try {
-      await this.ctx?.messages.reply(sessionId, m.chatId, m.id, this.config.awayMessage);
+      await this.ctx?.messages.reply(sessionId, m.chatId, m.id, liveCfg.awayMessage);
     } catch (err) {
       this.ctx?.logger.error('after-hours: reply failed', err);
     }
