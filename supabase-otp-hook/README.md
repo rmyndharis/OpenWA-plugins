@@ -131,6 +131,15 @@ Session scope (which session sends) is also set at instance mint time, not in th
 - **Supabase** — HTTP Send SMS hook with Standard Webhooks signing. SQL (Postgres function) hook variant not supported.
 - **WhatsApp** — may rate-limit or require an approved business template for business-initiated messages. Adjust `messageTemplate` to match your approved wording.
 
+### Per-session config
+
+**Supported.** Every config field (`appName`, `messageTemplate`, `fallbackSessionId`, `debug`) may be
+overridden per WhatsApp session via the dashboard; an override takes effect on the next delivery (config
+is re-read per delivery). For example, two sessions can brand the OTP message differently. Note: this
+plugin's inbound channel is the Supabase webhook (not a WhatsApp message), so a per-session override
+applies to the session the instance is bound to (`sessionScope`) — bind each instance to a session, or
+set `fallbackSessionId`.
+
 ## Security
 
 - Webhook secret stored as the instance secret (masked on dashboard reads after mint).

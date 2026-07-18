@@ -117,6 +117,34 @@ or for a non-session-attributed event). **Read `ctx.config` inside your hook han
 right slice; reading it at load/lifecycle time yields the base. No plugin code is needed — the operator
 sets overrides via the dashboard/API.
 
+#### Author requirement: re-resolve config inside the hook
+
+Because `ctx.config` is a **getter** that returns a different value per firing session, **caching it at
+`onEnable` and reading the cache in the hook silently ignores per-session overrides** — the cache holds
+the base `*` config. Two patterns honor overrides correctly:
+
+- **Per-event re-parse (simplest).** Call your `parseConfig(ctx.config)` inside the hook handler, not at
+  `onEnable`. This is the recommended pattern for plugins whose config is plain values (strings, numbers,
+  booleans, rule lists). Keep a `parseConfig(ctx.config)` at `onEnable` too as fail-fast validation so a
+  bad base config surfaces in the dashboard immediately, but don't keep the *result* as hook state.
+- **Config-signature caching (for stateful coordinators).** If your hook reads a *stateful object* built
+  from config — a client with a circuit breaker, a connection pool, a coordinator — a naive per-event
+  rebuild resets that state on every message (e.g. the circuit breaker never trips). Instead, compute a
+  stable signature of the coordinator-affecting config fields per event and rebuild **only when the
+  signature changes**. Two messages from sessions with the same resolved config reuse the same
+  coordinator (its breaker/state survives); a per-session override that changes a field triggers one
+  rebuild on the next hook fire.
+
+> ⚠️ **Anti-pattern.** Do NOT store `this.config = parseConfig(ctx.config)` at `onEnable` and read
+> `this.config` in the hook. This breaks per-session overrides and has been the source of multiple bugs
+> (PRs #38, #39). Re-parse per event, or use signature-caching for a stateful coordinator.
+
+If your plugin **cannot** support per-session config — typically because it holds a single shared sink
+(e.g. one buffer, one queue) that can't attribute work to a session at flush time — that is an
+acceptable design choice, but it **must be documented** in the plugin's README **Compatibility** section
+under a `### Per-session config` heading, with the reason and any workaround (e.g. "run one instance per
+session"). See the per-plugin README convention below.
+
 **Reserved ids** (cannot be used): `whatsapp-web.js`, `baileys`, `auto-reply`, `translation`.
 **Package limits** (enforced by OpenWA at install): ≤ 5 MB compressed, ≤ 200 files, ≤ 20 MB uncompressed.
 **Ship compiled JS** — the loader `require()`s `main`; build with `node package.mjs <id>`.
@@ -132,7 +160,9 @@ sets overrides via the dashboard/API.
 5. **Setup** — prerequisites in numbered steps.
 6. **Install** — `curl` examples (upload zip, set config, enable) and/or the Releases download.
 7. **Configuration** — a table: key · required · default · description.
-8. **Compatibility** — version-specific behavior and known caveats.
+8. **Compatibility** — version-specific behavior and known caveats. Include a `### Per-session config`
+   subsection stating whether per-session config overrides are supported (and any caveat — see
+   [Per-session config](#per-session-config-v07) above).
 9. **Security** — the threat model relevant to this plugin.
 10. **Changelog** — link to `CHANGELOG.md`.
 11. **License**.

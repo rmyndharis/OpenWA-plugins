@@ -95,6 +95,20 @@ Then, in the group, an admin runs `/tr on`. Or install the packaged `.zip` from
 Targets OpenWA **≥ 0.7.0** — outbound HTTP uses the v0.7 `ctx.net.fetch` capability. Declares
 `messages:send`, `engine:read` (for admin checks), and `net:fetch`.
 
+### Per-session config
+
+**Supported, with a caveat.** Every config field may be overridden per WhatsApp session via the
+dashboard; an override that changes a coordinator-affecting field (e.g. `libretranslateUrl`,
+`libretranslateApiKey`, `timeoutMs`, `commandPrefix`, `minLength`, `maxLength`, `denyReply`) takes
+effect on the next inbound message. The plugin uses config-signature caching: the coordinator (and the
+LibreTranslate client's circuit breaker) is reused across messages with the same resolved config, and
+rebuilt only when the signature changes.
+
+**Caveat for multi-backend deployments:** when two sessions point at *different* LibreTranslate
+instances, they share one coordinator slot and clobber each other's circuit-breaker state on every
+message alternation. For full per-backend isolation, run **one plugin instance per session** (bind each
+to a single WhatsApp session via the dashboard's session scope).
+
 ## Security
 
 Outbound translate calls go **exclusively** through the host's SSRF-guarded `ctx.net.fetch`; there is no

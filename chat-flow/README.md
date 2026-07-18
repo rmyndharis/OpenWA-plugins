@@ -107,6 +107,14 @@ Targets OpenWA **≥ 0.7.0** — relies on per-session config resolution (`sessi
 `onConfigChange`, and the `configUi` sandboxed config editor. Uses only `ctx.messages.reply`,
 `ctx.storage`, `ctx.logger`, and `ctx.config`.
 
+### Per-session config
+
+**Supported.** Every config field (`trigger`, `greeting`, `respondInGroups`, the `options` tree) may
+be overridden per WhatsApp session via the dashboard; an override takes effect on the next inbound
+message (config is re-read per event). For example, two sessions can run different menu trees. Flow
+state is keyed per `(session, chat)` in storage, so flows for sessions with different menus never
+interfere.
+
 ## Security
 
 Flow state lives in `ctx.storage`, keyed per `(session, chat)` and expiring after 15 minutes — no

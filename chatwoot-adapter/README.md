@@ -115,6 +115,16 @@ public host is added to the outbound allowlist). To use a self-hosted Chatwoot:
   `RESOLVE_LID_TO_PHONE=true` in OpenWA.
 - **Chatwoot** — account-level webhooks with timestamped HMAC signing (see Setup).
 
+### Per-session config
+
+**Supported.** Every config field (`baseUrl`, `apiToken`, `accountId`, `inboxId`, `relayGroups`,
+`relayMedia`, `relayOwnMessages`, `backfillLimit`, `backfillAllOnce`) may be overridden per WhatsApp
+session via the dashboard; an override takes effect on the next inbound message or webhook delivery
+(config is re-read per event). This is the **first-class multi-tenant shape**: bind one instance per
+WhatsApp session, each pointing at a different Chatwoot account/inbox, and the session-scoped mapping
+store isolates them. The per-session `baseUrl` is auto-added to the outbound allowlist via
+`allowConfigHosts`.
+
 ## Security
 
 - The outbound HTTP allowlist admits only your configured Chatwoot host; OpenWA's SSRF guard still blocks
