@@ -13,8 +13,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `faq-bot` |
-| **Version** | 0.1.6 |
-| **Released** | 2026-07-02 |
+| **Version** | 0.1.7 |
+| **Released** | 2026-07-18 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |

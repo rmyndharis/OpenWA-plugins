@@ -12,8 +12,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `after-hours` |
-| **Version** | 0.1.2 |
-| **Released** | 2026-06-23 |
+| **Version** | 0.1.3 |
+| **Released** | 2026-07-18 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |

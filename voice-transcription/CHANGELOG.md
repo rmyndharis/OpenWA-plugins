@@ -24,8 +24,6 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
   takes effect, while the STT provider's circuit-breaker state is preserved across messages for an
   unchanged backend (a naive per-event rebuild would open/close the backend anew on each call and defeat
   the breaker's purpose).
-  enabling `chatDelivery: 'self'` or `'reply'` threw `PluginCapabilityError` on every transcript send (the
-  default `'off'` masked it). The permission is now declared, so in-chat delivery works as documented.
 
 ## [1.0.1] — 2026-07-02
 

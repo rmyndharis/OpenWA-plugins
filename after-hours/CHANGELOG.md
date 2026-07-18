@@ -8,6 +8,8 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-07-18
+
 ### Fixed
 
 - **Per-session config overrides are now honored at message time.** The hook previously read a config

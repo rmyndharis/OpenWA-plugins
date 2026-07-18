@@ -8,6 +8,8 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.0.6] — 2026-07-18
+
 ### Fixed
 
 - **Per-session config overrides are now honored at message time without resetting the circuit breaker

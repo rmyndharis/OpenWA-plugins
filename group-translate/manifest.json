@@ -1,7 +1,7 @@
 {
   "id": "group-translate",
   "name": "Group Auto-Translation",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled.",
@@ -9,47 +9,298 @@
   "license": "MIT",
   "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate",
   "repository": "https://github.com/rmyndharis/OpenWA-plugins",
-  "keywords": ["translation", "libretranslate", "i18n", "groups", "whatsapp", "openwa"],
+  "keywords": [
+    "translation",
+    "libretranslate",
+    "i18n",
+    "groups",
+    "whatsapp",
+    "openwa"
+  ],
   "status": "stable",
   "minOpenWAVersion": "0.7.0",
   "testedOpenWAVersion": "0.8.1",
-  "provides": ["translation"],
-  "permissions": ["messages:send", "engine:read", "net:fetch"],
-  "net": { "allow": ["localhost:7001"] },
+  "provides": [
+    "translation"
+  ],
+  "permissions": [
+    "messages:send",
+    "engine:read",
+    "net:fetch"
+  ],
+  "net": {
+    "allow": [
+      "localhost:7001"
+    ]
+  },
   "sessionScoped": true,
-  "sessions": ["*"],
-  "hooks": ["message:received"],
+  "sessions": [
+    "*"
+  ],
+  "hooks": [
+    "message:received"
+  ],
   "configSchema": {
     "type": "object",
     "properties": {
-      "libretranslateUrl": { "type": "string", "title": "LibreTranslate URL", "default": "http://localhost:7001", "required": true,
-        "description": "Base URL of your LibreTranslate instance. Its host:port MUST also appear in this plugin's manifest `net.allow` (the host denies outbound calls to anything not allow-listed)." },
-      "libretranslateApiKey": { "type": "string", "title": "LibreTranslate API key", "secret": true, "description": "Optional, if your instance requires one." },
-      "timeoutMs": { "type": "number", "title": "Translate timeout (ms)", "default": 4000,
-        "description": "Per-call timeout. Keep at or below the host hook budget (5000ms) so a slow backend doesn't make the host proceed un-translated." },
-      "commandPrefix": { "type": "string", "title": "Command prefix", "default": "/tr" },
-      "minLength": { "type": "number", "title": "Min message length to translate", "default": 2 },
-      "maxLength": { "type": "number", "title": "Max message length to translate", "default": 2000 },
-      "denyReply": { "type": "boolean", "title": "Reply on denied commands", "default": false,
-        "description": "If true, reply 'admins only' when a non-admin runs a restricted command." }
+      "libretranslateUrl": {
+        "type": "string",
+        "title": "LibreTranslate URL",
+        "default": "http://localhost:7001",
+        "required": true,
+        "description": "Base URL of your LibreTranslate instance. Its host:port MUST also appear in this plugin's manifest `net.allow` (the host denies outbound calls to anything not allow-listed)."
+      },
+      "libretranslateApiKey": {
+        "type": "string",
+        "title": "LibreTranslate API key",
+        "secret": true,
+        "description": "Optional, if your instance requires one."
+      },
+      "timeoutMs": {
+        "type": "number",
+        "title": "Translate timeout (ms)",
+        "default": 4000,
+        "description": "Per-call timeout. Keep at or below the host hook budget (5000ms) so a slow backend doesn't make the host proceed un-translated."
+      },
+      "commandPrefix": {
+        "type": "string",
+        "title": "Command prefix",
+        "default": "/tr"
+      },
+      "minLength": {
+        "type": "number",
+        "title": "Min message length to translate",
+        "default": 2
+      },
+      "maxLength": {
+        "type": "number",
+        "title": "Max message length to translate",
+        "default": 2000
+      },
+      "denyReply": {
+        "type": "boolean",
+        "title": "Reply on denied commands",
+        "default": false,
+        "description": "If true, reply 'admins only' when a non-admin runs a restricted command."
+      }
     }
   },
   "i18n": {
-    "es": { "name": "Traducción Automática de Grupos", "description": "Traduce automáticamente los mensajes del grupo entre los idiomas de los participantes mediante un backend LibreTranslate. Configúralo en el chat con comandos /tr. Gestionado por administradores; desactivado hasta que se habilite.",
-      "config": { "libretranslateUrl": { "title": "URL de LibreTranslate" }, "libretranslateApiKey": { "title": "Clave API de LibreTranslate" }, "timeoutMs": { "title": "Tiempo de espera de traducción (ms)" }, "commandPrefix": { "title": "Prefijo de comando" }, "minLength": { "title": "Longitud mínima de mensaje a traducir" }, "maxLength": { "title": "Longitud máxima de mensaje a traducir" }, "denyReply": { "title": "Responder a comandos denegados" } } },
-    "fr": { "name": "Traduction Automatique de Groupe", "description": "Traduit automatiquement les messages du groupe entre les langues des participants via un backend LibreTranslate. Configurez dans le chat avec des commandes /tr. Réservé aux administrateurs ; désactivé jusqu'à activation.",
-      "config": { "libretranslateUrl": { "title": "URL de LibreTranslate" }, "libretranslateApiKey": { "title": "Clé API de LibreTranslate" }, "timeoutMs": { "title": "Délai de traduction (ms)" }, "commandPrefix": { "title": "Préfixe de commande" }, "minLength": { "title": "Longueur minimale du message à traduire" }, "maxLength": { "title": "Longueur maximale du message à traduire" }, "denyReply": { "title": "Répondre aux commandes refusées" } } },
-    "it": { "name": "Traduzione Automatica di Gruppo", "description": "Traduce automaticamente i messaggi di gruppo tra le lingue dei partecipanti tramite un backend LibreTranslate. Configura in chat con i comandi /tr. Gestito dagli amministratori; disabilitato fino all'attivazione.",
-      "config": { "libretranslateUrl": { "title": "URL di LibreTranslate" }, "libretranslateApiKey": { "title": "Chiave API di LibreTranslate" }, "timeoutMs": { "title": "Timeout di traduzione (ms)" }, "commandPrefix": { "title": "Prefisso comando" }, "minLength": { "title": "Lunghezza minima messaggio da tradurre" }, "maxLength": { "title": "Lunghezza massima messaggio da tradurre" }, "denyReply": { "title": "Rispondi ai comandi negati" } } },
-    "ar": { "name": "الترجمة التلقائية للمجموعات", "description": "يترجم رسائل المجموعة تلقائيًا بين لغات المشاركين عبر خلفية LibreTranslate. اضبطه داخل المحادثة بأوامر /tr. مقيّد للمشرفين؛ معطّل حتى يُفعَّل.",
-      "config": { "libretranslateUrl": { "title": "رابط LibreTranslate" }, "libretranslateApiKey": { "title": "مفتاح API لـ LibreTranslate" }, "timeoutMs": { "title": "مهلة الترجمة (بالميلي ثانية)" }, "commandPrefix": { "title": "بادئة الأمر" }, "minLength": { "title": "الحد الأدنى لطول الرسالة المترجمة" }, "maxLength": { "title": "الحد الأقصى لطول الرسالة المترجمة" }, "denyReply": { "title": "الرد على الأوامر المرفوضة" } } },
-    "he": { "name": "תרגום אוטומטי לקבוצות", "description": "מתרגם אוטומטית הודעות קבוצה בין שפות המשתתפים דרך backend של LibreTranslate. הגדר בצ'אט עם פקודות /tr. מוגן בניהול; מושבת עד להפעלה.",
-      "config": { "libretranslateUrl": { "title": "כתובת LibreTranslate" }, "libretranslateApiKey": { "title": "מפתח API של LibreTranslate" }, "timeoutMs": { "title": "פסק זמן לתרגום (ms)" }, "commandPrefix": { "title": "קידומת פקודה" }, "minLength": { "title": "אורך מינימלי להודעה לתרגום" }, "maxLength": { "title": "אורך מקסימלי להודעה לתרגום" }, "denyReply": { "title": "השב על פקודות שנדחו" } } },
-    "te": { "name": "గ్రూప్ ఆటో-అనువాదం", "description": "LibreTranslate బ్యాకెండ్ ద్వారా గ్రూప్ సందేశాలను పాల్గొనేవారి భాషల మధ్య స్వయంచాలకంగా అనువదిస్తుంది. /tr కమాండ్‌లతో చాట్‌లో కాన్ఫిగర్ చేయండి. అడ్మిన్-గేటెడ్; ప్రారంభించే వరకు నిష్క్రియం.",
-      "config": { "libretranslateUrl": { "title": "LibreTranslate చిరునామా" }, "libretranslateApiKey": { "title": "LibreTranslate API కీ" }, "timeoutMs": { "title": "అనువాద టైమ్‌అవుట్ (ms)" }, "commandPrefix": { "title": "కమాండ్ ప్రిఫిక్స్" }, "minLength": { "title": "అనువదించే కనీస సందేశ పొడవు" }, "maxLength": { "title": "అనువదించే గరిష్ట సందేశ పొడవు" }, "denyReply": { "title": "తిరస్కరించిన కమాండ్‌లకు జవాబివ్వు" } } },
-    "zh-CN": { "name": "群组自动翻译", "description": "通过 LibreTranslate 后端自动翻译群组成员之间的消息。使用 /tr 命令在聊天中配置。仅管理员可操作；启用前处于禁用状态。",
-      "config": { "libretranslateUrl": { "title": "LibreTranslate 地址" }, "libretranslateApiKey": { "title": "LibreTranslate API 密钥" }, "timeoutMs": { "title": "翻译超时 (ms)" }, "commandPrefix": { "title": "命令前缀" }, "minLength": { "title": "翻译的最小消息长度" }, "maxLength": { "title": "翻译的最大消息长度" }, "denyReply": { "title": "拒绝命令时回复" } } },
-    "zh-HK": { "name": "群組自動翻譯", "description": "透過 LibreTranslate 後端自動翻譯群組成員之間的訊息。使用 /tr 指令在聊天中設定。僅管理員可操作；啟用前處於停用狀態。",
-      "config": { "libretranslateUrl": { "title": "LibreTranslate 網址" }, "libretranslateApiKey": { "title": "LibreTranslate API 金鑰" }, "timeoutMs": { "title": "翻譯逾時 (ms)" }, "commandPrefix": { "title": "指令前綴" }, "minLength": { "title": "翻譯的最小訊息長度" }, "maxLength": { "title": "翻譯的最大訊息長度" }, "denyReply": { "title": "拒絕指令時回覆" } } }
+    "es": {
+      "name": "Traducción Automática de Grupos",
+      "description": "Traduce automáticamente los mensajes del grupo entre los idiomas de los participantes mediante un backend LibreTranslate. Configúralo en el chat con comandos /tr. Gestionado por administradores; desactivado hasta que se habilite.",
+      "config": {
+        "libretranslateUrl": {
+          "title": "URL de LibreTranslate"
+        },
+        "libretranslateApiKey": {
+          "title": "Clave API de LibreTranslate"
+        },
+        "timeoutMs": {
+          "title": "Tiempo de espera de traducción (ms)"
+        },
+        "commandPrefix": {
+          "title": "Prefijo de comando"
+        },
+        "minLength": {
+          "title": "Longitud mínima de mensaje a traducir"
+        },
+        "maxLength": {
+          "title": "Longitud máxima de mensaje a traducir"
+        },
+        "denyReply": {
+          "title": "Responder a comandos denegados"
+        }
+      }
+    },
+    "fr": {
+      "name": "Traduction Automatique de Groupe",
+      "description": "Traduit automatiquement les messages du groupe entre les langues des participants via un backend LibreTranslate. Configurez dans le chat avec des commandes /tr. Réservé aux administrateurs ; désactivé jusqu'à activation.",
+      "config": {
+        "libretranslateUrl": {
+          "title": "URL de LibreTranslate"
+        },
+        "libretranslateApiKey": {
+          "title": "Clé API de LibreTranslate"
+        },
+        "timeoutMs": {
+          "title": "Délai de traduction (ms)"
+        },
+        "commandPrefix": {
+          "title": "Préfixe de commande"
+        },
+        "minLength": {
+          "title": "Longueur minimale du message à traduire"
+        },
+        "maxLength": {
+          "title": "Longueur maximale du message à traduire"
+        },
+        "denyReply": {
+          "title": "Répondre aux commandes refusées"
+        }
+      }
+    },
+    "it": {
+      "name": "Traduzione Automatica di Gruppo",
+      "description": "Traduce automaticamente i messaggi di gruppo tra le lingue dei partecipanti tramite un backend LibreTranslate. Configura in chat con i comandi /tr. Gestito dagli amministratori; disabilitato fino all'attivazione.",
+      "config": {
+        "libretranslateUrl": {
+          "title": "URL di LibreTranslate"
+        },
+        "libretranslateApiKey": {
+          "title": "Chiave API di LibreTranslate"
+        },
+        "timeoutMs": {
+          "title": "Timeout di traduzione (ms)"
+        },
+        "commandPrefix": {
+          "title": "Prefisso comando"
+        },
+        "minLength": {
+          "title": "Lunghezza minima messaggio da tradurre"
+        },
+        "maxLength": {
+          "title": "Lunghezza massima messaggio da tradurre"
+        },
+        "denyReply": {
+          "title": "Rispondi ai comandi negati"
+        }
+      }
+    },
+    "ar": {
+      "name": "الترجمة التلقائية للمجموعات",
+      "description": "يترجم رسائل المجموعة تلقائيًا بين لغات المشاركين عبر خلفية LibreTranslate. اضبطه داخل المحادثة بأوامر /tr. مقيّد للمشرفين؛ معطّل حتى يُفعَّل.",
+      "config": {
+        "libretranslateUrl": {
+          "title": "رابط LibreTranslate"
+        },
+        "libretranslateApiKey": {
+          "title": "مفتاح API لـ LibreTranslate"
+        },
+        "timeoutMs": {
+          "title": "مهلة الترجمة (بالميلي ثانية)"
+        },
+        "commandPrefix": {
+          "title": "بادئة الأمر"
+        },
+        "minLength": {
+          "title": "الحد الأدنى لطول الرسالة المترجمة"
+        },
+        "maxLength": {
+          "title": "الحد الأقصى لطول الرسالة المترجمة"
+        },
+        "denyReply": {
+          "title": "الرد على الأوامر المرفوضة"
+        }
+      }
+    },
+    "he": {
+      "name": "תרגום אוטומטי לקבוצות",
+      "description": "מתרגם אוטומטית הודעות קבוצה בין שפות המשתתפים דרך backend של LibreTranslate. הגדר בצ'אט עם פקודות /tr. מוגן בניהול; מושבת עד להפעלה.",
+      "config": {
+        "libretranslateUrl": {
+          "title": "כתובת LibreTranslate"
+        },
+        "libretranslateApiKey": {
+          "title": "מפתח API של LibreTranslate"
+        },
+        "timeoutMs": {
+          "title": "פסק זמן לתרגום (ms)"
+        },
+        "commandPrefix": {
+          "title": "קידומת פקודה"
+        },
+        "minLength": {
+          "title": "אורך מינימלי להודעה לתרגום"
+        },
+        "maxLength": {
+          "title": "אורך מקסימלי להודעה לתרגום"
+        },
+        "denyReply": {
+          "title": "השב על פקודות שנדחו"
+        }
+      }
+    },
+    "te": {
+      "name": "గ్రూప్ ఆటో-అనువాదం",
+      "description": "LibreTranslate బ్యాకెండ్ ద్వారా గ్రూప్ సందేశాలను పాల్గొనేవారి భాషల మధ్య స్వయంచాలకంగా అనువదిస్తుంది. /tr కమాండ్‌లతో చాట్‌లో కాన్ఫిగర్ చేయండి. అడ్మిన్-గేటెడ్; ప్రారంభించే వరకు నిష్క్రియం.",
+      "config": {
+        "libretranslateUrl": {
+          "title": "LibreTranslate చిరునామా"
+        },
+        "libretranslateApiKey": {
+          "title": "LibreTranslate API కీ"
+        },
+        "timeoutMs": {
+          "title": "అనువాద టైమ్‌అవుట్ (ms)"
+        },
+        "commandPrefix": {
+          "title": "కమాండ్ ప్రిఫిక్స్"
+        },
+        "minLength": {
+          "title": "అనువదించే కనీస సందేశ పొడవు"
+        },
+        "maxLength": {
+          "title": "అనువదించే గరిష్ట సందేశ పొడవు"
+        },
+        "denyReply": {
+          "title": "తిరస్కరించిన కమాండ్‌లకు జవాబివ్వు"
+        }
+      }
+    },
+    "zh-CN": {
+      "name": "群组自动翻译",
+      "description": "通过 LibreTranslate 后端自动翻译群组成员之间的消息。使用 /tr 命令在聊天中配置。仅管理员可操作；启用前处于禁用状态。",
+      "config": {
+        "libretranslateUrl": {
+          "title": "LibreTranslate 地址"
+        },
+        "libretranslateApiKey": {
+          "title": "LibreTranslate API 密钥"
+        },
+        "timeoutMs": {
+          "title": "翻译超时 (ms)"
+        },
+        "commandPrefix": {
+          "title": "命令前缀"
+        },
+        "minLength": {
+          "title": "翻译的最小消息长度"
+        },
+        "maxLength": {
+          "title": "翻译的最大消息长度"
+        },
+        "denyReply": {
+          "title": "拒绝命令时回复"
+        }
+      }
+    },
+    "zh-HK": {
+      "name": "群組自動翻譯",
+      "description": "透過 LibreTranslate 後端自動翻譯群組成員之間的訊息。使用 /tr 指令在聊天中設定。僅管理員可操作；啟用前處於停用狀態。",
+      "config": {
+        "libretranslateUrl": {
+          "title": "LibreTranslate 網址"
+        },
+        "libretranslateApiKey": {
+          "title": "LibreTranslate API 金鑰"
+        },
+        "timeoutMs": {
+          "title": "翻譯逾時 (ms)"
+        },
+        "commandPrefix": {
+          "title": "指令前綴"
+        },
+        "minLength": {
+          "title": "翻譯的最小訊息長度"
+        },
+        "maxLength": {
+          "title": "翻譯的最大訊息長度"
+        },
+        "denyReply": {
+          "title": "拒絕指令時回覆"
+        }
+      }
+    }
   }
 }
