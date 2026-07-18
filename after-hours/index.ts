@@ -57,58 +57,47 @@ export function allowReply(map: Map<string, number>, key: string, nowMs: number,
 }
 
 export default class AfterHours implements IPlugin {
-  private schedule: Schedule = {};
-  private config: AfterHoursConfig = { timezone: 'UTC', awayMessage: '', cooldownSec: 3600, respondInGroups: false };
-  private ctx: PluginContext | null = null;
   private readonly repliedAt = new Map<string, number>();
 
   async onEnable(ctx: PluginContext): Promise<void> {
-    this.apply(ctx);
+    parseConfig(ctx.config); // fail-fast: surface invalid config at enable, not per-message
     ctx.registerHook('message:received', async (hook: HookContext) => {
-      await this.onMessage(hook);
+      await this.onMessage(ctx, hook);
       return { continue: true };
     });
   }
 
   async onConfigChange(ctx: PluginContext, _newConfig: Record<string, unknown>): Promise<void> {
-    this.apply(ctx);
+    parseConfig(ctx.config); // re-validate on change (fail-fast feedback in the dashboard)
   }
 
-  private apply(ctx: PluginContext): void {
-    this.ctx = ctx;
-    const { config, schedule } = parseConfig(ctx.config);
-    this.schedule = schedule;
-    this.config = config;
-  }
-
-  private async onMessage(hook: HookContext): Promise<void> {
+  private async onMessage(ctx: PluginContext, hook: HookContext): Promise<void> {
     if (hook.source !== 'Engine' || !hook.sessionId) return;
     const m = (hook.data ?? {}) as Partial<IncomingMessage>;
     if (m.fromMe || typeof m.body !== 'string' || !m.chatId || !m.id) return;
 
-    let liveCfg;
-    let liveSchedule;
+    // Re-parse per event so a per-session config override (resolved by the host for this hook fire) is
+    // honored — a snapshot cached at enable would ignore overrides set via the dashboard after enable.
+    let cfg: { config: AfterHoursConfig; schedule: Schedule };
     try {
-      const parsed = parseConfig(this.ctx!.config);
-      liveCfg = parsed.config;
-      liveSchedule = parsed.schedule;
+      cfg = parseConfig(ctx.config);
     } catch (e) {
-      this.ctx?.logger.warn(`after-hours: skipping message, config invalid: ${e instanceof Error ? e.message : String(e)}`);
+      ctx.logger.warn(`after-hours: skipping message, config invalid: ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
 
-    if (m.isGroup && !liveCfg.respondInGroups) return;
-    if (!isAfterHours(new Date(), liveSchedule, liveCfg.timezone)) return;
+    if (m.isGroup && !cfg.config.respondInGroups) return;
+    if (!isAfterHours(new Date(), cfg.schedule, cfg.config.timezone)) return;
 
     const sessionId = hook.sessionId;
     const key = `${sessionId}:${m.chatId}`;
-    const cooldownMs = Math.max(0, liveCfg.cooldownSec) * 1000;
+    const cooldownMs = Math.max(0, cfg.config.cooldownSec) * 1000;
     if (!allowReply(this.repliedAt, key, Date.now(), cooldownMs)) return;
 
     try {
-      await this.ctx?.messages.reply(sessionId, m.chatId, m.id, liveCfg.awayMessage);
+      await ctx.messages.reply(sessionId, m.chatId, m.id, cfg.config.awayMessage);
     } catch (err) {
-      this.ctx?.logger.error('after-hours: reply failed', err);
+      ctx.logger.error('after-hours: reply failed', err);
     }
   }
 }

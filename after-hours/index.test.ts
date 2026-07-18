@@ -54,3 +54,32 @@ test('allowReply eviction is recency-aware: re-touching a key protects it', () =
   assert.equal(map.has('k-0'), true); // protected by recent touch
   assert.equal(map.has('k-1'), false); // now the oldest, evicted
 });
+
+// Regression: the message hook must re-read ctx.config per event (not a snapshot cached at enable) so a
+// per-session override resolved by the host for the firing session is honored. Mutating the config AFTER
+// enable must be visible to the next hook fire. We prove it by corrupting the config post-enable and
+// asserting the hook warns + skips (a cached snapshot would still hold the valid enable-time value).
+test('onMessage re-reads ctx.config per event (per-session config is not cached at enable)', async () => {
+  // Use a schedule whose window never covers the current wall-clock minute, so any message is after-hours.
+  const alwaysClosed = JSON.stringify({ mon: '00:00-00:01', tue: '00:00-00:01', wed: '00:00-00:01', thu: '00:00-00:01', fri: '00:00-00:01', sat: '00:00-00:01', sun: '00:00-00:01' });
+  let liveConfig: Record<string, unknown> = { schedule: alwaysClosed, awayMessage: 'Closed', cooldownSec: 0 };
+  const warnings: string[] = [];
+  let registered = false;
+  let handler: (hook: any) => Promise<void> = async () => {}; // default no-op; overwritten on registerHook
+  const ctx: any = {
+    get config() { return liveConfig; }, // simulate the host's per-session getter
+    logger: { log() {}, debug() {}, warn: (m: string) => warnings.push(m), error() {} },
+    registerHook: (_e: string, h: any) => { handler = h; registered = true; },
+    messages: { reply: async () => ({ messageId: '', timestamp: 0 }), sendText: async () => ({ messageId: '', timestamp: 0 }) },
+  };
+  const { default: AfterHours } = await import('./index.ts');
+  const plugin = new AfterHours();
+  await plugin.onEnable(ctx);
+  assert.ok(registered, 'hook registered');
+
+  // Corrupt the config AFTER enable. A snapshot cached at enable would not see this; a per-event read does.
+  liveConfig = { schedule: 'NOT JSON', awayMessage: 'x' };
+  await handler({ source: 'Engine', sessionId: 's1', timestamp: new Date(),
+    data: { id: 'm1', chatId: 'c@x', body: 'hi', fromMe: false, isGroup: false } });
+  assert.ok(warnings.some(w => /config invalid/.test(w)), 'corrupted post-enable config was re-read and warned');
+});

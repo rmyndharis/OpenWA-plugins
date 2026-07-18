@@ -8,6 +8,14 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Per-session config overrides are now honored at message time.** The hook previously read a config
+  snapshot cached at enable, so a per-session override (e.g. a different menu tree for one WhatsApp number)
+  set via the dashboard after enable was ignored. The hook now re-parses `ctx.config` on each event, which
+  the host resolves to the firing session's slice. An invalid config for a session is logged and skipped
+  instead of driving the flow with a stale snapshot. The enable-time fail-fast validation is retained.
+
 ## [1.0.5] — 2026-07-02
 
 ### Fixed

@@ -45,11 +45,10 @@ export function parseConfig(raw: Record<string, unknown>): ChatFlowConfig {
 const SWEEP_INTERVAL_MS = 30 * 60 * 1000;
 
 export default class ChatFlow implements IPlugin {
-  private config: ChatFlowConfig | null = null;
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
 
   async onEnable(ctx: PluginContext): Promise<void> {
-    this.config = parseConfig(ctx.config);
+    parseConfig(ctx.config); // fail-fast: surface invalid config at enable, not per-message
     ctx.registerHook('message:received', hook =>
       this.onMessage(ctx, hook as HookContext<IncomingMessage>),
     );
@@ -64,7 +63,7 @@ export default class ChatFlow implements IPlugin {
   // The platform passes the new config as the 2nd arg, but for a sessionScoped plugin ctx.config is already
   // the resolved per-session slice — read that (re-parsing _newConfig would lose the per-session merge).
   async onConfigChange(ctx: PluginContext, _newConfig: Record<string, unknown>): Promise<void> {
-    this.config = parseConfig(ctx.config);
+    parseConfig(ctx.config); // re-validate on change (fail-fast feedback in the dashboard)
   }
 
   async onDisable(): Promise<void> {
