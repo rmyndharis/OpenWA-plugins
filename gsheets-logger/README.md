@@ -209,6 +209,18 @@ version-dependent:
   v0.6.0/v0.6.1, a config change needs a disable + re-enable, and a non-graceful exit (SIGKILL/OOM) can
   drop rows buffered since the last flush (≤ `flushIntervalSec`).
 
+### Per-session spreadsheet routing is not supported
+
+The plugin holds a **single** in-memory buffer and a single Sheets client built from the base `*` config
+at `onEnable`. Rows from **every** WhatsApp session land in that one configured sheet. A per-session
+config override that points at a different `spreadsheetId` / `serviceAccountJson` is **not** honored — the
+buffer cannot attribute a row to a session at flush time, so routing per session is a design-level change,
+not a config one.
+
+If you need to log different sessions to different sheets, run **one plugin instance per session** (bind
+each to a single WhatsApp session via the dashboard's session scope), or run multiple OpenWA instances.
+Per-session multi-sink logging is a roadmap item if a concrete need emerges.
+
 ## Security
 
 Message content is treated as untrusted. Writes use `valueInputOption=RAW`, so Google Sheets never

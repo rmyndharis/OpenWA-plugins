@@ -6,6 +6,27 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+## [1.0.2] — 2026-07-18
+
+### Fixed
+
+- **Declared the `messages:send` permission required by in-chat delivery.** The `chatDelivery` feature
+  (`self` / `reply`) sends the transcript back into WhatsApp via `ctx.messages.sendText` / `ctx.messages.reply`,
+  both gated by the `messages:send` permission, but the manifest only declared `net:fetch`. As a result,
+  enabling `chatDelivery: 'self'` or `'reply'` threw `PluginCapabilityError` on every transcript send (the
+  default `'off'` masked it). The permission is now declared, so in-chat delivery works as documented.
+
+- **Per-session config overrides are now honored at message time without resetting the circuit breaker
+  on every message.** The coordinator was built once at `onEnable` and the hook read that cached instance,
+  so a per-session override (e.g. a different STT backend or delivery webhook for one session) set via the
+  dashboard after enable was ignored. The hook now recomputes a signature of the coordinator-affecting
+  config fields per event and rebuilds the coordinator only when that signature changes — so an override
+  takes effect, while the STT provider's circuit-breaker state is preserved across messages for an
+  unchanged backend (a naive per-event rebuild would open/close the backend anew on each call and defeat
+  the breaker's purpose).
+  enabling `chatDelivery: 'self'` or `'reply'` threw `PluginCapabilityError` on every transcript send (the
+  default `'off'` masked it). The permission is now declared, so in-chat delivery works as documented.
+
 ## [1.0.1] — 2026-07-02
 
 ### Fixed

@@ -8,6 +8,15 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+### Changed
+
+- **Documented that per-session spreadsheet routing is not supported.** The plugin holds one buffer and
+  one Sheets client built from the base `*` config, so a per-session config override that points at a
+  different `spreadsheetId` / `serviceAccountJson` is **not** honored — rows from every session land in
+  the single configured sheet. This is a deliberate single-sink design (the buffer cannot attribute a
+  row to a session at flush time), documented now in the README's **Compatibility** section rather than
+  left implicit. Per-session logging remains a roadmap item if a multi-sink need arises.
+
 ## [0.2.3] — 2026-07-02
 
 ### Fixed

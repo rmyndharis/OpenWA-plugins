@@ -8,6 +8,17 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Per-session config overrides are now honored at message time without resetting the circuit breaker
+  on every message.** The coordinator was built once at `onEnable` and the hook read that cached
+  instance, so a per-session override (e.g. a different LibreTranslate instance or command prefix for one
+  session) set via the dashboard after enable was ignored. The hook now recomputes a signature of the
+  coordinator-affecting config fields per event and rebuilds the coordinator only when that signature
+  changes — so an override takes effect, while the LibreTranslate client's circuit-breaker state is
+  preserved across messages for an unchanged backend (a naive per-event rebuild would open/close the
+  backend anew on each call and defeat the breaker's purpose).
+
 ## [1.0.5] — 2026-07-02
 
 ### Fixed

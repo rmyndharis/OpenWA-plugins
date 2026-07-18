@@ -1,7 +1,7 @@
 {
   "id": "voice-transcription",
   "name": "Voice Note Transcription",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Transcribes inbound WhatsApp voice notes to text via an OpenAI-compatible speech-to-text backend (self-hosted Speaches/faster-whisper or hosted Groq/OpenAI) and delivers a `message.transcription` event to your webhook — so bots and AI can read and reply to audio. Off the message-delivery path; disabled until enabled.",
@@ -9,16 +9,41 @@
   "license": "MIT",
   "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/voice-transcription",
   "repository": "https://github.com/rmyndharis/OpenWA-plugins",
-  "keywords": ["transcription", "speech-to-text", "stt", "whisper", "voice", "audio", "whatsapp", "openwa"],
+  "keywords": [
+    "transcription",
+    "speech-to-text",
+    "stt",
+    "whisper",
+    "voice",
+    "audio",
+    "whatsapp",
+    "openwa"
+  ],
   "status": "beta",
   "minOpenWAVersion": "0.7.0",
   "testedOpenWAVersion": "0.8.1",
-  "provides": ["transcription"],
-  "permissions": ["net:fetch"],
-  "net": { "allow": ["localhost", "127.0.0.1", "api.groq.com:443", "api.openai.com:443"] },
+  "provides": [
+    "transcription"
+  ],
+  "permissions": [
+    "net:fetch",
+    "messages:send"
+  ],
+  "net": {
+    "allow": [
+      "localhost",
+      "127.0.0.1",
+      "api.groq.com:443",
+      "api.openai.com:443"
+    ]
+  },
   "sessionScoped": true,
-  "sessions": ["*"],
-  "hooks": ["message:received"],
+  "sessions": [
+    "*"
+  ],
+  "hooks": [
+    "message:received"
+  ],
   "configSchema": {
     "type": "object",
     "properties": {
@@ -34,30 +59,81 @@
         "secret": true,
         "description": "Bearer key for a hosted backend (Groq/OpenAI). Leave blank for a local Speaches instance."
       },
-      "model": { "type": "string", "title": "Model", "default": "small", "description": "Whisper model name, e.g. small, base, whisper-large-v3-turbo." },
-      "language": { "type": "string", "title": "Language hint", "default": "", "description": "Optional BCP-47 hint (e.g. es). Blank = auto-detect." },
-      "provider": { "type": "string", "title": "Provider label", "default": "faster-whisper", "description": "Informational label recorded in the delivered event." },
-      "timeoutMs": { "type": "number", "title": "STT timeout (ms)", "default": 20000, "min": 1000, "max": 30000, "description": "Per-request STT timeout. Runs off the message-delivery path, so it is bounded only by the host net.fetch ceiling (30000ms), not the 5s hook budget." },
+      "model": {
+        "type": "string",
+        "title": "Model",
+        "default": "small",
+        "description": "Whisper model name, e.g. small, base, whisper-large-v3-turbo."
+      },
+      "language": {
+        "type": "string",
+        "title": "Language hint",
+        "default": "",
+        "description": "Optional BCP-47 hint (e.g. es). Blank = auto-detect."
+      },
+      "provider": {
+        "type": "string",
+        "title": "Provider label",
+        "default": "faster-whisper",
+        "description": "Informational label recorded in the delivered event."
+      },
+      "timeoutMs": {
+        "type": "number",
+        "title": "STT timeout (ms)",
+        "default": 20000,
+        "min": 1000,
+        "max": 30000,
+        "description": "Per-request STT timeout. Runs off the message-delivery path, so it is bounded only by the host net.fetch ceiling (30000ms), not the 5s hook budget."
+      },
       "enabledMessageTypes": {
         "type": "array",
         "title": "Message types to transcribe",
-        "default": ["voice"],
-        "items": { "type": "string" },
+        "default": [
+          "voice"
+        ],
+        "items": {
+          "type": "string"
+        },
         "description": "Usually just voice (PTT). Add audio to also transcribe music/file audio (more cost)."
       },
-      "maxSizeBytes": { "type": "number", "title": "Max audio size (bytes)", "default": 16777216, "description": "Skip audio larger than this (exact cost guard)." },
-      "maxPerHour": { "type": "number", "title": "Max transcriptions / hour / session", "default": 60, "description": "Best-effort per-session hourly cap to bound paid-API spend." },
+      "maxSizeBytes": {
+        "type": "number",
+        "title": "Max audio size (bytes)",
+        "default": 16777216,
+        "description": "Skip audio larger than this (exact cost guard)."
+      },
+      "maxPerHour": {
+        "type": "number",
+        "title": "Max transcriptions / hour / session",
+        "default": 60,
+        "description": "Best-effort per-session hourly cap to bound paid-API spend."
+      },
       "deliveryWebhookUrl": {
         "type": "string",
         "title": "Delivery webhook URL",
         "description": "Your endpoint that receives the message.transcription event (the bot/AI integration channel). Its host MUST be in this plugin's manifest net.allow. Optional if you only use in-chat delivery."
       },
-      "deliverySecret": { "type": "string", "title": "Delivery secret", "secret": true, "description": "Optional. When set, the body is HMAC-SHA256 signed in `X-OpenWA-Signature: sha256=<hex>` (same scheme as OpenWA core webhooks) so your endpoint can verify it." },
-      "deliveryTimeoutMs": { "type": "number", "title": "Delivery timeout (ms)", "default": 5000, "min": 1000, "max": 30000 },
+      "deliverySecret": {
+        "type": "string",
+        "title": "Delivery secret",
+        "secret": true,
+        "description": "Optional. When set, the body is HMAC-SHA256 signed in `X-OpenWA-Signature: sha256=<hex>` (same scheme as OpenWA core webhooks) so your endpoint can verify it."
+      },
+      "deliveryTimeoutMs": {
+        "type": "number",
+        "title": "Delivery timeout (ms)",
+        "default": 5000,
+        "min": 1000,
+        "max": 30000
+      },
       "chatDelivery": {
         "type": "string",
         "title": "In-chat delivery",
-        "enum": ["off", "self", "reply"],
+        "enum": [
+          "off",
+          "self",
+          "reply"
+        ],
         "default": "off",
         "description": "Also post the transcript into WhatsApp: off (webhook only), self (a note to your own number), or reply (quote-reply to the sender — visible to them). Default off."
       }
