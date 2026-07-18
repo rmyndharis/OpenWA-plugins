@@ -50,6 +50,27 @@ The table above is generated from each plugin's `manifest.json` + `CHANGELOG.md`
 (and mirrored in [`plugins.json`](./plugins.json)). See [PLUGIN-STANDARD.md](./PLUGIN-STANDARD.md) for the
 metadata standard every plugin follows.
 
+## Per-session config support
+
+OpenWA's `sessionScoped` plugins (the default) may carry per-session config **overrides** set via the
+dashboard — so two WhatsApp sessions under one plugin instance can run different settings. A plugin
+honors overrides only if it re-reads `ctx.config` inside its hook (not a cached snapshot from enable).
+The table below is the status for each plugin in this repo. See each plugin's README **Compatibility →
+Per-session config** for details and caveats.
+
+| Plugin | Per-session config | Notes |
+| ------ | :----------------: | ----- |
+| [`after-hours`](./after-hours) | ✅ Supported | All fields per session; takes effect on next message. |
+| [`chat-flow`](./chat-flow) | ✅ Supported | All fields per session; flow state is per `(session, chat)`. |
+| [`chatwoot-adapter`](./chatwoot-adapter) | ✅ Supported | All fields per session — first-class multi-tenant shape. |
+| [`faq-bot`](./faq-bot) | ✅ Supported | All fields per session (different rule sets per number). |
+| [`group-translate`](./group-translate) | ⚠️ Supported, with caveat | Config-signature caching; multi-backend isolation needs one instance per session. |
+| [`gsheets-logger`](./gsheets-logger) | ❌ Not supported | Single-buffer single-sink design; use one instance per session. |
+| [`http-action`](./http-action) | ✅ Supported | All fields per session (different endpoints/action sets). |
+| [`supabase-otp-hook`](./supabase-otp-hook) | ✅ Supported | All fields per session; applies to the instance's bound session. |
+| [`typebot-connector`](./typebot-connector) | ✅ Supported | All fields per session; flow state is per `(session, chat)`. |
+| [`voice-transcription`](./voice-transcription) | ⚠️ Supported, with caveat | Config-signature caching; multi-backend isolation needs one instance per session. |
+
 **On the roadmap:** an automatic closing-greeting plugin for new leads. Want something else? [Open an issue](https://github.com/rmyndharis/OpenWA-plugins/issues) or [contribute one](#contributing).
 
 ## Installing a plugin

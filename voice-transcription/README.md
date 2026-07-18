@@ -136,6 +136,20 @@ curl -X POST http://localhost:2785/plugins/voice-transcription/enable \
   engine re-fire can still double-call STT). For exactly-once, structured-event delivery, a future core
   `message.transcription` event would be the upgrade path.
 
+### Per-session config
+
+**Supported, with a caveat.** Every config field may be overridden per WhatsApp session via the
+dashboard; an override that changes a coordinator-affecting field (e.g. `sttBaseUrl`, `sttApiKey`,
+`model`, `language`, `timeoutMs`, delivery fields, `chatDelivery`, `enabledMessageTypes`,
+`maxSizeBytes`, `maxPerHour`, `provider`) takes effect on the next inbound message. The plugin uses
+config-signature caching: the coordinator (and the STT provider's circuit breaker) is reused across
+messages with the same resolved config, and rebuilt only when the signature changes.
+
+**Caveat for multi-backend deployments:** when two sessions point at *different* STT backends, they
+share one coordinator slot and clobber each other's circuit-breaker state on every message
+alternation. For full per-backend isolation, run **one plugin instance per session** (bind each to a
+single WhatsApp session via the dashboard's session scope).
+
 ## Security
 
 - **Outbound HTTP is allow-listed.** Calls go through the host's SSRF-guarded `ctx.net.fetch`; only hosts in

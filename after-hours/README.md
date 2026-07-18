@@ -86,6 +86,13 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 Targets OpenWA **≥ 0.6.2** (sandboxed runtime with `Intl` timezone data and `onConfigChange` forwarding,
 so schedule edits apply live without a re-enable).
 
+### Per-session config
+
+**Supported.** Every config field (`schedule`, `timezone`, `awayMessage`, `cooldownSec`,
+`respondInGroups`) may be overridden per WhatsApp session via the dashboard; an override takes effect on
+the next inbound message (config is re-read per event). For example, two sessions can have different
+business hours and away messages.
+
 ## Security
 
 The plugin declares only `messages:send` and makes no outbound network calls. The away message is the

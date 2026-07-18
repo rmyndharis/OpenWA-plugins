@@ -105,6 +105,14 @@ Status is **development**. It targets OpenWA **≥ 0.8.7** (`allowConfigHosts` +
 instance before being marked `beta`. Live config edits apply on the next inbound message (config is
 re-read per event).
 
+### Per-session config
+
+**Supported.** Every config field (`baseUrl`, auth fields, `actions`, `timeoutMs`, `cooldownSeconds`,
+`respondInGroups`) may be overridden per WhatsApp session via the dashboard; an override takes effect on
+the next inbound message (config is re-read per event). For example, two sessions can target different
+API endpoints with different action sets. The per-session `baseUrl` is auto-added to the outbound
+allowlist via `allowConfigHosts`.
+
 ## Security
 
 - **Fixed origin.** `baseUrl` must be HTTPS with no embedded credentials, query string, or fragment, and

@@ -88,6 +88,13 @@ Targets OpenWA **≥ 0.6.1** (sandboxed plugin runtime). Live config edits (`PUT
 immediately on builds that forward `onConfigChange` to sandboxed plugins (the #430 follow-ups);
 on v0.6.0/v0.6.1 a disable + re-enable is needed after changing rules.
 
+### Per-session config
+
+**Supported.** Every config field (`rules`, `fallbackReply`, `fallbackCooldownSec`,
+`respondInGroups`) may be overridden per WhatsApp session via the dashboard; an override takes effect on
+the next inbound message (config is re-read per event). For example, two sessions can run different FAQ
+rule sets.
+
 ## Security
 
 `regex` patterns are operator-authored (trusted) and tested against at most the first 1000 characters

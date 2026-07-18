@@ -103,6 +103,15 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 - `payment` steps and non-renderable embeds can't be shown on WhatsApp and get a short fallback
   message. Streaming AI blocks are resolved server-side into normal text bubbles.
 
+### Per-session config
+
+**Supported.** Every config field (`apiHost`, `publicId`, `apiToken`, `respondInGroups`,
+`sessionTimeoutMinutes`, `passContactVariables`, `mediaHost`) may be overridden per WhatsApp session
+via the dashboard; an override takes effect on the next inbound message (config is re-read per event).
+For example, two sessions can connect to different Typebot bots. The per-session `apiHost`/`mediaHost`
+is auto-added to the outbound allowlist via `allowConfigHosts`. Flow state is keyed per `(session, chat)`
+in storage, so flows across sessions never interfere.
+
 ## Security
 
 - **Outbound HTTP is allow-listed.** Calls go through the host's SSRF-guarded `ctx.net.fetch`; only
