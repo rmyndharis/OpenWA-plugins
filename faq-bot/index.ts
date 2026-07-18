@@ -58,55 +58,60 @@ export function allowFallback(map: Map<string, number>, key: string, nowMs: numb
 }
 
 export default class FaqBot implements IPlugin {
-  private rules: CompiledRule[] = [];
-  private config: FaqConfig = { fallbackReply: '', fallbackCooldownSec: 600, respondInGroups: false };
-  private ctx: PluginContext | null = null;
   private readonly fallbackAt = new Map<string, number>();
 
   async onEnable(ctx: PluginContext): Promise<void> {
-    this.apply(ctx);
+    this.warnSkipped(ctx); // fail-fast + surface any invalid regex rules at enable
     ctx.registerHook('message:received', async (hook: HookContext) => {
-      await this.onMessage(hook);
+      await this.onMessage(ctx, hook);
       return { continue: true };
     });
   }
 
   async onConfigChange(ctx: PluginContext): Promise<void> {
-    this.apply(ctx);
+    this.warnSkipped(ctx); // re-validate on change (fail-fast feedback + fresh skipped warning)
   }
 
-  private apply(ctx: PluginContext): void {
-    this.ctx = ctx;
-    const { config, rules, skipped } = parseConfig(ctx.config);
-    this.rules = rules;
-    this.config = config;
+  private warnSkipped(ctx: PluginContext): void {
+    const { skipped } = parseConfig(ctx.config);
     if (skipped.length) {
       ctx.logger.warn(`faq-bot: skipped ${skipped.length} rule(s) with an invalid regex: ${skipped.join(', ')}`);
     }
   }
 
-  private async onMessage(hook: HookContext): Promise<void> {
+  private async onMessage(ctx: PluginContext, hook: HookContext): Promise<void> {
     if (hook.source !== 'Engine' || !hook.sessionId) return;
     const m = (hook.data ?? {}) as Partial<IncomingMessage>;
     if (m.fromMe || typeof m.body !== 'string' || !m.chatId || !m.id) return;
-    if (m.isGroup && !this.config.respondInGroups) return;
+
+    // Re-parse per event so a per-session config override (resolved by the host for this hook fire) is
+    // honored — a snapshot cached at enable would ignore overrides set via the dashboard after enable.
+    let cfg: { config: FaqConfig; rules: CompiledRule[] };
+    try {
+      cfg = parseConfig(ctx.config);
+    } catch (e) {
+      ctx.logger.warn(`faq-bot: skipping message, config invalid: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+
+    if (m.isGroup && !cfg.config.respondInGroups) return;
 
     const sessionId = hook.sessionId;
-    const rule = matchRule(this.rules, m.body);
+    const rule = matchRule(cfg.rules, m.body);
     try {
       if (rule) {
-        await this.ctx?.messages.reply(sessionId, m.chatId, m.id, rule.reply);
+        await ctx.messages.reply(sessionId, m.chatId, m.id, rule.reply);
         return;
       }
-      if (this.config.fallbackReply) {
+      if (cfg.config.fallbackReply) {
         const key = `${sessionId}:${m.chatId}`;
-        const cooldownMs = Math.max(0, this.config.fallbackCooldownSec) * 1000;
+        const cooldownMs = Math.max(0, cfg.config.fallbackCooldownSec) * 1000;
         if (allowFallback(this.fallbackAt, key, Date.now(), cooldownMs)) {
-          await this.ctx?.messages.reply(sessionId, m.chatId, m.id, this.config.fallbackReply);
+          await ctx.messages.reply(sessionId, m.chatId, m.id, cfg.config.fallbackReply);
         }
       }
     } catch (err) {
-      this.ctx?.logger.error('faq-bot: reply failed', err);
+      ctx.logger.error('faq-bot: reply failed', err);
     }
   }
 }

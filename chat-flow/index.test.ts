@@ -39,3 +39,31 @@ test('toFlowNodes accepts keys that collide with Object.prototype names, but rej
   // __proto__ would set the prototype rather than an own key — reject it outright
   assert.throws(() => toFlowNodes([{ key: '__proto__', text: 'A' }]), /not allowed/);
 });
+
+// Regression: the message hook must re-read ctx.config per event (not a snapshot cached at enable) so a
+// per-session override resolved by the host for the firing session is honored. We prove it by corrupting
+// the config post-enable and asserting the hook warns + skips (a cached snapshot would drive the flow with
+// the stale enable-time menu).
+test('onMessage re-reads ctx.config per event (per-session config is not cached at enable)', async () => {
+  let liveConfig: Record<string, unknown> = { greeting: 'menu', options: [{ key: '1', text: 'A' }] };
+  const warnings: string[] = [];
+  let registered = false;
+  let handler: (hook: any) => Promise<unknown> = async () => {}; // default no-op; overwritten on registerHook
+  const ctx: any = {
+    get config() { return liveConfig; }, // simulate the host's per-session getter
+    logger: { log() {}, debug() {}, warn: (m: string) => warnings.push(m), error() {} },
+    registerHook: (_e: string, h: any) => { handler = h; registered = true; },
+    storage: { get: async () => null, set: async () => {}, delete: async () => {}, list: async () => [] },
+    messages: { reply: async () => ({ messageId: '', timestamp: 0 }), sendText: async () => ({ messageId: '', timestamp: 0 }) },
+  };
+  const { default: ChatFlow } = await import('./index.ts');
+  const plugin = new ChatFlow();
+  await plugin.onEnable(ctx);
+  assert.ok(registered, 'hook registered');
+
+  // Corrupt the config AFTER enable. A snapshot cached at enable would not see this; a per-event read does.
+  liveConfig = { greeting: '', options: [] };
+  await handler({ source: 'Engine', sessionId: 's1', timestamp: new Date(),
+    data: { id: 'm1', chatId: 'c@x', body: 'hi', fromMe: false, isGroup: false } });
+  assert.ok(warnings.some(w => /config invalid/.test(w)), 'corrupted post-enable config was re-read and warned');
+});

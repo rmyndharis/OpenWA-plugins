@@ -59,3 +59,30 @@ test('allowFallback eviction is recency-aware: re-touching a key protects it fro
   assert.equal(map.has('chat-0'), true); // protected by recent touch
   assert.equal(map.has('chat-1'), false); // now the oldest, evicted
 });
+
+// Regression: the message hook must re-read ctx.config per event (not a snapshot cached at enable) so a
+// per-session override resolved by the host for the firing session is honored. We prove it by corrupting
+// the config post-enable and asserting the hook warns + skips (a cached snapshot would hold the valid
+// enable-time value and try to match rules that no longer exist).
+test('onMessage re-reads ctx.config per event (per-session config is not cached at enable)', async () => {
+  let liveConfig: Record<string, unknown> = { rules: JSON.stringify([{ mode: 'contains', pattern: 'hi', reply: 'hello' }]) };
+  const warnings: string[] = [];
+  let registered = false;
+  let handler: (hook: any) => Promise<void> = async () => {}; // default no-op; overwritten on registerHook
+  const ctx: any = {
+    get config() { return liveConfig; }, // simulate the host's per-session getter
+    logger: { log() {}, debug() {}, warn: (m: string) => warnings.push(m), error() {} },
+    registerHook: (_e: string, h: any) => { handler = h; registered = true; },
+    messages: { reply: async () => ({ messageId: '', timestamp: 0 }), sendText: async () => ({ messageId: '', timestamp: 0 }) },
+  };
+  const { default: FaqBot } = await import('./index.ts');
+  const plugin = new FaqBot();
+  await plugin.onEnable(ctx);
+  assert.ok(registered, 'hook registered');
+
+  // Corrupt the config AFTER enable. A snapshot cached at enable would not see this; a per-event read does.
+  liveConfig = { rules: 'NOT JSON' };
+  await handler({ source: 'Engine', sessionId: 's1', timestamp: new Date(),
+    data: { id: 'm1', chatId: 'c@x', body: 'hi', fromMe: false, isGroup: false } });
+  assert.ok(warnings.some(w => /config invalid/.test(w)), 'corrupted post-enable config was re-read and warned');
+});
