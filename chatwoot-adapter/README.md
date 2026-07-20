@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chatwoot-adapter` |
-| **Version** | 0.5.2 |
-| **Released** | 2026-07-04 |
+| **Version** | 0.5.3 |
+| **Released** | 2026-07-20 |
 | **Status** | beta |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -47,16 +47,44 @@ sees it.
 
 ## Setup
 
-> **Chatwoot version:** the adapter verifies the webhook signature, so you need a Chatwoot version that
-> HMAC-signs **account-level** webhooks with a timestamp (an `X-Chatwoot-Timestamp` header). Agent-bot / inbox
-> webhooks are unsigned and are **not** supported — use an account-level webhook (Integrations → Webhooks).
+> **Chatwoot version:** you need Chatwoot **v4.12.0 or newer** — the first release whose account-level
+> webhooks carry a per-webhook secret and a timestamped HMAC signature (`X-Chatwoot-Signature` +
+> `X-Chatwoot-Timestamp`). Older releases send unsigned webhooks, which OpenWA rejects with a 401.
+> Agent-bot / inbox webhooks are **not** supported — use an account-level webhook (Integrations → Webhooks).
 
 1. **Chatwoot — API-channel inbox.** Create an API-channel inbox and note its **inbox ID**.
 2. **Chatwoot — account-level webhook.** Integrations → Webhooks → add a webhook subscribed to
    `message_created` and `conversation_updated`; copy the webhook **secret** shown on the edit form.
-3. **OpenWA — mint an instance.** In the dashboard's Instances tab for this plugin: set the **session scope**,
-   paste the Chatwoot webhook **secret**, and fill the config (`baseUrl`, `apiToken`, `accountId`, `inboxId`).
-   Copy the **ingress URL** it shows: `{BASE_URL}/api/ingress/chatwoot-adapter/{instanceId}/chatwoot`.
+   Chatwoot generates this secret itself and won't accept a custom one — so it must be copied **into**
+   OpenWA (the reverse direction is impossible).
+3. **OpenWA — mint an instance with that secret.** OpenWA verifies every webhook delivery against the
+   instance's ingress secret, so it must equal the Chatwoot secret from step 2. Mint via the REST API
+   (the only path that accepts a secret today):
+
+   ```bash
+   curl -X POST "$OPENWA/api/integration/plugins/chatwoot-adapter/instances" \
+     -H "X-API-Key: $ADMIN_KEY" -H "Content-Type: application/json" \
+     -d '{
+       "instanceId": "main",
+       "sessionScope": "<your-whatsapp-session-id>",
+       "secret": "<chatwoot webhook secret from step 2>",
+       "config": {
+         "baseUrl": "https://chatwoot.example.com",
+         "apiToken": "<chatwoot access token>",
+         "accountId": 2,
+         "inboxId": 8
+       }
+     }'
+   ```
+
+   The response reveals the **ingress URL** (once):
+   `{BASE_URL}/api/ingress/chatwoot-adapter/{instanceId}/chatwoot`.
+
+   > ⚠️ **Do not mint the instance from the dashboard**: its instance form has no secret field and
+   > auto-generates a random one that can never match Chatwoot's — every agent reply then fails with a
+   > 401 (see [Troubleshooting](#troubleshooting)). If you already did, delete the instance and re-mint
+   > via the API above; an instance's secret cannot be edited after minting (only regenerated to a new
+   > random one).
 4. **Chatwoot — set the webhook URL** to the ingress URL from step 3.
 
 ## Install
@@ -102,6 +130,23 @@ public host is added to the outbound allowlist). To use a self-hosted Chatwoot:
   attachment. A tunnel or reverse proxy with a small body-size limit can return **502/530** on large files; raise
   the limit (e.g. nginx `client_max_body_size`, or your tunnel's max request size). Oversized inbound media that
   the engine already dropped for size is relayed as a short placeholder instead of an empty message.
+
+## Troubleshooting
+
+**Inbound works (WhatsApp messages reach Chatwoot), but agent replies never reach WhatsApp and the
+Chatwoot logs show `WebhookJob ... 401 Unauthorized`.** OpenWA rejected the webhook's HMAC signature.
+Work down this list:
+
+| Cause | Check | Fix |
+| --- | --- | --- |
+| The instance's ingress secret ≠ the Chatwoot webhook secret (by far the most common — every instance minted from the dashboard has an auto-generated secret that can't match Chatwoot's) | Compare the secret on the Chatwoot webhook edit form with the one the instance was minted with | Delete the instance and re-mint via the REST API with `secret` = the Chatwoot webhook secret (Setup step 3) |
+| The Chatwoot webhook was re-created (or its secret reset) after the instance was minted | Same as above | Re-mint the instance with the new secret |
+| Clock skew beyond the 300-second signature tolerance | Compare `date -u` on the Chatwoot and OpenWA hosts | Sync both hosts with NTP |
+| Chatwoot older than v4.12.0 | Its account webhooks are unsigned | Upgrade Chatwoot |
+
+Inbound is unaffected by all of these because it authenticates to Chatwoot's REST API with the
+`apiToken`, not through the webhook. A **404** (instead of 401) means the URL itself is wrong — unknown
+instance id or route — so re-copy the ingress URL from the mint response.
 
 ## Compatibility
 

@@ -6,6 +6,20 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.5.3] — 2026-07-20
+
+### Fixed
+
+- **Setup guide no longer prescribes a mint path that can never verify webhooks**
+  ([OpenWA #821](https://github.com/rmyndharis/OpenWA/issues/821)). It previously told you to mint the
+  instance from the dashboard and "paste the Chatwoot webhook secret" there — but the dashboard's
+  instance form has no secret field and auto-generates one, which can never match Chatwoot's, so every
+  Chatwoot → OpenWA delivery failed HMAC verification with a 401 while inbound (which uses the API
+  token, not the webhook secret) kept working. Setup now mints via the REST API (the only path that
+  accepts a secret), states the concrete minimum Chatwoot version (v4.12.0, the first release with
+  per-webhook secrets + timestamped webhook signatures), and a new Troubleshooting section maps the 401
+  symptom to its causes. Documentation only — no runtime code changed.
+
 ## [0.5.2] — 2026-07-04
 
 ### Fixed
