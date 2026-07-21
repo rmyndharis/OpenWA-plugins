@@ -6,6 +6,23 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.5.4] — 2026-07-21
+
+### Fixed
+
+- **Every outgoing WhatsApp message was delivered twice while the adapter was enabled.** With "Relay your
+  own outbound sends" on (the default), the adapter mirrors anything you send — from the WhatsApp app, a
+  linked phone, or the OpenWA API — into the Chatwoot thread as an outgoing message. Chatwoot then
+  announces that mirror back over the webhook, and because the adapter only ignored *incoming* Chatwoot
+  posts, it treated its own mirror as a fresh agent reply and sent it to WhatsApp a second time. The
+  recipient genuinely received two copies of every message. The adapter now records the Chatwoot message
+  it creates and recognises the announcement as its own, exactly as it already did in the other
+  direction. The one-time history import was affected the same way and is fixed by the same change — with
+  "History backfill" enabled it could have re-sent imported messages to the contact.
+
+  No action is needed beyond updating; de-duplication is keyed on the Chatwoot message id, never on
+  message content, so genuine repeat messages are still delivered.
+
 ## [0.5.3] — 2026-07-20
 
 ### Fixed

@@ -369,7 +369,7 @@
   {
     "id": "chatwoot-adapter",
     "name": "Chatwoot Adapter",
-    "version": "0.5.3",
+    "version": "0.5.4",
     "type": "extension",
     "status": "beta",
     "description": "Two-way sync between a WhatsApp session and a Chatwoot inbox: relays WhatsApp messages (1:1 and groups, with media) into Chatwoot as an API-channel inbox, sends agent replies back to WhatsApp, and hands a chat over to a human agent — silencing other OpenWA bots — when an agent takes it in Chatwoot. First consumer of the OpenWA Integration SDK v1; runs sandboxed in the plugin worker.",
@@ -387,11 +387,11 @@
     ],
     "minOpenWAVersion": "0.8.7",
     "testedOpenWAVersion": "0.8.7",
-    "releasedAt": "2026-07-20",
+    "releasedAt": "2026-07-21",
     "repoPath": "chatwoot-adapter",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chatwoot-adapter-v0.5.3/chatwoot-adapter.zip"
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chatwoot-adapter-v0.5.4/chatwoot-adapter.zip"
   },
   {
     "id": "faq-bot",

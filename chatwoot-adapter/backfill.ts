@@ -26,7 +26,7 @@ async function replayHistory(
   for (const msg of ordered) {
     if (await deps.store.hasSeen('wa', msg.id, sessionId)) continue;
     try {
-      await relayMessage(deps, conversationId, msg, msg.fromMe ? 'outgoing' : 'incoming');
+      await relayMessage(deps, sessionId, conversationId, msg, msg.fromMe ? 'outgoing' : 'incoming');
       await deps.store.markSeen('wa', msg.id, sessionId);
     } catch (err) {
       deps.log(`history message ${msg.id} failed`, err);

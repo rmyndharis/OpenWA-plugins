@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chatwoot-adapter` |
-| **Version** | 0.5.3 |
-| **Released** | 2026-07-20 |
+| **Version** | 0.5.4 |
+| **Released** | 2026-07-21 |
 | **Status** | beta |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |

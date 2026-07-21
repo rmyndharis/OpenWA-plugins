@@ -16,6 +16,10 @@ import { relayMessage, type InboundDeps } from './relay.ts';
 // outbound.relay marks the WA id of every reply it sends (markSeen('wa', …)) on the same canonical
 // per-chat lock, so the hasSeen check below recognizes and skips them. At-most-once (a failed post is
 // not retried), like inbound.
+//
+// The OTHER leg of the loop is guarded inside relayMessage: the Chatwoot message this mirror creates is
+// marked 'cw'-seen (under the same lock, before it is released), so the `message_created` Chatwoot fires
+// for it is not relayed back out to WhatsApp as a duplicate.
 export async function handleSent(
   deps: InboundDeps,
   sessionId: string,
@@ -34,7 +38,7 @@ export async function handleSent(
       const conversationId = await findMappedConversation(deps, sessionId, msg, key);
       if (conversationId === null) return; // unmapped chat — drop, never create (no split)
       await deps.store.markSeen('wa', msg.id, sessionId);
-      await relayMessage(deps, conversationId, msg, 'outgoing');
+      await relayMessage(deps, sessionId, conversationId, msg, 'outgoing');
     } catch (err) {
       deps.log('own-send relay failed', err);
     }

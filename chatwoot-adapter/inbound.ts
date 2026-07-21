@@ -25,7 +25,7 @@ export async function relayInbound(deps: InboundDeps, sessionId: string, msg: In
   if (created && deps.backfillLimit > 0) {
     await backfillHistory(deps, sessionId, msg.chatId, conversationId);
   }
-  await relayMessage(deps, conversationId, msg, 'incoming');
+  await relayMessage(deps, sessionId, conversationId, msg, 'incoming');
 }
 
 // WhatsApp → Chatwoot. Filter, then run resolve+post under the per-chat lock so two near-simultaneous

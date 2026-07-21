@@ -60,8 +60,10 @@ function placeholderFor(msg: IncomingMessage): string {
 
 // Render one WhatsApp message into Chatwoot (text / media / location / sticker / voice, with quote
 // threading). Live inbound always passes 'incoming'; history backfill derives the direction per message.
+// An 'outgoing' post is echo-guarded before returning (see markOutgoingEcho) — the caller need not.
 export async function relayMessage(
   deps: InboundDeps,
+  sessionId: string,
   conversationId: number,
   msg: IncomingMessage,
   messageType: 'incoming' | 'outgoing',
@@ -70,10 +72,11 @@ export async function relayMessage(
   const post = { sourceId: msg.id, inReplyToExternalId: msg.quotedMessage?.id, messageType };
   const isVoice = msg.type === 'voice';
   const isSticker = msg.type === 'sticker';
+  let created: { id: number };
   if (msg.type === 'location' && msg.location) {
-    await deps.client.postText(conversationId, locationText(msg), post);
+    created = await deps.client.postText(conversationId, locationText(msg), post);
   } else if (deps.relayMedia && msg.media?.data && !msg.media.omitted) {
-    await deps.client.postMedia(
+    created = await deps.client.postMedia(
       conversationId,
       content,
       {
@@ -85,8 +88,25 @@ export async function relayMessage(
       { ...post, isVoiceMessage: isVoice },
     );
   } else {
-    await deps.client.postText(conversationId, msg.body?.trim() ? content : placeholderFor(msg), post);
+    created = await deps.client.postText(conversationId, msg.body?.trim() ? content : placeholderFor(msg), post);
   }
+  if (messageType === 'outgoing') await markOutgoingEcho(deps, sessionId, created.id);
+}
+
+// Echo guard for the own-send mirror (#615), the mirror image of the 'wa' marker outbound.relay writes.
+// A message we post as 'outgoing' comes straight back as a Chatwoot `message_created` that
+// shouldRelayOutbound accepts (it only drops 'incoming'), so without a marker outbound.relay would send it
+// to WhatsApp a SECOND time — the recipient really receives two messages.
+//
+// Marked under BOTH the session scope and unscoped because the two sides key differently: this runs on a WA
+// event (scope = the WA session), while the check runs on an ingress delivery whose scope is
+// `instance.sessionScope ?? undefined` — undefined for an unscoped instance, which would then read the
+// unscoped key and miss a session-scoped marker. Same scoped+unscoped pair, and the same reason, as the
+// reverse-lookup keys MappingStore.link writes.
+async function markOutgoingEcho(deps: InboundDeps, sessionId: string, chatwootMessageId: number): Promise<void> {
+  const id = String(chatwootMessageId);
+  await deps.store.markSeen('cw', id, sessionId);
+  await deps.store.markSeen('cw', id);
 }
 
 // Get-or-create the Chatwoot contact + conversation for a chat and mirror the mapping. Self-contained so
