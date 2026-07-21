@@ -63,8 +63,23 @@ async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: Cha
   await deps.lock.run(`${target.sessionId}:${lockKey}`, async () => {
     const id = evt.id !== undefined ? String(evt.id) : undefined;
     // Dedup, but mark only AFTER a successful send: a transient send failure must retry the reply, not be
-    // silently suppressed as "already seen". Scope the marker by the delivery's session (F-02/F-03).
-    if (id && (await deps.store.hasSeen('cw', id, sessionId))) return;
+    // silently suppressed as "already seen".
+    //
+    // Scoped by target.sessionId — the WA session that owns this conversation, just resolved from the
+    // mapping — NOT the delivery's `sessionId`. Both identify the tenant (F-02/F-03), but the delivery
+    // scope is `instance.sessionScope ?? undefined` and so is UNDEFINED for an unscoped instance, which
+    // would put its markers in a global namespace keyed by bare Chatwoot message id: two tenants whose
+    // ids collide could then suppress each other's replies. target.sessionId is always defined, and is
+    // the same value relayMessage marks the own-send mirror under, so both halves of the echo guard
+    // agree by construction.
+    //
+    // A pre-0.5.4 unscoped install has legacy `seen:cw:<id>` markers that this no longer reads. They are
+    // deliberately abandoned rather than migrated: these markers are a short-lived (3-day TTL) cache, not
+    // a ledger, duplicate deliveries are already dropped upstream by the ingress layer's providerDeliveryId
+    // dedup, and honouring them would carry the cross-tenant collision forward. Worst case is one repeated
+    // reply if Chatwoot re-announces an already-relayed message under a NEW delivery id during the upgrade
+    // window — visible and self-correcting, unlike silently dropping a genuine agent reply.
+    if (id && (await deps.store.hasSeen('cw', id, target.sessionId))) return;
     let res: unknown;
     if (media) {
       res = await deps.conversations.send({
@@ -77,7 +92,7 @@ async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: Cha
     } else {
       res = await deps.conversations.send({ sessionId: target.sessionId, chatId: target.chatId, type: 'text', text });
     }
-    if (id) await deps.store.markSeen('cw', id, sessionId);
+    if (id) await deps.store.markSeen('cw', id, target.sessionId);
     // Echo guard for the own-send relay (#615): the message we just sent to WhatsApp will come back as a
     // fromMe message:sent event. Mark its WA id seen — scoped by the WA session that will emit it
     // (target.sessionId, NOT the delivery scope) — so handleSent recognizes it as ours and skips it. Held

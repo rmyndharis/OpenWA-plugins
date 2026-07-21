@@ -23,6 +23,22 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
   No action is needed beyond updating; de-duplication is keyed on the Chatwoot message id, never on
   message content, so genuine repeat messages are still delivered.
 
+### Changed
+
+- **Reply de-duplication is now scoped by the WhatsApp session that owns the conversation**, rather than
+  by the session scope attached to the incoming webhook delivery. The two agree on a normal
+  session-scoped setup, but an integration instance configured without a session scope previously fell
+  back to a global namespace keyed by the bare Chatwoot message id — and because Chatwoot numbers
+  messages per account, two Chatwoot accounts on one gateway could collide there and suppress each
+  other's agent replies. The new scope is always defined and always matches, so that collision cannot
+  occur.
+
+  Upgrade note, and only for an instance running **without** a session scope: de-duplication markers
+  written before this release are not carried over. If Chatwoot re-announces an already-relayed message
+  under a new delivery id during the upgrade, that reply may be sent once more. Duplicate deliveries are
+  already discarded by the gateway ahead of the plugin, so this is unlikely; markers are short-lived
+  either way and the situation resolves itself immediately after the upgrade.
+
 ## [0.5.3] — 2026-07-20
 
 ### Fixed

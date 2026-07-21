@@ -119,8 +119,10 @@ test('an own send mirrored into Chatwoot is NOT sent back to WhatsApp (session-s
 
 test('an own send mirrored into Chatwoot is NOT sent back to WhatsApp (delivery with NO session scope)', async () => {
   // An integration instance without a session scope yields sessionId: undefined on every delivery
-  // (ingress.service: `instance.sessionScope ?? undefined`), so the outbound dedup reads the UNSCOPED
-  // marker key. A marker written only under the WA session id would be invisible here and still loop.
+  // (ingress.service: `instance.sessionScope ?? undefined`). The guard must not depend on that value:
+  // outbound.relay scopes its dedup on target.sessionId, resolved from the conversation mapping, which
+  // is the same scope relayMessage marked the mirror under. Keying on the delivery scope instead would
+  // read a different marker here and loop.
   const { inbound, outbound, posted, sent } = await wire();
 
   await handleSent(inbound, 'sess', 'Engine', own);
@@ -138,4 +140,40 @@ test('a genuine agent reply from Chatwoot IS still relayed to WhatsApp', async (
   await handleOutbound(outbound, mirrorWebhook(999, 'sess'));
 
   assert.equal(sent.length, 1, 'a real agent reply must still reach WhatsApp');
+});
+
+test("one tenant's mirror marker does not suppress another tenant's reply with the same Chatwoot id", async () => {
+  // Chatwoot message ids are per-account autoincrement, so two tenants collide on low ids routinely.
+  // The echo marker must therefore never live in a global namespace keyed by the bare id — suppressing a
+  // genuine agent reply is a worse failure than the duplicate this guard exists to prevent.
+  const store = new MappingStore(fakeStorage(), fakeMappings);
+  const lock = new KeyedAsyncLock();
+  const engine = { canonicalChatId: async (_s: string, c: string) => c };
+  // Two WA sessions whose Chatwoot accounts both number this conversation 55.
+  await store.link('sessA', 'alice@c.us', 'instA', { conversationId: 55, contactId: 1, sourceId: 'a' });
+  await store.link('sessB', 'bob@c.us', 'instB', { conversationId: 55, contactId: 2, sourceId: 'b' });
+
+  // Tenant A mirrors an own send; Chatwoot numbers it 60, and the guard marks it.
+  const posted: Array<{ id: number }> = [];
+  const inboundA = {
+    lock, store, engine, instanceId: 'instA', relayGroups: true, relayMedia: true,
+    backfillLimit: 0, backfillAllOnce: false, log: () => {},
+    client: { postText: async () => { posted.push({ id: 60 }); return { id: 60 }; }, postMedia: async () => ({ id: 60 }) },
+  } as unknown as InboundDeps;
+  await handleSent(inboundA, 'sessA', 'Engine', { ...own, chatId: 'alice@c.us' } as IncomingMessage);
+  assert.equal(posted.length, 1);
+
+  // Tenant B's agent now replies, and Chatwoot happens to number THAT message 60 as well. The delivery
+  // is UNSCOPED, which is what makes this bite: a guard that keyed the marker on the delivery scope would
+  // fall back to a global `seen:cw:60` and find tenant A's marker sitting there.
+  const sent: Array<{ chatId?: string }> = [];
+  const outboundB = {
+    lock, store, engine, inboxId: INBOX_ID, log: () => {},
+    conversations: { send: async (e: { chatId?: string }) => { sent.push(e); return { messageId: 'wa-b' }; } },
+    handover: { set: async () => {} },
+  } as unknown as OutboundDeps;
+  await handleOutbound(outboundB, mirrorWebhook(60, undefined));
+
+  assert.equal(sent.length, 1, "tenant B's genuine reply was suppressed by tenant A's echo marker");
+  assert.equal(sent[0].chatId, 'bob@c.us');
 });
