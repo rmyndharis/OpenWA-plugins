@@ -156,6 +156,31 @@ test('cold lid->phone table (canonicalChatId cannot resolve @lid) DROPS the own 
   assert.deepEqual(counts(), { contacts: 0, convs: 0 }); // crucially: NO duplicate conversation created
 });
 
+test('an own send with no engine id is still mirrored, and cannot silence later ones', async () => {
+  // An engine that cannot read an id back reports the empty sentinel (Baileys' `?? ''`), which the
+  // codebase already treats as a real hazard elsewhere (outbound.ts logs it; the gateway's unique index
+  // exempts NULL because '' would collide). Here it collapsed every id-less own send onto ONE dedup key:
+  // the first marked `seen:<sess>:wa:`, and every later one was skipped as "already seen" for the
+  // marker's whole 3-day life — silently, and only for the operator's Chatwoot thread.
+  //
+  // An id-less message cannot be de-duplicated by definition, so the choice is which way to fail. A
+  // duplicate in the helpdesk is visible and harmless; a missing customer message is neither.
+  const { deps: d, posted } = deps({
+    store: { getByChat: async () => ({ conversationId: 55, contactId: 9, sourceId: 'src', name: 'x' }) },
+  });
+  const first = { ...own, id: '' } as IncomingMessage;
+  const second = { ...own, id: '', body: 'a different message' } as IncomingMessage;
+
+  await handleSent(d, 'sess', 'Engine', first);
+  await handleSent(d, 'sess', 'Engine', second);
+
+  assert.equal(posted.length, 2, 'the second id-less own send was swallowed by the first one\'s marker');
+  assert.deepEqual(
+    posted.map(p => p.c),
+    ['from my phone', 'a different message'],
+  );
+});
+
 test('respects relayGroups=false for a fromMe group send', async () => {
   const { deps: d, posted } = deps({ relayGroups: false });
   const grp = { ...own, id: 'o4', chatId: '12@g.us', isGroup: true } as IncomingMessage;

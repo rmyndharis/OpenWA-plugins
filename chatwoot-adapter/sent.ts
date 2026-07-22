@@ -34,10 +34,18 @@ export async function handleSent(
   const key = await deps.engine.canonicalChatId(sessionId, msg.chatId);
   await deps.lock.run(`${sessionId}:${key}`, async () => {
     try {
-      if (await deps.store.hasSeen('wa', msg.id, sessionId)) return;
+      // An engine that cannot read an id back reports the empty sentinel (Baileys' `?? ''`; outbound.ts
+      // logs the same case for its own echo guard). Such a message cannot be de-duplicated — and worse,
+      // keying on it collapses EVERY id-less own send onto one marker: the first would be relayed, and
+      // every later one skipped as "already seen" for the marker's full retention, silently and only in
+      // the operator's Chatwoot thread. Relay it and skip both marker operations instead. A duplicate in
+      // the helpdesk is visible and harmless; a missing customer message is neither.
+      const identifiable = Boolean(msg.id);
+      if (identifiable && (await deps.store.hasSeen('wa', msg.id, sessionId))) return;
       const conversationId = await findMappedConversation(deps, sessionId, msg, key);
       if (conversationId === null) return; // unmapped chat — drop, never create (no split)
-      await deps.store.markSeen('wa', msg.id, sessionId);
+      if (identifiable) await deps.store.markSeen('wa', msg.id, sessionId);
+      else deps.log('own send has no engine message id; relaying it without de-duplication');
       await relayMessage(deps, sessionId, conversationId, msg, 'outgoing');
     } catch (err) {
       deps.log('own-send relay failed', err);

@@ -6,6 +6,31 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.5.5] — 2026-07-22
+
+### Fixed
+
+- **Two of your own messages in a row could go missing from the Chatwoot thread.** When WhatsApp does
+  not return an id for a message you send — which happens occasionally, and more often on the Baileys
+  engine — the adapter used that missing id as its "already relayed" key. Every such message therefore
+  shared one key: the first reached Chatwoot, and any later one was treated as a duplicate and dropped
+  for the next three days. Silently, and only in Chatwoot: the message itself reached the recipient
+  normally. Messages without an id are now always relayed. They cannot be de-duplicated, so on the rare
+  occasion WhatsApp re-delivers one you may see it twice in the thread — visible, unlike losing it.
+
+### Changed
+
+- **Promoted from beta to stable.** The two-way relay has now been exercised end to end on both engines
+  (whatsapp-web.js and Baileys) against a live WhatsApp account: inbound relay, agent replies with text
+  and media, your own outbound messages mirrored without being re-sent, and a real history import.
+  Tested against OpenWA 0.10.5.
+
+  One limitation to be aware of, unchanged by this release: WhatsApp is migrating contacts to privacy
+  ids (`@lid`), and a contact first seen under its privacy id creates a separate Chatwoot contact from
+  one already known by phone number. The adapter resolves the two together whenever it can, and never
+  creates a second conversation for a chat it has already mapped, but a contact whose mapping is lost or
+  who arrives privacy-id-first can appear twice. See the README.
+
 ## [0.5.4] — 2026-07-21
 
 ### Fixed
