@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chatwoot-adapter` |
-| **Version** | 0.5.4 |
-| **Released** | 2026-07-21 |
-| **Status** | beta |
+| **Version** | 0.5.5 |
+| **Released** | 2026-07-22 |
+| **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.7 (tested 0.8.7) |
+| **Requires OpenWA** | ≥ 0.8.7 (tested 0.10.5) |
 | **Keywords** | chatwoot, helpdesk, inbox, handover, two-way, agent, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/chatwoot-adapter](https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter) |
 <!-- END DETAILS -->
@@ -158,6 +158,12 @@ instance id or route — so re-copy the ingress URL from the mint response.
   from splitting as long as the lid→phone mapping is known (after any reply to them). To resolve it on
   every inbound too — closing the gap for a contact you've only ever received from — set
   `RESOLVE_LID_TO_PHONE=true` in OpenWA.
+
+  Two residual cases remain, and both produce a second Chatwoot contact for the same person rather than
+  any loss of messages: a contact whose very first message arrives under their privacy id while Chatwoot
+  already knows them by phone number, and a chat whose stored mapping is lost. Once a chat is mapped the
+  adapter never creates a second conversation for it, so this cannot happen to a thread already in use.
+  If you do end up with a duplicate, merging the two contacts in Chatwoot is safe.
 - **Chatwoot** — account-level webhooks with timestamped HMAC signing (see Setup).
 
 ### Per-session config
