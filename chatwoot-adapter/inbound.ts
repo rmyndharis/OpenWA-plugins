@@ -25,7 +25,33 @@ export async function relayInbound(deps: InboundDeps, sessionId: string, msg: In
   if (created && deps.backfillLimit > 0) {
     await backfillHistory(deps, sessionId, msg.chatId, conversationId);
   }
-  await relayMessage(deps, sessionId, conversationId, msg, 'incoming');
+  try {
+    await relayMessage(deps, sessionId, conversationId, msg, 'incoming');
+  } catch (err) {
+    // A 404 mid-relay means the CACHED conversation id is gone — almost always because an operator
+    // (or Chatwoot) deleted the conversation out-of-band, leaving the conv<->WA mapping dangling. Drop
+    // the stale forward + scoped + legacy reverse keys and rebuild via the same resolveConversation ->
+    // ensureConversation path; then retry once. A second failure (404 or anything) survives the rebuild
+    // and falls through to the regular enqueueRetry -> drainRetries pipeline with its 5-attempt cap, so
+    // a wedged Chatwoot or a misconfigured inbox cannot loop here.
+    if ((err as { status?: number } | null)?.status !== 404) throw err;
+    const originalErr = err;
+    try {
+      await deps.store.unlinkByChatId(sessionId, msg.chatId);
+      await deps.store.unlinkByConversationId(sessionId, conversationId);
+      const re = await resolveConversation(deps, sessionId, msg, canonical);
+      // The deleted Chatwoot conversation is gone, so its history is gone too. When the rebuild mints a
+      // brand-new conversation, re-import prior history under the same gate the happy path uses — a fresh
+      // Chatwoot thread without context defeats the point of (lazy) backfill.
+      if (re.created && deps.backfillLimit > 0) {
+        await backfillHistory(deps, sessionId, msg.chatId, re.conversationId);
+      }
+      await relayMessage(deps, sessionId, re.conversationId, msg, 'incoming');
+    } catch (rebuildErr) {
+      deps.log('inbound 404-recovery failed; surfacing original 404 to retry queue', rebuildErr);
+      throw originalErr;
+    }
+  }
 }
 
 // WhatsApp → Chatwoot. Filter, then run resolve+post under the per-chat lock so two near-simultaneous

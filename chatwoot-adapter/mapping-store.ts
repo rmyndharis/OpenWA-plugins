@@ -207,4 +207,13 @@ export class MappingStore {
   async countRetries(): Promise<number> {
     return (await this.retryKeys()).length;
   }
+
+  async unlinkByChatId(sessionId: string, chatId: string) {
+    await this.storage.delete(this.fwdKey(sessionId, chatId));
+  }
+
+  async unlinkByConversationId(sessionId: string, conversationId: number) {
+    await this.storage.delete(this.revKey(sessionId, conversationId));
+    await this.storage.delete(this.legacyRevKey(conversationId));
+  }
 }
