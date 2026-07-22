@@ -5,60 +5,127 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chat Flow Config</title>
 <style>
+  /* Colour lives in custom properties so the dark theme is a variable swap rather than a second
+     stylesheet. The host resolves its theme and sends it with the config handshake
+     (config:value.theme), because this editor runs in an opaque-origin sandbox and cannot read the
+     dashboard's theme itself. Falls back to the OS preference when the host says nothing, so the editor
+     is still readable on a host that predates the theme field. */
+  :root {
+    --bg: #f8f9fa;
+    --fg: #212529;
+    --fg-strong: #1a1a2e;
+    --muted: #6c757d;
+    --hint: #868e96;
+    --surface: #fff;
+    --border: #dee2e6;
+    --border-input: #ced4da;
+    --border-soft: #e9ecef;
+    --accent: #4f7fff;
+    --accent-strong: #3360cc;
+    --accent-ring: rgba(79,127,255,0.15);
+    --add-bg: #e8f0fe; --add-fg: #2d5fc4; --add-bd: #b8d0f7; --add-bg-hover: #d0e3ff;
+    --rm-bg: #fdecea; --rm-fg: #b91c1c; --rm-bd: #f5c6c6; --rm-bg-hover: #fcd5d5;
+    --root-bg: #e6f4ea; --root-fg: #1a7a3a; --root-bd: #a8d5b5; --root-bg-hover: #c9e9d2;
+    --ok-bg: #d4edda; --ok-fg: #155724; --ok-bd: #c3e6cb;
+    --err-bg: #f8d7da; --err-fg: #721c24; --err-bd: #f5c6c6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12161c;
+      --fg: #e6e9ef;
+      --fg-strong: #f2f4f8;
+      --muted: #9aa4b2;
+      --hint: #8b95a3;
+      --surface: #1a1f27;
+      --border: #2b323c;
+      --border-input: #39414d;
+      --border-soft: #262d36;
+      --accent: #6b93ff;
+      --accent-strong: #4f7fff;
+      --accent-ring: rgba(107,147,255,0.25);
+      --add-bg: #1b2740; --add-fg: #9dbcff; --add-bd: #2d4372; --add-bg-hover: #24345a;
+      --rm-bg: #3a1f20; --rm-fg: #ff9a94; --rm-bd: #5c2f2f; --rm-bg-hover: #4a2728;
+      --root-bg: #16301f; --root-fg: #7fd39b; --root-bd: #27543a; --root-bg-hover: #1d4028;
+      --ok-bg: #16301f; --ok-fg: #7fd39b; --ok-bd: #27543a;
+      --err-bg: #3a1f20; --err-fg: #ff9a94; --err-bd: #5c2f2f;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12161c;
+    --fg: #e6e9ef;
+    --fg-strong: #f2f4f8;
+    --muted: #9aa4b2;
+    --hint: #8b95a3;
+    --surface: #1a1f27;
+    --border: #2b323c;
+    --border-input: #39414d;
+    --border-soft: #262d36;
+    --accent: #6b93ff;
+    --accent-strong: #4f7fff;
+    --accent-ring: rgba(107,147,255,0.25);
+    --add-bg: #1b2740; --add-fg: #9dbcff; --add-bd: #2d4372; --add-bg-hover: #24345a;
+    --rm-bg: #3a1f20; --rm-fg: #ff9a94; --rm-bd: #5c2f2f; --rm-bg-hover: #4a2728;
+    --root-bg: #16301f; --root-fg: #7fd39b; --root-bd: #27543a; --root-bg-hover: #1d4028;
+    --ok-bg: #16301f; --ok-fg: #7fd39b; --ok-bd: #27543a;
+    --err-bg: #3a1f20; --err-fg: #ff9a94; --err-bd: #5c2f2f;
+  }
+
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: system-ui, -apple-system, sans-serif;
     font-size: 14px;
-    background: #f8f9fa;
-    color: #212529;
+    background: var(--bg);
+    color: var(--fg);
     padding: 16px;
   }
-  h1 { font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #1a1a2e; }
+  h1 { font-size: 18px; font-weight: 600; margin-bottom: 16px; color: var(--fg-strong); }
   .field { margin-bottom: 14px; }
   label { display: block; font-weight: 500; margin-bottom: 4px; }
   input[type="text"], textarea {
     width: 100%;
     padding: 7px 10px;
-    border: 1px solid #ced4da;
+    border: 1px solid var(--border-input);
     border-radius: 5px;
     font-size: 14px;
     font-family: inherit;
-    background: #fff;
+    background: var(--surface);
+    color: var(--fg);
     transition: border-color 0.15s;
   }
   input[type="text"]:focus, textarea:focus {
     outline: none;
-    border-color: #4f7fff;
-    box-shadow: 0 0 0 2px rgba(79,127,255,0.15);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-ring);
   }
   textarea { resize: vertical; min-height: 64px; }
   .check-row { display: flex; align-items: center; gap: 8px; }
-  .check-row input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+  .check-row input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
   .section-title {
     font-weight: 600;
     font-size: 13px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #6c757d;
+    color: var(--muted);
     margin-bottom: 8px;
     margin-top: 18px;
   }
   .tree { margin-bottom: 12px; }
   .node {
-    background: #fff;
-    border: 1px solid #dee2e6;
+    background: var(--surface);
+    border: 1px solid var(--border);
     border-radius: 6px;
     padding: 10px 12px;
     margin-bottom: 8px;
   }
   .node-header { display: flex; align-items: flex-start; gap: 8px; }
-  .node-key {
-    width: 72px;
-    flex-shrink: 0;
-  }
+  /* `input.node-key` (0,1,1), not `.node-key` (0,1,0): the generic `input[type="text"]` rule above is
+     also (0,1,1), so a bare class lost to it and the key field stretched to 100%, pushing the reply
+     textarea and the row's buttons outside the card. flex-basis carries the width so the rule holds
+     even if a future edit reorders the stylesheet. */
+  input.node-key { flex: 0 0 72px; width: 72px; }
   .node-text { flex: 1; min-height: 48px; }
   .node-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
-  .children { margin-left: 20px; margin-top: 8px; padding-left: 12px; border-left: 2px solid #e9ecef; }
+  .children { margin-left: 20px; margin-top: 8px; padding-left: 12px; border-left: 2px solid var(--border-soft); }
   button {
     cursor: pointer;
     font-size: 12px;
@@ -69,36 +136,36 @@
     white-space: nowrap;
   }
   .btn-add {
-    background: #e8f0fe;
-    color: #2d5fc4;
-    border-color: #b8d0f7;
+    background: var(--add-bg);
+    color: var(--add-fg);
+    border-color: var(--add-bd);
   }
-  .btn-add:hover { background: #d0e3ff; }
+  .btn-add:hover { background: var(--add-bg-hover); }
   .btn-remove {
-    background: #fdecea;
-    color: #b91c1c;
-    border-color: #f5c6c6;
+    background: var(--rm-bg);
+    color: var(--rm-fg);
+    border-color: var(--rm-bd);
   }
-  .btn-remove:hover { background: #fcd5d5; }
+  .btn-remove:hover { background: var(--rm-bg-hover); }
   .btn-add-root {
-    background: #e6f4ea;
-    color: #1a7a3a;
-    border-color: #a8d5b5;
+    background: var(--root-bg);
+    color: var(--root-fg);
+    border-color: var(--root-bd);
     font-size: 13px;
     padding: 6px 14px;
     margin-bottom: 12px;
   }
-  .btn-add-root:hover { background: #c9e9d2; }
+  .btn-add-root:hover { background: var(--root-bg-hover); }
   .btn-save {
-    background: #4f7fff;
+    background: var(--accent);
     color: #fff;
-    border-color: #3360cc;
+    border-color: var(--accent-strong);
     font-size: 14px;
     padding: 9px 24px;
     font-weight: 600;
     margin-top: 16px;
   }
-  .btn-save:hover:not(:disabled) { background: #3360cc; }
+  .btn-save:hover:not(:disabled) { background: var(--accent-strong); }
   .btn-save:disabled { opacity: 0.55; cursor: not-allowed; }
   #feedback {
     margin-top: 10px;
@@ -107,9 +174,9 @@
     font-size: 13px;
     display: none;
   }
-  #feedback.ok { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; display: block; }
-  #feedback.err { background: #f8d7da; color: #721c24; border: 1px solid #f5c6c6; display: block; }
-  .hint { font-size: 11px; color: #868e96; margin-top: 2px; }
+  #feedback.ok { background: var(--ok-bg); color: var(--ok-fg); border: 1px solid var(--ok-bd); display: block; }
+  #feedback.err { background: var(--err-bg); color: var(--err-fg); border: 1px solid var(--err-bd); display: block; }
+  .hint { font-size: 11px; color: var(--hint); margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -123,7 +190,7 @@
 
 <div class="field">
   <label for="greeting">Greeting / opening menu</label>
-  <textarea id="greeting" rows="4" placeholder="Hi! Please choose:\n1. Hosting\n2. Support"></textarea>
+  <textarea id="greeting" rows="4" placeholder="Hi! Please choose:&#10;1. Hosting&#10;2. Support"></textarea>
 </div>
 
 <div class="field check-row">
@@ -275,10 +342,21 @@
     feedback.style.display = 'none';
   }
 
+  // The host resolves 'system' for us, so this is only ever 'light' or 'dark'. Anything else (including
+  // a host too old to send it) leaves the attribute off, which falls back to the OS preference. Sent once
+  // with the config handshake — the theme control is behind the modal overlay, so it cannot change while
+  // this editor is open.
+  function applyTheme(theme) {
+    if (theme === 'light' || theme === 'dark') {
+      document.documentElement.setAttribute('data-theme', theme);
+    }
+  }
+
   window.addEventListener('message', function(event) {
     var data = event.data;
     if (!data || typeof data.type !== 'string') return;
     if (data.type === 'config:value') {
+      applyTheme(data.theme);
       populateConfig(data.config);
     } else if (data.type === 'config:saved') {
       showFeedback('Saved!', true);

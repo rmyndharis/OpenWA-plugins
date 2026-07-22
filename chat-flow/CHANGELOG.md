@@ -8,6 +8,25 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.0.7] — 2026-07-22
+
+### Fixed
+
+- **The menu-option rows are usable again.** Each option row rendered with its key field stretched
+  across the full width, pushing the reply text and the row's own buttons outside the panel, where they
+  were cut off and unreachable — so a menu could not be edited at all. The row now lays out as intended:
+  a narrow key, the reply text filling the space, and the Remove and Sub-option buttons visible beside
+  them.
+- **The greeting placeholder no longer suggests typing `\n` for a line break.** It showed
+  `Hi! Please choose:\n1. Hosting` literally, and a `\n` typed into the greeting is delivered to
+  WhatsApp exactly as written rather than as a new line. The example is now shown across real lines.
+
+### Added
+
+- **The editor follows the dashboard's dark theme.** It was always light, so on a dark dashboard it
+  appeared as a bright panel in the middle of the dialog. It now uses whichever theme the dashboard
+  reports (OpenWA 0.10.5+), and falls back to the operating system preference on older versions.
+
 ## [1.0.6] — 2026-07-18
 
 ### Fixed
