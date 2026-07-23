@@ -7,8 +7,17 @@ import { MAX_PENDING_RETRIES, slimForRetry } from './retry.ts';
 export type { InboundDeps };
 
 // The resolve + backfill + relay core, lock-free, that THROWS on failure. Shared by the live inbound
-// handler and the retry drain (retry.ts) so a retried message follows the exact same path.
-export async function relayInbound(deps: InboundDeps, sessionId: string, msg: IncomingMessage): Promise<void> {
+// handler and the retry drain (retry.ts) so a retried message follows the exact same path. `opts.recoverOn404`
+// defaults TRUE for the live path; the retry drain (index.ts) flips it FALSE so drain attempts against a
+// still-dangling mapping burn their retry-budget instead of minting a fresh orphan conversation per
+// attempt — the next LIVE inbound recovers the chat.
+export async function relayInbound(
+  deps: InboundDeps,
+  sessionId: string,
+  msg: IncomingMessage,
+  opts: { recoverOn404?: boolean } = {},
+): Promise<void> {
+  const recoverOn404 = opts.recoverOn404 ?? true;
   // Best-effort @lid -> <phone>@c.us for the LOOKUP only (never the lock — see handleInbound). Raw-fallback:
   // canonicalChatId needs a live engine, but the retry drain re-relays messages whose WA session may be
   // offline (the relay is a Chatwoot post that doesn't need it), so a failure must not block the relay.
@@ -18,7 +27,7 @@ export async function relayInbound(deps: InboundDeps, sessionId: string, msg: In
   } catch {
     /* session down / unresolvable — fall back to the raw id; dedup is best-effort */
   }
-  const { conversationId, created } = await resolveConversation(deps, sessionId, msg, canonical);
+  const { conversationId, created, foundKey } = await resolveConversation(deps, sessionId, msg, canonical);
   // Lazy backfill: the first time this chat maps, replay its recent history (older messages, both
   // directions, deduped) BEFORE posting this one — so the thread reads chronologically and this message's
   // quote resolves against a just-posted source_id. This message is already markSeen, so backfill skips it.
@@ -35,9 +44,17 @@ export async function relayInbound(deps: InboundDeps, sessionId: string, msg: In
     // and falls through to the regular enqueueRetry -> drainRetries pipeline with its 5-attempt cap, so
     // a wedged Chatwoot or a misconfigured inbox cannot loop here.
     if ((err as { status?: number } | null)?.status !== 404) throw err;
+    // Drain path: same 404, but the drain is already a re-attempt of a previously failed relay. Rebuilding
+    // here would mint a fresh orphan conversation per attempt (up to 5) and never converge — better to let
+    // the retry budget run out and let the NEXT live inbound self-heal the chat.
+    if (!recoverOn404) throw err;
     const originalErr = err;
     try {
-      await deps.store.unlinkByChatId(sessionId, msg.chatId);
+      // Unlink the key the mapping actually lived under (resolveConversation returns it), not msg.chatId.
+      // A migrated contact's mapping is often keyed under the canonical @c.us while msg.chatId is @lid —
+      // unlinking the raw key would miss entirely, resolveConversation would re-find the stale row via its
+      // canonical fallback, the second relay would 404 again, and the message would dead-letter.
+      await deps.store.unlinkByChatId(sessionId, foundKey);
       await deps.store.unlinkByConversationId(sessionId, conversationId);
       const re = await resolveConversation(deps, sessionId, msg, canonical);
       // The deleted Chatwoot conversation is gone, so its history is gone too. When the rebuild mints a
@@ -100,11 +117,13 @@ async function resolveConversation(
   sessionId: string,
   msg: IncomingMessage,
   canonicalChatId: string,
-): Promise<{ conversationId: number; created: boolean }> {
+): Promise<{ conversationId: number; created: boolean; foundKey: string }> {
   // Dual lookup (re-read inside the lock): the raw chatId finds a mapping keyed by @lid, the canonical
   // chatId finds one keyed by @c.us (a contact that has since migrated to @lid, when the lid resolves) —
   // so a migrated contact's inbound lands in its EXISTING conversation instead of splitting a duplicate.
-  // `foundKey` is the key the mapping actually lives under, so refreshContactName patches the right doc.
+  // `foundKey` is the key the mapping actually lives under, so refreshContactName patches the right doc
+  // AND the 404-recovery path knows which forward key to unlink (a migrated contact's stale row is under
+  // the canonical key, NOT msg.chatId — unlinking the raw id would miss it entirely).
   let existing = await deps.store.getByChat(sessionId, msg.chatId);
   let foundKey = msg.chatId;
   if (!existing && canonicalChatId !== msg.chatId) {
@@ -113,7 +132,7 @@ async function resolveConversation(
   }
   if (existing) {
     await refreshContactName(deps, sessionId, msg, existing, foundKey);
-    return { conversationId: existing.conversationId, created: false };
+    return { conversationId: existing.conversationId, created: false, foundKey };
   }
   const name = msg.isGroup
     ? `Group ${msg.chatId}`
@@ -122,5 +141,8 @@ async function resolveConversation(
     name,
     phone: msg.isGroup ? undefined : msg.senderPhone ?? undefined,
   });
-  return { conversationId, created: true };
+  // A freshly-created mapping lives under msg.chatId (ensureConversation links raw). The recovery path
+  // reads foundKey off this return only when `created === false` (a 404 implies a row existed); the value
+  // here is still defined so the return shape is uniform.
+  return { conversationId, created: true, foundKey: msg.chatId };
 }
