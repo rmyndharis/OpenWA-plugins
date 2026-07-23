@@ -306,7 +306,7 @@ test('a 404 on the REBUILT inbound conversation propagates to the retry queue (n
         throw e; // BOTH the dead id AND the rebuilt id 404 — the recovery cannot succeed
       },
     },
-    log: logCalls.push.bind(logCalls),
+    log: (m: string) => { logCalls.push(m); },
   });
   await handleInbound(d, 'sess', 'Engine', { ...msg, id: 'm-recover-twice' });
   assert.deepEqual(unlinksConv, [55], 'still unlinks the dead conv mapping once');

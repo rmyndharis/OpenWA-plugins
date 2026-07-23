@@ -274,7 +274,7 @@ test('a 404 on the REBUILT own-send conversation logs failure (sent is at-most-o
       findOpenConversation: async () => null,
       createConversation: async () => { createConvCalls++; return 200; },
     },
-    log: logCalls.push.bind(logCalls),
+    log: (m: string) => { logCalls.push(m); },
   });
   await handleSent(d, 'sess', 'Engine', { ...own, id: 'o-double-404' });
   assert.deepEqual(unlinksConv, [55], 'still unlinks the dead conv mapping once');
