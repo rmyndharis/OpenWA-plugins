@@ -1,8 +1,6 @@
 import type { IPlugin, PluginContext, HookContext, IncomingMessage } from '../types/openwa';
 import { parseRules, matchRule, CompiledRule } from './rules.ts';
-
-/** Cap on the per-chat fallback-cooldown map (drop oldest past this) so it can't grow unbounded. */
-const MAX_COOLDOWN_ENTRIES = 5000;
+import { allowCooldown } from './cooldown.ts';
 
 export interface FaqConfig {
   fallbackReply: string;
@@ -39,22 +37,6 @@ export function parseConfig(raw: Record<string, unknown>): {
       respondInGroups: raw.respondInGroups === true,
     },
   };
-}
-
-/**
- * Decide whether a fallback may be sent to `key` now. On allow, records `nowMs` (re-inserting so the
- * map evicts least-recently-used) and caps the map by dropping the LRU entry. A `cooldownMs` of 0 always allows.
- */
-export function allowFallback(map: Map<string, number>, key: string, nowMs: number, cooldownMs: number): boolean {
-  const last = map.get(key);
-  if (last !== undefined && nowMs - last < cooldownMs) return false;
-  map.delete(key); // re-insert so iteration order tracks recency (LRU by touch)
-  map.set(key, nowMs);
-  if (map.size > MAX_COOLDOWN_ENTRIES) {
-    const oldest = map.keys().next().value as string | undefined;
-    if (oldest !== undefined) map.delete(oldest);
-  }
-  return true;
 }
 
 export default class FaqBot implements IPlugin {
@@ -106,7 +88,7 @@ export default class FaqBot implements IPlugin {
       if (cfg.config.fallbackReply) {
         const key = `${sessionId}:${m.chatId}`;
         const cooldownMs = Math.max(0, cfg.config.fallbackCooldownSec) * 1000;
-        if (allowFallback(this.fallbackAt, key, Date.now(), cooldownMs)) {
+        if (allowCooldown(this.fallbackAt, key, Date.now(), cooldownMs)) {
           await ctx.messages.reply(sessionId, m.chatId, m.id, cfg.config.fallbackReply);
         }
       }

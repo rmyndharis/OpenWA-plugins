@@ -95,17 +95,6 @@ export async function prune(
   return { ran: true, pruned };
 }
 
-const MAX_COOLDOWN_ENTRIES = 5000;
-
-/** In-memory per-key cooldown, LRU-capped. True if allowed now (and records the touch); false if within the window. */
-export function allowCooldown(map: Map<string, number>, key: string, nowMs: number, cooldownMs: number): boolean {
-  const last = map.get(key);
-  if (last !== undefined && nowMs - last < cooldownMs) return false;
-  map.delete(key); // re-insert so iteration order tracks recency (LRU by touch)
-  map.set(key, nowMs);
-  if (map.size > MAX_COOLDOWN_ENTRIES) {
-    const oldest = map.keys().next().value as string | undefined;
-    if (oldest !== undefined) map.delete(oldest);
-  }
-  return true;
-}
+// The in-memory per-key cooldown lives in ./cooldown.ts (shared copy); re-exported here so existing
+// imports from './reliability.ts' keep working.
+export { allowCooldown } from './cooldown.ts';
