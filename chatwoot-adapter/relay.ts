@@ -108,6 +108,36 @@ export async function relayMessage(
   });
 }
 
+// Best phone for a brand-new Chatwoot contact, or `undefined` when no source knows it. Priority:
+//   1. `msg.senderPhone` — populated by the host ONLY for `@lid` senders under `RESOLVE_LID_TO_PHONE=true`;
+//      MSISDN digits, no `+` guaranteed, so we normalize.
+//   2. User-part of `canonicalChatId` when it ends `@c.us` — covers a warmed lid→pn mapping (the id is
+//      @lid-aware, resolved via the engine's in-memory map — no network) AND every plain `@c.us` chat,
+//      whose JID user-part is by definition the MSISDN (previously created with no phone at all).
+//
+// Deliberately NOT consulted: `msg.contact?.number`. For an `@lid` sender it carries the LID digits, not
+// the real phone — matching on it would corrupt Chatwoot's contact search and future merges.
+//
+// Groups and an unresolved `@lid` (canonical stays `@lid`) yield `undefined` — pre-fix behavior preserved.
+// Pure & synchronous, so the bulk sweep (ChatSummary, id already neutral) and retry drain reuse it freely.
+export function resolvePhone(
+  msg: { isGroup: boolean; senderPhone?: string | null },
+  canonicalChatId: string,
+): string | undefined {
+  if (msg.isGroup) return undefined;
+  // Digits only, prefixed `+`; undefined if nothing survives (a host error like '--' must not emit a bare '+').
+  const e164 = (raw: string): string | undefined => {
+    const digits = raw.replace(/\D/g, '');
+    return digits ? `+${digits}` : undefined;
+  };
+  if (msg.senderPhone) {
+    const phone = e164(msg.senderPhone);
+    if (phone) return phone;
+  }
+  if (canonicalChatId.endsWith('@c.us')) return e164(canonicalChatId.slice(0, -'@c.us'.length));
+  return undefined;
+}
+
 // Get-or-create the Chatwoot contact + conversation for a chat and mirror the mapping. Self-contained so
 // the bulk backfill can call it from a chat summary (no triggering message), and idempotent so a chat
 // already mapped by the live path is a no-op.

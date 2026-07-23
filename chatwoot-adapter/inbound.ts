@@ -1,6 +1,6 @@
 import type { IncomingMessage } from '../types/openwa';
 import { shouldRelayInbound } from './filters.ts';
-import { relayMessage, ensureConversation, refreshContactName, type InboundDeps } from './relay.ts';
+import { relayMessage, ensureConversation, refreshContactName, resolvePhone, type InboundDeps } from './relay.ts';
 import { backfillHistory } from './backfill.ts';
 import { MAX_PENDING_RETRIES, slimForRetry } from './retry.ts';
 
@@ -94,7 +94,9 @@ async function resolveConversation(
     : msg.contact?.pushName || msg.contact?.name || msg.senderPhone || msg.chatId;
   const conversationId = await ensureConversation(deps, sessionId, msg.chatId, {
     name,
-    phone: msg.isGroup ? undefined : msg.senderPhone ?? undefined,
+    // Phone from the host-resolved sender (RESOLVE_LID_TO_PHONE), or the canonical chat id (warm lid→pn
+    // cache / every plain @c.us chat); undefined when genuinely unknown so the contact still creates.
+    phone: resolvePhone(msg, canonicalChatId),
   });
   return { conversationId, created: true };
 }

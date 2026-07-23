@@ -210,3 +210,77 @@ test('never renames a group contact from a member pushName (#609)', async () => 
   await handleInbound(d, 'sess', 'Engine', grp);
   assert.equal(updates.length, 0);
 });
+
+// Helpers for the create-contact phone assertions below: capture the (identifier, name, phone) triple
+// every createContact call was made with. Phone is the new behavior under test (resolvePhone feeds it).
+function captureCreateContact() {
+  const calls: Array<{ identifier: string; name: string; phone: string | undefined }> = [];
+  const client = {
+    createContact: async (identifier: string, name: string, phone?: string) => {
+      calls.push({ identifier, name, phone });
+      return { id: 9, sourceId: 'src' };
+    },
+  };
+  return { calls, client };
+}
+
+test('@lid inbound with senderPhone set (RESOLVE_LID_TO_PHONE=true) creates the contact with the real phone', async () => {
+  const { calls, client } = captureCreateContact();
+  const { deps: d } = deps({ client });
+  // senderPhone is what the host populates when the env flag is on — MSISDN digits, no `+` guaranteed.
+  const lid = { ...msg, id: 'lid-pn', chatId: '118367890123478@lid' } as IncomingMessage;
+  lid.senderPhone = '1234567890';
+  await handleInbound(d, 'sess', 'Engine', lid);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].phone, '+1234567890');
+});
+
+test('@lid inbound with a warm lid->phone mapping (canonicalChatId resolves) creates the contact with the real phone', async () => {
+  const { calls, client } = captureCreateContact();
+  const { deps: d } = deps({
+    client,
+    // The engine's in-memory lidMappingStore returns the chat's `<phone>@c.us` once any reply to them
+    // has warmed it, with RESOLVE_LID_TO_PHONE off.
+    engine: { canonicalChatId: async (_s: string, c: string) => (c === '118367890123478@lid' ? '1234567890@c.us' : c) },
+  });
+  const lid = { ...msg, id: 'lid-warm', chatId: '118367890123478@lid' } as IncomingMessage;
+  lid.senderPhone = undefined;
+  await handleInbound(d, 'sess', 'Engine', lid);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].phone, '+1234567890');
+});
+
+test('@lid inbound with COLD lid mapping (RESOLVE_LID_TO_PHONE off, no reply yet) creates the contact without a phone — no regression vs pre-fix behavior', async () => {
+  const { calls, client } = captureCreateContact();
+  const { deps: d } = deps({
+    client,
+    engine: { canonicalChatId: async (_s: string, c: string) => c }, // unresolved → @lid stays @lid
+  });
+  const lid = { ...msg, id: 'lid-cold', chatId: '118367890123478@lid' } as IncomingMessage;
+  lid.senderPhone = undefined;
+  await handleInbound(d, 'sess', 'Engine', lid);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].phone, undefined); // genuinely unknown — pre-fix behavior preserved
+});
+
+test('plain `@c.us` inbound without senderPhone creates the contact with the phone (resolved from the chatId user-part)', async () => {
+  const { calls, client } = captureCreateContact();
+  const { deps: d } = deps({ client });
+  // senderPhone on the host is lid-only, so a plain @c.us sender usually has no senderPhone at all.
+  const c_us = { ...msg, id: 'cn1', chatId: '1234567890@c.us' } as IncomingMessage;
+  c_us.senderPhone = undefined;
+  await handleInbound(d, 'sess', 'Engine', c_us);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].phone, '+1234567890');
+});
+
+test('a group inbound creates the group contact without a phone, regardless of senderPhone', async () => {
+  const { calls, client } = captureCreateContact();
+  const { deps: d } = deps({ client });
+  const grp = { ...msg, id: 'g1', isGroup: true, chatId: '120363@g.us', author: '621@c.us' } as IncomingMessage;
+  grp.senderPhone = '1234567890';
+  await handleInbound(d, 'sess', 'Engine', grp);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].phone, undefined); // groups never get a phone
+  assert.equal(calls[0].name, 'Group 120363@g.us');
+});

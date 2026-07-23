@@ -1,5 +1,5 @@
 import type { ChatSummary, IncomingMessage } from '../types/openwa';
-import { relayMessage, ensureConversation, type InboundDeps } from './relay.ts';
+import { relayMessage, ensureConversation, resolvePhone, type InboundDeps } from './relay.ts';
 
 // Fetch a chat's recent history oldest->newest. Best-effort: any failure (including an engine that does
 // not support history, e.g. Baileys, which rejects) yields an empty list so callers degrade cleanly.
@@ -67,7 +67,12 @@ export async function backfillAllChats(deps: InboundDeps, sessionId: string): Pr
         try {
           const ordered = await fetchHistory(deps, sessionId, chat.id);
           if (!ordered.length) return; // nothing to import -> don't create an empty Chatwoot conversation
-          const conversationId = await ensureConversation(deps, sessionId, chat.id, { name: chat.name || chat.id });
+          // chat.id is already the neutral JID on this path (anti-corruption layer), so the phone can be
+          // resolved from it without an engine call. Groups skip (no MSISDN); a cold @lid stays no-phone.
+          const conversationId = await ensureConversation(deps, sessionId, chat.id, {
+            name: chat.name || chat.id,
+            phone: resolvePhone(chat, chat.id),
+          });
           await replayHistory(deps, sessionId, conversationId, ordered);
         } catch (err) {
           deps.log(`bulk backfill failed for ${chat.id}`, err);
