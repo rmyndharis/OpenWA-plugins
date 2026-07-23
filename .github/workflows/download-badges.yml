@@ -1,0 +1,48 @@
+name: download-badges
+
+# Sum per-plugin .zip downloads across all GitHub Releases and publish shields.io endpoint JSON files
+# to the `badges` branch (raw.githubusercontent.com/.../badges/downloads/<plugin>.json), which the
+# per-plugin README badges point at. A separate branch keeps the daily commit off main so CI is not
+# re-triggered. Runs twice a day; download_count only moves when someone downloads, so more often is noise.
+on:
+  schedule:
+    - cron: '43 6,18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Aggregate downloads
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/download-badges.mjs out
+
+      - name: Publish to the badges branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin badges >/dev/null 2>&1; then
+            git fetch origin badges:badges
+            git checkout badges
+          else
+            git checkout --orphan badges
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+          mkdir -p downloads
+          cp out/*.json downloads/
+          git add downloads
+          if git diff --cached --quiet; then
+            echo "No download-count change; nothing to commit."
+            exit 0
+          fi
+          git commit -m "Update download badges ($(date -u +%Y-%m-%d))"
+          git push origin badges

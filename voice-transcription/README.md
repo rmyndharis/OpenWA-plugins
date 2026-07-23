@@ -6,6 +6,7 @@
 ![type: extension](https://img.shields.io/badge/type-extension-blue.svg)
 ![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)
 ![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.7.0-25D366.svg)
+[![downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Frmyndharis%2FOpenWA-plugins%2Fbadges%2Fdownloads%2Fvoice-transcription.json)](https://github.com/rmyndharis/OpenWA-plugins/releases?q=voice-transcription)
 
 ## Details
 

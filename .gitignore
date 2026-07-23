@@ -79,3 +79,6 @@ _docs/
 .superpowers/
 # Packaged plugins
 *.zip
+
+# Download badge output (node scripts/download-badges.mjs)
+.badges-out/
