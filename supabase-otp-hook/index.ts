@@ -26,6 +26,8 @@ export default class SupabaseSmsHook implements IPlugin {
           config,
           messages: ctx.messages,
           log: (m, meta) => ctx.logger.warn(m, meta),
+          // Best-effort LID→phone resolution (0.8.7+, engine:read). Absent on older hosts.
+          canonicalChatId: ctx.engine?.canonicalChatId?.bind(ctx.engine),
         },
         req,
       );

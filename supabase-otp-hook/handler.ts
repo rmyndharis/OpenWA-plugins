@@ -28,6 +28,13 @@ export interface HandlerDeps {
   config: SupabaseSmsConfig;
   messages: Pick<PluginMessagingCapability, 'sendText'>;
   log: (message: string, meta?: Record<string, unknown>) => void;
+  /**
+   * Optional `ctx.engine.canonicalChatId` (OpenWA 0.8.7+). When present, the phone-derived
+   * `<digits>@c.us` chat id is resolved to the session's canonical id before sending, so an OTP
+   * still lands in the right chat when the contact is keyed by a `@lid` privacy id. Absent (older
+   * host or no engine:read permission) the raw phone JID is used unchanged.
+   */
+  canonicalChatId?: (sessionId: string, chatId: string) => Promise<string>;
 }
 
 interface SupabaseSmsPayload {
@@ -87,26 +94,47 @@ export async function handleSendSms(deps: HandlerDeps, req: WebhookRequest): Pro
     return;
   }
 
+  // Resolve to the canonical chat id when the host supports it (best-effort: any failure keeps the
+  // phone-derived JID). See HandlerDeps.canonicalChatId. Bounded to 2 s: this is the ONLY await before
+  // the fire-and-forget send, and a wedged engine bridge must not stall the ingress job into a
+  // timeout → retry → duplicate OTP.
+  let targetChatId = chatId;
+  if (deps.canonicalChatId) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      targetChatId = await Promise.race([
+        deps.canonicalChatId(sessionId, chatId),
+        new Promise<string>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('canonicalChatId timeout')), 2000);
+        }),
+      ]);
+    } catch {
+      /* keep the phone-derived JID */
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   if (cfg.debug) {
     deps.log('supabase-otp-hook: inbound delivery', {
       debug: true,
       instanceId: req.instanceId,
       deliveryId: req.deliveryId,
       sessionId,
-      chatId,
+      chatId: targetChatId,
     });
   }
 
   const text = composeMessage(cfg.messageTemplate, otp, cfg.appName);
-  if (cfg.debug) deps.log('supabase-otp-hook: sending OTP', { debug: true, sessionId, chatId, text });
+  if (cfg.debug) deps.log('supabase-otp-hook: sending OTP', { debug: true, sessionId, chatId: targetChatId, text });
 
   // Fire-and-forget: the worker dispatch is bounded to 5 s (INGRESS_DISPATCH_TIMEOUT_MS), so awaiting a
   // slow send risks a 504 → retry → DUPLICATE OTP. Background it; failures are logged, not retried.
-  void deps.messages.sendText(sessionId, chatId, text).then(
-    () => { if (cfg.debug) deps.log('supabase-otp-hook: sendText ok', { debug: true, sessionId, chatId }); },
+  void deps.messages.sendText(sessionId, targetChatId, text).then(
+    () => { if (cfg.debug) deps.log('supabase-otp-hook: sendText ok', { debug: true, sessionId, chatId: targetChatId }); },
     (err: unknown) => {
       deps.log('supabase-otp-hook: sendText failed (background)', {
-        sessionId, chatId, error: err instanceof Error ? err.message : String(err),
+        sessionId, chatId: targetChatId, error: err instanceof Error ? err.message : String(err),
       });
     },
   );
