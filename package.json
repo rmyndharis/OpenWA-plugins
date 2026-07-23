@@ -5,11 +5,13 @@
   "type": "module",
   "description": "Official & community plugins for OpenWA.",
   "license": "MIT",
+  "engines": { "node": ">=22" },
   "scripts": {
     "build": "for d in */; do if [ -f \"${d}manifest.json\" ]; then node package.mjs \"${d%/}\"; fi; done",
     "catalog": "node scripts/catalog.mjs",
     "catalog:check": "node scripts/catalog.mjs --check",
-    "test": "node --import tsx --test \"gsheets-logger/*.test.ts\" \"faq-bot/*.test.ts\" \"after-hours/*.test.ts\" \"chat-flow/*.test.ts\" \"group-translate/**/*.test.ts\" \"voice-transcription/**/*.test.ts\" \"chatwoot-adapter/**/*.test.ts\" \"typebot-connector/**/*.test.ts\" \"http-action/*.test.ts\" \"supabase-otp-hook/*.test.ts\"",
+    "test": "node scripts/run-tests.mjs",
+    "test:coverage": "node scripts/run-tests.mjs --experimental-test-coverage",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
