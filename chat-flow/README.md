@@ -6,6 +6,7 @@
 ![type: extension](https://img.shields.io/badge/type-extension-blue.svg)
 ![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)
 ![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.7.0-25D366.svg)
+[![downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Frmyndharis%2FOpenWA-plugins%2Fbadges%2Fdownloads%2Fchat-flow.json)](https://github.com/rmyndharis/OpenWA-plugins/releases?q=chat-flow)
 
 ## Details
 
@@ -114,6 +115,13 @@ be overridden per WhatsApp session via the dashboard; an override takes effect o
 message (config is re-read per event). For example, two sessions can run different menu trees. Flow
 state is keyed per `(session, chat)` in storage, so flows for sessions with different menus never
 interfere.
+
+### Known limitations
+
+- **WhatsApp `@lid` migration:** flow state is keyed by the chat id as received. If a contact migrates
+  between a `@lid` privacy id and a phone-based `@c.us` id mid-flow, the in-progress menu state is
+  orphaned and the contact restarts from the greeting on the new id. A proper fix needs a host-side
+  lid↔phone resolver; tracked upstream.
 
 ## Security
 

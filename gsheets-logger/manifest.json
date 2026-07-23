@@ -1,7 +1,7 @@
 {
   "id": "gsheets-logger",
   "name": "Google Sheets Logger",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Logs WhatsApp message events to a Google Sheet via a service account.",
@@ -11,10 +11,12 @@
   "repository": "https://github.com/rmyndharis/OpenWA-plugins",
   "keywords": ["google-sheets", "logging", "audit", "crm", "whatsapp", "openwa"],
   "status": "stable",
-  "minOpenWAVersion": "0.6.1",
+  "minOpenWAVersion": "0.7.0",
   "testedOpenWAVersion": "0.8.1",
   "provides": ["message-logging"],
-  "permissions": [],
+  "permissions": ["net:fetch"],
+  "net": { "allow": ["oauth2.googleapis.com", "sheets.googleapis.com"] },
+  "sessionScoped": true,
   "sessions": ["*"],
   "hooks": ["message:received", "message:sent", "message:failed", "message:ack"],
   "configSchema": {

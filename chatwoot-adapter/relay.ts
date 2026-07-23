@@ -68,6 +68,11 @@ export async function relayMessage(
   msg: IncomingMessage,
   messageType: 'incoming' | 'outgoing',
 ): Promise<void> {
+  // Conversation-scoped lock spanning the POST + echo-marker write. outbound.relay dedups the webhook
+  // echo under the SAME key, so an echo processed while this POST is still in flight waits for the
+  // marker instead of racing it (the surrounding per-chat locks don't help: inbound/backfill lock the
+  // raw chatId, outbound the canonical one). Innermost on every path, so no lock-order cycle.
+  await deps.lock.run(`${sessionId}:conv:${conversationId}`, async () => {
   const content = prefixSender(msg);
   const post = { sourceId: msg.id, inReplyToExternalId: msg.quotedMessage?.id, messageType };
   const isVoice = msg.type === 'voice';
@@ -100,6 +105,7 @@ export async function relayMessage(
   // is always defined — never the ingress delivery's `instance.sessionScope ?? undefined`, which is
   // undefined for an unscoped instance and would key a different marker.
   if (messageType === 'outgoing') await deps.store.markSeen('cw', String(created.id), sessionId);
+  });
 }
 
 // Best phone for a brand-new Chatwoot contact, or `undefined` when no source knows it. Priority:

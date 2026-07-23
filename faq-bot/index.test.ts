@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseConfig, allowFallback } from './index.ts';
+import { parseConfig } from './index.ts';
+import { allowCooldown as allowFallback } from './cooldown.ts';
 
 const rules = JSON.stringify([{ mode: 'contains', pattern: 'hi', reply: 'hello' }]);
 

@@ -7,6 +7,7 @@
 ![type: extension](https://img.shields.io/badge/type-extension-blue.svg)
 ![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)
 ![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.8.16-25D366.svg)
+[![downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Frmyndharis%2FOpenWA-plugins%2Fbadges%2Fdownloads%2Fsupabase-otp-hook.json)](https://github.com/rmyndharis/OpenWA-plugins/releases?q=supabase-otp-hook)
 
 ## Details
 
@@ -14,8 +15,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `supabase-otp-hook` |
-| **Version** | 0.1.0 |
-| **Released** | 2026-07-07 |
+| **Version** | 0.2.0 |
+| **Released** | 2026-07-23 |
 | **Status** | beta |
 | **Author** | maplerichie |
 | **License** | MIT |

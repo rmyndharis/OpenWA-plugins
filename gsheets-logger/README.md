@@ -5,7 +5,8 @@
 
 ![type: extension](https://img.shields.io/badge/type-extension-blue.svg)
 ![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)
-![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.6.1-25D366.svg)
+![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.7.0-25D366.svg)
+[![downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Frmyndharis%2FOpenWA-plugins%2Fbadges%2Fdownloads%2Fgsheets-logger.json)](https://github.com/rmyndharis/OpenWA-plugins/releases?q=gsheets-logger)
 
 ## Details
 
@@ -13,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `gsheets-logger` |
-| **Version** | 0.2.3 |
-| **Released** | 2026-07-02 |
+| **Version** | 0.3.0 |
+| **Released** | 2026-07-23 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.6.1 (tested 0.8.1) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.8.1) |
 | **Keywords** | google-sheets, logging, audit, crm, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/gsheets-logger](https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger) |
 <!-- END DETAILS -->
@@ -38,8 +39,10 @@ The installed version is also visible in the OpenWA dashboard Plugins list (`v0.
   dependencies**, so the package is tiny.
 - **Formula-injection safe** — writes with `valueInputOption=RAW` and neutralizes CSV/Sheets formula
   triggers, while leaving legitimate `+`/`-` content (phone numbers) intact in free-text cells.
-- **Least privilege** — declares no capabilities (`permissions: []`); it only reads hook events and
-  writes to your sheet, never sends messages or reads contacts.
+- **Least privilege** — declares only `net:fetch`, allowlisted to the two fixed Google hosts
+  (`oauth2.googleapis.com`, `sheets.googleapis.com`) via `net.allow`; all outbound HTTP goes through the
+  host-proxied, SSRF-guarded `ctx.net.fetch`. It only reads hook events and writes to your sheet,
+  never sends messages or reads contacts.
 - **Self-reporting version** — surfaces its own version in logs and `healthCheck`.
 
 ## What it logs
@@ -199,8 +202,10 @@ The target tab must exist, **with a header row of your choosing** — the plugin
 
 ## Compatibility
 
-External plugins run **sandboxed in a worker thread** (since OpenWA **v0.6.0**). Two capabilities are
-version-dependent:
+External plugins run **sandboxed in a worker thread** (since OpenWA **v0.6.0**). Requires OpenWA
+**≥ 0.7.0** — all outbound HTTP (OAuth token + Sheets append) goes through the host-proxied,
+SSRF-guarded `ctx.net.fetch` introduced in v0.7, allowlisted to the two fixed Google hosts. Two further
+capabilities are version-dependent:
 
 - **`message:ack` rows** require OpenWA **≥ v0.6.1** (#427). On v0.6.0 the hook was declared but never
   fired, so ack rows are absent.

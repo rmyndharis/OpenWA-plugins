@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { handleSent } from './sent.ts';
 import { handleOutbound, type OutboundDeps } from './outbound.ts';
-import type { InboundDeps } from './relay.ts';
+import { relayMessage, type InboundDeps } from './relay.ts';
 import { KeyedAsyncLock } from './chat-lock.ts';
 import { MappingStore } from './mapping-store.ts';
 import type {
@@ -176,4 +176,46 @@ test("one tenant's mirror marker does not suppress another tenant's reply with t
 
   assert.equal(sent.length, 1, "tenant B's genuine reply was suppressed by tenant A's echo marker");
   assert.equal(sent[0].chatId, 'bob@c.us');
+});
+
+test('an echo webhook processed while the adapter post is still in flight is NOT re-sent (backfill race)', async () => {
+  // relayMessage marks the 'cw' echo marker AFTER the POST returns. Backfill holds the RAW chat lock
+  // while outbound.relay dedups under the CANONICAL lock — two different locks — so a Chatwoot
+  // message_created webhook processed inside that window (the webhook can arrive before the POST
+  // response does) would see no marker and re-send a backfilled message to the customer.
+  const store = new MappingStore(fakeStorage(), fakeMappings);
+  const lock = new KeyedAsyncLock();
+  const engine = { canonicalChatId: async (_s: string, c: string) => c };
+  await store.link('sess', CHAT_ID, 'inst', {
+    conversationId: CONVERSATION_ID, contactId: 9, sourceId: 'src', name: 'Budi',
+  });
+
+  let releasePost = (): void => {};
+  const postGate = new Promise<void>((resolve) => { releasePost = resolve; });
+  const client = {
+    postText: async () => { await postGate; return { id: 4242 }; },
+    postMedia: async () => { throw new Error('unused in this test'); },
+  };
+  const inbound = {
+    lock, client, store, engine, instanceId: 'inst',
+    relayGroups: true, relayMedia: true, backfillLimit: 0, backfillAllOnce: false, log: () => {},
+  } as unknown as InboundDeps;
+  const sent: Array<{ chatId?: string }> = [];
+  const outbound = {
+    lock, store, engine,
+    conversations: { send: async (e: { chatId?: string }) => { sent.push(e); return { messageId: 'wa-r' }; } },
+    handover: { set: async () => {} },
+    inboxId: INBOX_ID,
+    log: () => {},
+  } as unknown as OutboundDeps;
+
+  // The relay runs with no shared lock held (the backfill case: raw-key lock, which outbound never
+  // takes), and the echo webhook is processed while the POST is still in flight.
+  const relayPromise = relayMessage(inbound, 'sess', CONVERSATION_ID, own, 'outgoing');
+  const echoPromise = handleOutbound(outbound, mirrorWebhook(4242, 'sess'));
+  for (let i = 0; i < 5; i++) await new Promise<void>((r) => setImmediate(r)); // let the echo race ahead
+  releasePost();
+  await Promise.all([relayPromise, echoPromise]);
+
+  assert.deepEqual(sent, [], 'the echo was processed before the marker landed and got re-sent to WhatsApp');
 });

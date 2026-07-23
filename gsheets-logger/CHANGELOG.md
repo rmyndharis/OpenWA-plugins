@@ -6,10 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this plugin adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The version here always matches `manifest.json`'s `version`.
 
-## [Unreleased]
+## [0.3.0] — 2026-07-23
 
 ### Changed
 
+- **Outbound HTTP now goes through `ctx.net.fetch`** (host-proxied, SSRF-guarded) instead of the raw
+  worker `fetch`, bringing the plugin back inside the v0.7 net contract. The manifest declares
+  `permissions: ["net:fetch"]` and `net.allow: ["oauth2.googleapis.com", "sheets.googleapis.com"]` —
+  the only two hosts the plugin ever calls — and `minOpenWAVersion` rises to **0.7.0** accordingly.
 - **Documented that per-session spreadsheet routing is not supported.** The plugin holds one buffer and
   one Sheets client built from the base `*` config, so a per-session config override that points at a
   different `spreadsheetId` / `serviceAccountJson` is **not** honored — rows from every session land in

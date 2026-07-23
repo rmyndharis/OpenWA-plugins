@@ -1,7 +1,7 @@
 {
   "id": "supabase-otp-hook",
   "name": "Supabase Auth OTP",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Deliver Supabase Auth phone OTPs over WhatsApp.",
@@ -14,7 +14,7 @@
   "minOpenWAVersion": "0.8.16",
   "testedOpenWAVersion": "0.8.16",
   "sdkVersion": "1",
-  "permissions": ["webhook:ingress", "messages:send"],
+  "permissions": ["webhook:ingress", "messages:send", "engine:read"],
   "sessionScoped": true,
   "sessions": ["*"],
   "ingress": [
@@ -65,5 +65,23 @@
         "description": "Log every inbound request (resolved session + chatId), each outbound send, and send failures. Never blocks or skips WhatsApp sending. Signature verification and the session-liveness check happen host-side before this handler runs, so they are not logged here."
       }
     }
+  },
+  "i18n": {
+    "es": { "name": "OTP de Supabase Auth", "description": "Entrega los OTP telefónicos de Supabase Auth a través de WhatsApp.",
+      "config": { "appName": { "title": "Nombre de la app" }, "messageTemplate": { "title": "Plantilla de mensaje" }, "fallbackSessionId": { "title": "Sesión de WhatsApp de respaldo" }, "debug": { "title": "Modo de depuración" } } },
+    "fr": { "name": "OTP Supabase Auth", "description": "Envoie les OTP téléphoniques de Supabase Auth via WhatsApp.",
+      "config": { "appName": { "title": "Nom de l'application" }, "messageTemplate": { "title": "Modèle de message" }, "fallbackSessionId": { "title": "Session WhatsApp de secours" }, "debug": { "title": "Mode débogage" } } },
+    "it": { "name": "OTP di Supabase Auth", "description": "Invia gli OTP telefonici di Supabase Auth tramite WhatsApp.",
+      "config": { "appName": { "title": "Nome dell'app" }, "messageTemplate": { "title": "Modello di messaggio" }, "fallbackSessionId": { "title": "Sessione WhatsApp di riserva" }, "debug": { "title": "Modalità debug" } } },
+    "ar": { "name": "OTP لـ Supabase Auth", "description": "يُسلّم رموز OTP الهاتفية من Supabase Auth عبر WhatsApp.",
+      "config": { "appName": { "title": "اسم التطبيق" }, "messageTemplate": { "title": "قالب الرسالة" }, "fallbackSessionId": { "title": "جلسة WhatsApp الاحتياطية" }, "debug": { "title": "وضع التصحيح" } } },
+    "he": { "name": "OTP של Supabase Auth", "description": "מספק קודי OTP טלפוניים של Supabase Auth דרך WhatsApp.",
+      "config": { "appName": { "title": "שם האפליקציה" }, "messageTemplate": { "title": "תבנית הודעה" }, "fallbackSessionId": { "title": "סשן WhatsApp גיבוי" }, "debug": { "title": "מצב ניפוי שגיאות" } } },
+    "te": { "name": "Supabase Auth OTP", "description": "Supabase Auth ఫోన్ OTPలను WhatsApp ద్వారా డెలివర్ చేస్తుంది.",
+      "config": { "appName": { "title": "యాప్ పేరు" }, "messageTemplate": { "title": "సందేశ టెంప్లేట్" }, "fallbackSessionId": { "title": "ఫాల్‌బ్యాక్ WhatsApp సెషన్" }, "debug": { "title": "డీబగ్ మోడ్" } } },
+    "zh-CN": { "name": "Supabase Auth OTP", "description": "通过 WhatsApp 发送 Supabase Auth 手机 OTP 验证码。",
+      "config": { "appName": { "title": "应用名称" }, "messageTemplate": { "title": "消息模板" }, "fallbackSessionId": { "title": "备用 WhatsApp 会话" }, "debug": { "title": "调试模式" } } },
+    "zh-HK": { "name": "Supabase Auth OTP", "description": "透過 WhatsApp 發送 Supabase Auth 手機 OTP 驗證碼。",
+      "config": { "appName": { "title": "應用程式名稱" }, "messageTemplate": { "title": "訊息範本" }, "fallbackSessionId": { "title": "備用 WhatsApp 工作階段" }, "debug": { "title": "除錯模式" } } }
   }
 }

@@ -5,6 +5,7 @@
 ![type: extension](https://img.shields.io/badge/type-extension-blue.svg)
 ![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)
 ![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.6.2-25D366.svg)
+[![downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Frmyndharis%2FOpenWA-plugins%2Fbadges%2Fdownloads%2Fafter-hours.json)](https://github.com/rmyndharis/OpenWA-plugins/releases?q=after-hours)
 
 ## Details
 
@@ -92,6 +93,13 @@ so schedule edits apply live without a re-enable).
 `respondInGroups`) may be overridden per WhatsApp session via the dashboard; an override takes effect on
 the next inbound message (config is re-read per event). For example, two sessions can have different
 business hours and away messages.
+
+### Known limitations
+
+- **WhatsApp `@lid` migration:** the per-chat cooldown is keyed by the chat id as received. If a contact
+  migrates between a `@lid` privacy id and a phone-based `@c.us` id, the old entry is orphaned and the
+  new id is treated as a fresh chat (the cooldown simply resets — harmless). A proper fix needs a
+  host-side lid↔phone resolver; tracked upstream.
 
 ## Security
 

@@ -61,12 +61,15 @@ async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: Cha
   }
   const lockKey = await deps.engine.canonicalChatId(target.sessionId, target.chatId);
   await deps.lock.run(`${target.sessionId}:${lockKey}`, async () => {
+    // Same conversation-scoped key relayMessage holds across post+mark: an echo webhook that arrives
+    // while the adapter's own post is still in flight waits here until the echo marker has landed.
+    await deps.lock.run(`${target.sessionId}:conv:${conversationId}`, async () => {
     const id = evt.id !== undefined ? String(evt.id) : undefined;
     // Dedup, but mark only AFTER a successful send: a transient send failure must retry the reply, not be
     // silently suppressed as "already seen".
     //
     // Scoped by target.sessionId — the WA session that owns this conversation, just resolved from the
-    // mapping — NOT the delivery's `sessionId`. Both identify the tenant (F-02/F-03), but the delivery
+    // mapping — NOT the delivery's `sessionId`. Both identify the tenant, but the delivery
     // scope is `instance.sessionScope ?? undefined` and so is UNDEFINED for an unscoped instance, which
     // would put its markers in a global namespace keyed by bare Chatwoot message id: two tenants whose
     // ids collide could then suppress each other's replies. target.sessionId is always defined, and is
@@ -106,6 +109,7 @@ async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: Cha
       // silently open.
       deps.log('conversation.send returned no message id; own-send echo guard skipped for this reply');
     }
+    });
   });
 }
 

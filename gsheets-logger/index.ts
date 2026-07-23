@@ -77,7 +77,9 @@ export default class GSheetsLogger implements IPlugin {
   async onEnable(ctx: PluginContext): Promise<void> {
     this.ctx = ctx;
     const { config, sa } = parseConfig(ctx.config);
-    this.client = new SheetsClient(sa, config.spreadsheetId, config.sheetTab);
+    // Outbound HTTP goes through ctx.net.fetch (host-proxied, SSRF-guarded, net:fetch permission +
+    // manifest net.allow for the two fixed Google hosts) — never the raw unguarded worker fetch.
+    this.client = new SheetsClient(ctx.net.fetch.bind(ctx.net), sa, config.spreadsheetId, config.sheetTab);
     this.batchSize = config.flushBatchSize;
 
     const restored = await ctx.storage.get<string[][]>(BUFFER_KEY);
@@ -99,7 +101,7 @@ export default class GSheetsLogger implements IPlugin {
     await this.flush();
     this.ctx = ctx;
     const { config, sa } = parseConfig(ctx.config);
-    this.client = new SheetsClient(sa, config.spreadsheetId, config.sheetTab);
+    this.client = new SheetsClient(ctx.net.fetch.bind(ctx.net), sa, config.spreadsheetId, config.sheetTab);
     this.batchSize = config.flushBatchSize;
     this.startTimer(config.flushIntervalSec);
   }

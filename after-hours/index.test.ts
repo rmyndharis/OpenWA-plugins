@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseConfig, allowReply } from './index.ts';
+import { parseConfig } from './index.ts';
+import { allowCooldown as allowReply } from './cooldown.ts';
 
 const schedule = JSON.stringify({ mon: '09:00-17:00', sun: null });
 
