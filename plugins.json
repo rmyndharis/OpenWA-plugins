@@ -369,7 +369,7 @@
   {
     "id": "chatwoot-adapter",
     "name": "Chatwoot Adapter",
-    "version": "0.5.5",
+    "version": "0.5.6",
     "type": "extension",
     "status": "stable",
     "description": "Two-way sync between a WhatsApp session and a Chatwoot inbox: relays WhatsApp messages (1:1 and groups, with media) into Chatwoot as an API-channel inbox, sends agent replies back to WhatsApp, and hands a chat over to a human agent — silencing other OpenWA bots — when an agent takes it in Chatwoot. First consumer of the OpenWA Integration SDK v1; runs sandboxed in the plugin worker.",
@@ -387,11 +387,277 @@
     ],
     "minOpenWAVersion": "0.8.7",
     "testedOpenWAVersion": "0.10.5",
-    "releasedAt": "2026-07-22",
+    "releasedAt": "2026-07-23",
     "repoPath": "chatwoot-adapter",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chatwoot-adapter-v0.5.5/chatwoot-adapter.zip"
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chatwoot-adapter-v0.5.6/chatwoot-adapter.zip",
+    "i18n": {
+      "es": {
+        "name": "Adaptador de Chatwoot",
+        "description": "Sincronización bidireccional entre una sesión de WhatsApp y una bandeja de entrada de Chatwoot: reenvía los mensajes de WhatsApp (1:1 y grupos, con multimedia) a Chatwoot como una bandeja de canal API, devuelve las respuestas de los agentes a WhatsApp y transfiere el chat a un agente humano —silenciando a los demás bots de OpenWA— cuando un agente lo toma en Chatwoot. Primer consumidor del OpenWA Integration SDK v1; se ejecuta en sandbox dentro del worker de plugins.",
+        "config": {
+          "baseUrl": {
+            "title": "URL base de Chatwoot"
+          },
+          "apiToken": {
+            "title": "Token de acceso a la API"
+          },
+          "accountId": {
+            "title": "ID de cuenta"
+          },
+          "inboxId": {
+            "title": "ID de bandeja de entrada de canal API"
+          },
+          "relayGroups": {
+            "title": "Reenviar chats de grupo"
+          },
+          "relayMedia": {
+            "title": "Reenviar multimedia entrante a Chatwoot"
+          },
+          "relayOwnMessages": {
+            "title": "Reenviar tus propios mensajes enviados"
+          },
+          "backfillLimit": {
+            "title": "Relleno de historial (mensajes por chat)"
+          },
+          "backfillAllOnce": {
+            "title": "Importar todos los chats en masa una vez al configurar"
+          }
+        }
+      },
+      "fr": {
+        "name": "Adaptateur Chatwoot",
+        "description": "Synchronisation bidirectionnelle entre une session WhatsApp et une boîte de réception Chatwoot : relaie les messages WhatsApp (1:1 et groupes, avec médias) vers Chatwoot en tant que boîte de réception de canal API, renvoie les réponses des agents vers WhatsApp, et transfère un chat à un agent humain — en faisant taire les autres bots OpenWA — lorsqu'un agent le prend en charge dans Chatwoot. Premier consommateur du SDK d'intégration OpenWA v1 ; s'exécute en sandbox dans le worker de plugins.",
+        "config": {
+          "baseUrl": {
+            "title": "URL de base de Chatwoot"
+          },
+          "apiToken": {
+            "title": "Jeton d'accès API"
+          },
+          "accountId": {
+            "title": "ID de compte"
+          },
+          "inboxId": {
+            "title": "ID de boîte de réception de canal API"
+          },
+          "relayGroups": {
+            "title": "Relayer les chats de groupe"
+          },
+          "relayMedia": {
+            "title": "Relayer les médias entrants vers Chatwoot"
+          },
+          "relayOwnMessages": {
+            "title": "Relayer vos propres messages envoyés"
+          },
+          "backfillLimit": {
+            "title": "Remplissage d'historique (messages par chat)"
+          },
+          "backfillAllOnce": {
+            "title": "Importer en masse tous les chats une fois à la configuration"
+          }
+        }
+      },
+      "it": {
+        "name": "Adattatore Chatwoot",
+        "description": "Sincronizzazione bidirezionale tra una sessione WhatsApp e una casella di posta Chatwoot: inoltra i messaggi WhatsApp (1:1 e gruppi, con media) a Chatwoot come casella di canale API, restituisce le risposte degli agenti a WhatsApp e passa la chat a un agente umano — silenziando gli altri bot OpenWA — quando un agente la prende in carico in Chatwoot. Primo consumatore dell'OpenWA Integration SDK v1; eseguito in sandbox nel worker dei plugin.",
+        "config": {
+          "baseUrl": {
+            "title": "URL base di Chatwoot"
+          },
+          "apiToken": {
+            "title": "Token di accesso API"
+          },
+          "accountId": {
+            "title": "ID account"
+          },
+          "inboxId": {
+            "title": "ID casella di canale API"
+          },
+          "relayGroups": {
+            "title": "Inoltra le chat di gruppo"
+          },
+          "relayMedia": {
+            "title": "Inoltra i media in arrivo a Chatwoot"
+          },
+          "relayOwnMessages": {
+            "title": "Inoltra i tuoi messaggi in uscita"
+          },
+          "backfillLimit": {
+            "title": "Recupero cronologia (messaggi per chat)"
+          },
+          "backfillAllOnce": {
+            "title": "Importa in blocco tutte le chat una volta alla configurazione"
+          }
+        }
+      },
+      "ar": {
+        "name": "موصّل Chatwoot",
+        "description": "مزامنة ثنائية الاتجاه بين جلسة WhatsApp وصندوق وارد Chatwoot: ينقل رسائل WhatsApp (الفردية والجماعية، مع الوسائط) إلى Chatwoot كصندوق وارد بقناة API، ويعيد ردود الوكلاء إلى WhatsApp، ويحوّل المحادثة إلى وكيل بشري — مع إسكات بوتات OpenWA الأخرى — عندما يتولاها وكيل في Chatwoot. أول مستهلك لـ OpenWA Integration SDK v1؛ يعمل في بيئة معزولة داخل عامل الإضافات.",
+        "config": {
+          "baseUrl": {
+            "title": "الرابط الأساسي لـ Chatwoot"
+          },
+          "apiToken": {
+            "title": "رمز الوصول إلى API"
+          },
+          "accountId": {
+            "title": "معرّف الحساب"
+          },
+          "inboxId": {
+            "title": "معرّف صندوق الوارد بقناة API"
+          },
+          "relayGroups": {
+            "title": "نقل محادثات المجموعات"
+          },
+          "relayMedia": {
+            "title": "نقل الوسائط الواردة إلى Chatwoot"
+          },
+          "relayOwnMessages": {
+            "title": "نقل رسائلك الصادرة الخاصة"
+          },
+          "backfillLimit": {
+            "title": "استكمال السجل (رسائل لكل محادثة)"
+          },
+          "backfillAllOnce": {
+            "title": "استيراد جميع المحادثات دفعة واحدة عند الإعداد"
+          }
+        }
+      },
+      "he": {
+        "name": "מתאם Chatwoot",
+        "description": "סנכרון דו-כיווני בין סשן WhatsApp לתיבת דואר נכנס של Chatwoot: מעביר הודעות WhatsApp (אישיות וקבוצתיות, עם מדיה) ל-Chatwoot כתיבת דואר בערוץ API, מחזיר תשובות נציגים ל-WhatsApp, ומעביר צ'אט לנציג אנושי — תוך השתקת הבוטים האחרים של OpenWA — כאשר נציג לוקח אותו ב-Chatwoot. הצרכן הראשון של OpenWA Integration SDK v1; רץ בארגז חול בתוך עובד התוספים.",
+        "config": {
+          "baseUrl": {
+            "title": "כתובת הבסיס של Chatwoot"
+          },
+          "apiToken": {
+            "title": "אסימון גישה ל-API"
+          },
+          "accountId": {
+            "title": "מזהה חשבון"
+          },
+          "inboxId": {
+            "title": "מזהה תיבת דואר בערוץ API"
+          },
+          "relayGroups": {
+            "title": "העברת צ'אטים קבוצתיים"
+          },
+          "relayMedia": {
+            "title": "העברת מדיה נכנסת ל-Chatwoot"
+          },
+          "relayOwnMessages": {
+            "title": "העברת ההודעות היוצאות שלך"
+          },
+          "backfillLimit": {
+            "title": "מילוי היסטוריה (הודעות לכל צ'אט)"
+          },
+          "backfillAllOnce": {
+            "title": "ייבוא המוני של כל הצ'אטים פעם אחת בהתקנה"
+          }
+        }
+      },
+      "te": {
+        "name": "Chatwoot అడాప్టర్",
+        "description": "WhatsApp సెషన్ మరియు Chatwoot ఇన్‌బాక్స్ మధ్య రెండు మార్గాల సింక్: WhatsApp సందేశాలను (1:1 మరియు గ్రూపులు, మీడియాతో సహా) API-ఛానెల్ ఇన్‌బాక్స్‌గా Chatwoot లోకి రిలే చేస్తుంది, ఏజెంట్ ప్రత్యుత్తరాలను తిరిగి WhatsApp కు పంపుతుంది, మరియు ఏజెంట్ Chatwoot లో చాట్‌ను స్వీకరించినప్పుడు దానిని మానవ ఏజెంట్‌కు అప్పగిస్తుంది — ఇతర OpenWA బాట్‌లను మౌనంగా ఉంచుతూ. OpenWA Integration SDK v1 యొక్క మొదటి వినియోగదారు; ప్లగిన్ వర్కర్‌లో శ్యాండ్‌బాక్స్‌లో నడుస్తుంది.",
+        "config": {
+          "baseUrl": {
+            "title": "Chatwoot బేస్ URL"
+          },
+          "apiToken": {
+            "title": "API యాక్సెస్ టోకెన్"
+          },
+          "accountId": {
+            "title": "అకౌంట్ ID"
+          },
+          "inboxId": {
+            "title": "API-ఛానెల్ ఇన్‌బాక్స్ ID"
+          },
+          "relayGroups": {
+            "title": "గ్రూప్ చాట్‌లను రిలే చేయి"
+          },
+          "relayMedia": {
+            "title": "ఇన్‌బౌండ్ మీడియాను Chatwoot కు రిలే చేయి"
+          },
+          "relayOwnMessages": {
+            "title": "మీ స్వంత అవుట్‌బౌండ్ పంపకాలను రిలే చేయి"
+          },
+          "backfillLimit": {
+            "title": "హిస్టరీ బ్యాక్‌ఫిల్ (చాట్‌కు సందేశాలు)"
+          },
+          "backfillAllOnce": {
+            "title": "సెటప్ సమయంలో అన్ని చాట్‌లను ఒకేసారి బల్క్-ఇంపోర్ట్ చేయి"
+          }
+        }
+      },
+      "zh-CN": {
+        "name": "Chatwoot 适配器",
+        "description": "在 WhatsApp 会话与 Chatwoot 收件箱之间双向同步：将 WhatsApp 消息（一对一和群组，含媒体）作为 API 渠道收件箱转发到 Chatwoot，把客服回复发回 WhatsApp，并在客服在 Chatwoot 接管会话时将其转交给人工客服——同时让其他 OpenWA 机器人静默。OpenWA Integration SDK v1 的首个使用者；在插件工作器中以沙箱方式运行。",
+        "config": {
+          "baseUrl": {
+            "title": "Chatwoot 基础 URL"
+          },
+          "apiToken": {
+            "title": "API 访问令牌"
+          },
+          "accountId": {
+            "title": "账户 ID"
+          },
+          "inboxId": {
+            "title": "API 渠道收件箱 ID"
+          },
+          "relayGroups": {
+            "title": "转发群聊"
+          },
+          "relayMedia": {
+            "title": "将接收的媒体转发到 Chatwoot"
+          },
+          "relayOwnMessages": {
+            "title": "转发你自己发送的消息"
+          },
+          "backfillLimit": {
+            "title": "历史回填（每个会话的消息数）"
+          },
+          "backfillAllOnce": {
+            "title": "设置时一次性批量导入所有会话"
+          }
+        }
+      },
+      "zh-HK": {
+        "name": "Chatwoot 適配器",
+        "description": "在 WhatsApp 工作階段與 Chatwoot 收件箱之間雙向同步：將 WhatsApp 訊息（一對一及群組，含媒體）以 API 渠道收件箱形式轉發到 Chatwoot，把客服回覆傳回 WhatsApp，並在客服於 Chatwoot 接管對話時轉交給人工客服——同時令其他 OpenWA 機器人靜音。OpenWA Integration SDK v1 的首個使用者；在插件工作器中以沙箱方式運行。",
+        "config": {
+          "baseUrl": {
+            "title": "Chatwoot 基礎 URL"
+          },
+          "apiToken": {
+            "title": "API 存取權杖"
+          },
+          "accountId": {
+            "title": "帳戶 ID"
+          },
+          "inboxId": {
+            "title": "API 渠道收件箱 ID"
+          },
+          "relayGroups": {
+            "title": "轉發群組對話"
+          },
+          "relayMedia": {
+            "title": "將接收的媒體轉發到 Chatwoot"
+          },
+          "relayOwnMessages": {
+            "title": "轉發你自己發送的訊息"
+          },
+          "backfillLimit": {
+            "title": "歷史回填（每個對話的訊息數）"
+          },
+          "backfillAllOnce": {
+            "title": "設定時一次性批量匯入所有對話"
+          }
+        }
+      }
+    }
   },
   {
     "id": "faq-bot",
@@ -810,7 +1076,7 @@
   {
     "id": "gsheets-logger",
     "name": "Google Sheets Logger",
-    "version": "0.2.3",
+    "version": "0.3.0",
     "type": "extension",
     "status": "stable",
     "description": "Logs WhatsApp message events to a Google Sheet via a service account.",
@@ -824,13 +1090,13 @@
       "whatsapp",
       "openwa"
     ],
-    "minOpenWAVersion": "0.6.1",
+    "minOpenWAVersion": "0.7.0",
     "testedOpenWAVersion": "0.8.1",
-    "releasedAt": "2026-07-02",
+    "releasedAt": "2026-07-23",
     "repoPath": "gsheets-logger",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/gsheets-logger-v0.2.3/gsheets-logger.zip",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/gsheets-logger-v0.3.0/gsheets-logger.zip",
     "i18n": {
       "es": {
         "name": "Registrador en Google Sheets",
@@ -1025,12 +1291,254 @@
     "repoPath": "http-action",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/http-action-v0.1.0/http-action.zip"
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/http-action-v0.1.0/http-action.zip",
+    "i18n": {
+      "es": {
+        "name": "Bot de acciones HTTP",
+        "description": "Ejecuta solicitudes seguras a API REST desde comandos de WhatsApp y muestra las respuestas JSON en el chat.",
+        "config": {
+          "baseUrl": {
+            "title": "URL base"
+          },
+          "authType": {
+            "title": "Tipo de autenticación"
+          },
+          "authToken": {
+            "title": "Token / clave de API"
+          },
+          "apiKeyHeader": {
+            "title": "Encabezado de clave de API"
+          },
+          "respondInGroups": {
+            "title": "Responder en grupos"
+          },
+          "timeoutMs": {
+            "title": "Tiempo de espera de la solicitud (ms)"
+          },
+          "cooldownSeconds": {
+            "title": "Enfriamiento (segundos)"
+          },
+          "actions": {
+            "title": "Acciones (array JSON)"
+          }
+        }
+      },
+      "fr": {
+        "name": "Bot d'actions HTTP",
+        "description": "Déclenche des requêtes API REST sécurisées depuis des commandes WhatsApp et affiche les réponses JSON dans le chat.",
+        "config": {
+          "baseUrl": {
+            "title": "URL de base"
+          },
+          "authType": {
+            "title": "Type d'authentification"
+          },
+          "authToken": {
+            "title": "Jeton / clé API"
+          },
+          "apiKeyHeader": {
+            "title": "En-tête de clé API"
+          },
+          "respondInGroups": {
+            "title": "Répondre dans les groupes"
+          },
+          "timeoutMs": {
+            "title": "Délai d'attente de la requête (ms)"
+          },
+          "cooldownSeconds": {
+            "title": "Temps de recharge (secondes)"
+          },
+          "actions": {
+            "title": "Actions (tableau JSON)"
+          }
+        }
+      },
+      "it": {
+        "name": "Bot di azioni HTTP",
+        "description": "Esegue richieste sicure a API REST dai comandi WhatsApp e mostra le risposte JSON nella chat.",
+        "config": {
+          "baseUrl": {
+            "title": "URL di base"
+          },
+          "authType": {
+            "title": "Tipo di autenticazione"
+          },
+          "authToken": {
+            "title": "Token / chiave API"
+          },
+          "apiKeyHeader": {
+            "title": "Header della chiave API"
+          },
+          "respondInGroups": {
+            "title": "Rispondi nei gruppi"
+          },
+          "timeoutMs": {
+            "title": "Timeout della richiesta (ms)"
+          },
+          "cooldownSeconds": {
+            "title": "Tempo di attesa (secondi)"
+          },
+          "actions": {
+            "title": "Azioni (array JSON)"
+          }
+        }
+      },
+      "ar": {
+        "name": "بوت إجراءات HTTP",
+        "description": "يشغّل طلبات REST API آمنة من أوامر WhatsApp ويعرض استجابات JSON في المحادثة.",
+        "config": {
+          "baseUrl": {
+            "title": "الرابط الأساسي"
+          },
+          "authType": {
+            "title": "نوع المصادقة"
+          },
+          "authToken": {
+            "title": "الرمز / مفتاح API"
+          },
+          "apiKeyHeader": {
+            "title": "ترويسة مفتاح API"
+          },
+          "respondInGroups": {
+            "title": "الرد في المجموعات"
+          },
+          "timeoutMs": {
+            "title": "مهلة الطلب (ميلي ثانية)"
+          },
+          "cooldownSeconds": {
+            "title": "فترة التهدئة (بالثواني)"
+          },
+          "actions": {
+            "title": "الإجراءات (مصفوفة JSON)"
+          }
+        }
+      },
+      "he": {
+        "name": "בוט פעולות HTTP",
+        "description": "מפעיל בקשות REST API בטוחות מפקודות WhatsApp ומציג תגובות JSON חזרה בצ'אט.",
+        "config": {
+          "baseUrl": {
+            "title": "כתובת בסיס"
+          },
+          "authType": {
+            "title": "סוג אימות"
+          },
+          "authToken": {
+            "title": "אסימון / מפתח API"
+          },
+          "apiKeyHeader": {
+            "title": "כותרת מפתח API"
+          },
+          "respondInGroups": {
+            "title": "השב בקבוצות"
+          },
+          "timeoutMs": {
+            "title": "פסק זמן לבקשה (ms)"
+          },
+          "cooldownSeconds": {
+            "title": "צינון (שניות)"
+          },
+          "actions": {
+            "title": "פעולות (מערך JSON)"
+          }
+        }
+      },
+      "te": {
+        "name": "HTTP యాక్షన్ బాట్",
+        "description": "WhatsApp కమాండ్‌ల నుండి సురక్షిత REST API అభ్యర్థనలను ట్రిగర్ చేసి, JSON ప్రతిస్పందనలను చాట్‌లో చూపిస్తుంది.",
+        "config": {
+          "baseUrl": {
+            "title": "బేస్ URL"
+          },
+          "authType": {
+            "title": "ప్రామాణీకరణ రకం"
+          },
+          "authToken": {
+            "title": "టోకెన్ / API కీ"
+          },
+          "apiKeyHeader": {
+            "title": "API కీ హెడర్"
+          },
+          "respondInGroups": {
+            "title": "గ్రూపులలో స్పందించు"
+          },
+          "timeoutMs": {
+            "title": "అభ్యర్థన గడువు (ms)"
+          },
+          "cooldownSeconds": {
+            "title": "కూల్‌డౌన్ (సెకన్లు)"
+          },
+          "actions": {
+            "title": "చర్యలు (JSON శ్రేణి)"
+          }
+        }
+      },
+      "zh-CN": {
+        "name": "HTTP 动作机器人",
+        "description": "从 WhatsApp 命令触发安全的 REST API 请求，并将 JSON 响应展示回聊天中。",
+        "config": {
+          "baseUrl": {
+            "title": "基础 URL"
+          },
+          "authType": {
+            "title": "认证类型"
+          },
+          "authToken": {
+            "title": "令牌 / API 密钥"
+          },
+          "apiKeyHeader": {
+            "title": "API 密钥请求头"
+          },
+          "respondInGroups": {
+            "title": "在群组中回复"
+          },
+          "timeoutMs": {
+            "title": "请求超时（毫秒）"
+          },
+          "cooldownSeconds": {
+            "title": "冷却时间（秒）"
+          },
+          "actions": {
+            "title": "动作（JSON 数组）"
+          }
+        }
+      },
+      "zh-HK": {
+        "name": "HTTP 動作機器人",
+        "description": "從 WhatsApp 指令觸發安全的 REST API 請求，並將 JSON 回應顯示回對話中。",
+        "config": {
+          "baseUrl": {
+            "title": "基礎 URL"
+          },
+          "authType": {
+            "title": "認證類型"
+          },
+          "authToken": {
+            "title": "權杖 / API 金鑰"
+          },
+          "apiKeyHeader": {
+            "title": "API 金鑰標頭"
+          },
+          "respondInGroups": {
+            "title": "在群組中回覆"
+          },
+          "timeoutMs": {
+            "title": "請求逾時（毫秒）"
+          },
+          "cooldownSeconds": {
+            "title": "冷卻時間（秒）"
+          },
+          "actions": {
+            "title": "動作（JSON 陣列）"
+          }
+        }
+      }
+    }
   },
   {
     "id": "supabase-otp-hook",
     "name": "Supabase Auth OTP",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "type": "extension",
     "status": "beta",
     "description": "Deliver Supabase Auth phone OTPs over WhatsApp.",
@@ -1048,11 +1556,157 @@
     ],
     "minOpenWAVersion": "0.8.16",
     "testedOpenWAVersion": "0.8.16",
-    "releasedAt": "2026-07-07",
+    "releasedAt": "2026-07-23",
     "repoPath": "supabase-otp-hook",
     "repoUrl": "https://github.com/maplerichie/OpenWA-plugins",
     "homepage": "https://github.com/maplerichie/OpenWA-plugins/tree/main/supabase-otp-hook",
-    "download": "https://github.com/maplerichie/OpenWA-plugins/releases/download/supabase-otp-hook-v0.1.0/supabase-otp-hook.zip"
+    "download": "https://github.com/maplerichie/OpenWA-plugins/releases/download/supabase-otp-hook-v0.2.0/supabase-otp-hook.zip",
+    "i18n": {
+      "es": {
+        "name": "OTP de Supabase Auth",
+        "description": "Entrega los OTP telefónicos de Supabase Auth a través de WhatsApp.",
+        "config": {
+          "appName": {
+            "title": "Nombre de la app"
+          },
+          "messageTemplate": {
+            "title": "Plantilla de mensaje"
+          },
+          "fallbackSessionId": {
+            "title": "Sesión de WhatsApp de respaldo"
+          },
+          "debug": {
+            "title": "Modo de depuración"
+          }
+        }
+      },
+      "fr": {
+        "name": "OTP Supabase Auth",
+        "description": "Envoie les OTP téléphoniques de Supabase Auth via WhatsApp.",
+        "config": {
+          "appName": {
+            "title": "Nom de l'application"
+          },
+          "messageTemplate": {
+            "title": "Modèle de message"
+          },
+          "fallbackSessionId": {
+            "title": "Session WhatsApp de secours"
+          },
+          "debug": {
+            "title": "Mode débogage"
+          }
+        }
+      },
+      "it": {
+        "name": "OTP di Supabase Auth",
+        "description": "Invia gli OTP telefonici di Supabase Auth tramite WhatsApp.",
+        "config": {
+          "appName": {
+            "title": "Nome dell'app"
+          },
+          "messageTemplate": {
+            "title": "Modello di messaggio"
+          },
+          "fallbackSessionId": {
+            "title": "Sessione WhatsApp di riserva"
+          },
+          "debug": {
+            "title": "Modalità debug"
+          }
+        }
+      },
+      "ar": {
+        "name": "OTP لـ Supabase Auth",
+        "description": "يُسلّم رموز OTP الهاتفية من Supabase Auth عبر WhatsApp.",
+        "config": {
+          "appName": {
+            "title": "اسم التطبيق"
+          },
+          "messageTemplate": {
+            "title": "قالب الرسالة"
+          },
+          "fallbackSessionId": {
+            "title": "جلسة WhatsApp الاحتياطية"
+          },
+          "debug": {
+            "title": "وضع التصحيح"
+          }
+        }
+      },
+      "he": {
+        "name": "OTP של Supabase Auth",
+        "description": "מספק קודי OTP טלפוניים של Supabase Auth דרך WhatsApp.",
+        "config": {
+          "appName": {
+            "title": "שם האפליקציה"
+          },
+          "messageTemplate": {
+            "title": "תבנית הודעה"
+          },
+          "fallbackSessionId": {
+            "title": "סשן WhatsApp גיבוי"
+          },
+          "debug": {
+            "title": "מצב ניפוי שגיאות"
+          }
+        }
+      },
+      "te": {
+        "name": "Supabase Auth OTP",
+        "description": "Supabase Auth ఫోన్ OTPలను WhatsApp ద్వారా డెలివర్ చేస్తుంది.",
+        "config": {
+          "appName": {
+            "title": "యాప్ పేరు"
+          },
+          "messageTemplate": {
+            "title": "సందేశ టెంప్లేట్"
+          },
+          "fallbackSessionId": {
+            "title": "ఫాల్‌బ్యాక్ WhatsApp సెషన్"
+          },
+          "debug": {
+            "title": "డీబగ్ మోడ్"
+          }
+        }
+      },
+      "zh-CN": {
+        "name": "Supabase Auth OTP",
+        "description": "通过 WhatsApp 发送 Supabase Auth 手机 OTP 验证码。",
+        "config": {
+          "appName": {
+            "title": "应用名称"
+          },
+          "messageTemplate": {
+            "title": "消息模板"
+          },
+          "fallbackSessionId": {
+            "title": "备用 WhatsApp 会话"
+          },
+          "debug": {
+            "title": "调试模式"
+          }
+        }
+      },
+      "zh-HK": {
+        "name": "Supabase Auth OTP",
+        "description": "透過 WhatsApp 發送 Supabase Auth 手機 OTP 驗證碼。",
+        "config": {
+          "appName": {
+            "title": "應用程式名稱"
+          },
+          "messageTemplate": {
+            "title": "訊息範本"
+          },
+          "fallbackSessionId": {
+            "title": "備用 WhatsApp 工作階段"
+          },
+          "debug": {
+            "title": "除錯模式"
+          }
+        }
+      }
+    }
   },
   {
     "id": "typebot-connector",
@@ -1079,7 +1733,225 @@
     "repoPath": "typebot-connector",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/typebot-connector",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/typebot-connector-v0.1.0/typebot-connector.zip"
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/typebot-connector-v0.1.0/typebot-connector.zip",
+    "i18n": {
+      "es": {
+        "name": "Conector de Typebot",
+        "description": "Ejecuta un flujo de Typebot como el cerebro de un bot de WhatsApp: los mensajes entrantes alimentan una sesión de chat de Typebot a través de la Chat API en vivo, y las respuestas del bot —texto, multimedia e inputs de opción numerada— se devuelven a WhatsApp. Inicia automáticamente cada chat, gestiona los pasos de subida de archivos y se reinicia cuando el flujo termina o tras un tiempo de inactividad. Se ejecuta en sandbox dentro del worker de plugins; no requiere URL pública ni webhook.",
+        "config": {
+          "apiHost": {
+            "title": "URL del host de Typebot"
+          },
+          "publicId": {
+            "title": "ID público de Typebot"
+          },
+          "apiToken": {
+            "title": "Token de API"
+          },
+          "respondInGroups": {
+            "title": "Responder en chats de grupo"
+          },
+          "sessionTimeoutMinutes": {
+            "title": "Reinicio por inactividad (minutos)"
+          },
+          "passContactVariables": {
+            "title": "Pasar variables de contacto"
+          },
+          "mediaHost": {
+            "title": "Host de medios/subida"
+          }
+        }
+      },
+      "fr": {
+        "name": "Connecteur Typebot",
+        "description": "Exécute un flux Typebot comme cerveau d'un bot WhatsApp : les messages entrants alimentent une session de chat Typebot via la Chat API en direct, et les réponses du bot — texte, médias et choix numérotés — sont renvoyées vers WhatsApp. Démarre automatiquement chaque chat, gère les étapes de téléversement de fichiers et se réinitialise à la fin du flux ou après un délai d'inactivité. S'exécute en sandbox dans le worker de plugins ; aucune URL publique ni webhook requis.",
+        "config": {
+          "apiHost": {
+            "title": "URL de l'hôte Typebot"
+          },
+          "publicId": {
+            "title": "ID public Typebot"
+          },
+          "apiToken": {
+            "title": "Jeton API"
+          },
+          "respondInGroups": {
+            "title": "Répondre dans les chats de groupe"
+          },
+          "sessionTimeoutMinutes": {
+            "title": "Réinitialisation après inactivité (minutes)"
+          },
+          "passContactVariables": {
+            "title": "Transmettre les variables de contact"
+          },
+          "mediaHost": {
+            "title": "Hôte média/téléversement"
+          }
+        }
+      },
+      "it": {
+        "name": "Connettore Typebot",
+        "description": "Esegue un flusso Typebot come cervello di un bot WhatsApp: i messaggi in arrivo alimentano una sessione di chat Typebot tramite la Chat API live, e le risposte del bot — testo, media e scelte numerate — vengono rinviate a WhatsApp. Avvia automaticamente ogni chat, gestisce i passaggi di caricamento file e si reimposta quando il flusso termina o dopo un timeout di inattività. Eseguito in sandbox nel worker dei plugin; non richiede URL pubblico né webhook.",
+        "config": {
+          "apiHost": {
+            "title": "URL dell'host Typebot"
+          },
+          "publicId": {
+            "title": "ID pubblico Typebot"
+          },
+          "apiToken": {
+            "title": "Token API"
+          },
+          "respondInGroups": {
+            "title": "Rispondi nelle chat di gruppo"
+          },
+          "sessionTimeoutMinutes": {
+            "title": "Reset per inattività (minuti)"
+          },
+          "passContactVariables": {
+            "title": "Passa le variabili di contatto"
+          },
+          "mediaHost": {
+            "title": "Host media/caricamento"
+          }
+        }
+      },
+      "ar": {
+        "name": "موصّل Typebot",
+        "description": "يشغّل تدفق Typebot كعقل لبوت WhatsApp: تغذّي الرسائل الواردة جلسة دردشة Typebot عبر Chat API المباشرة، وتُعاد ردود البوت — نصوص ووسائط وخيارات مرقّمة — إلى WhatsApp. يبدأ كل محادثة تلقائيًا، ويتعامل مع خطوات رفع الملفات، ويعيد الضبط عند انتهاء التدفق أو بعد مهلة خمول. يعمل في بيئة معزولة داخل عامل الإضافات؛ لا يتطلب رابطًا عامًا أو webhook.",
+        "config": {
+          "apiHost": {
+            "title": "رابط مضيف Typebot"
+          },
+          "publicId": {
+            "title": "المعرّف العام لـ Typebot"
+          },
+          "apiToken": {
+            "title": "رمز API"
+          },
+          "respondInGroups": {
+            "title": "الرد في محادثات المجموعات"
+          },
+          "sessionTimeoutMinutes": {
+            "title": "إعادة الضبط بعد الخمول (بالدقائق)"
+          },
+          "passContactVariables": {
+            "title": "تمرير متغيرات جهة الاتصال"
+          },
+          "mediaHost": {
+            "title": "مضيف الوسائط/الرفع"
+          }
+        }
+      },
+      "he": {
+        "name": "מחבר Typebot",
+        "description": "מריץ זרימת Typebot כמוח של בוט WhatsApp: הודעות נכנסות מזינות סשן צ'אט של Typebot דרך ה-Chat API החי, ותשובות הבוט — טקסט, מדיה ובחירות ממוספרות — נשלחות חזרה ל-WhatsApp. מתחיל כל צ'אט אוטומטית, מטפל בשלבי העלאת קבצים, ומתאפס כשהזרימה מסתיימת או לאחר פסק זמן חוסר פעילות. רץ בארגז חול בתוך עובד התוספים; לא נדרשת כתובת ציבורית או webhook.",
+        "config": {
+          "apiHost": {
+            "title": "כתובת המארח של Typebot"
+          },
+          "publicId": {
+            "title": "מזהה ציבורי של Typebot"
+          },
+          "apiToken": {
+            "title": "אסימון API"
+          },
+          "respondInGroups": {
+            "title": "השב בצ'אטים קבוצתיים"
+          },
+          "sessionTimeoutMinutes": {
+            "title": "איפוס חוסר פעילות (דקות)"
+          },
+          "passContactVariables": {
+            "title": "העבר משתני איש קשר"
+          },
+          "mediaHost": {
+            "title": "מארח מדיה/העלאה"
+          }
+        }
+      },
+      "te": {
+        "name": "Typebot కనెక్టర్",
+        "description": "Typebot ఫ్లోను WhatsApp బాట్ యొక్క మెదడుగా నడుపుతుంది: ఇన్‌బౌండ్ సందేశాలు లైవ్ Chat API ద్వారా Typebot చాట్ సెషన్‌ను నడుపుతాయి, మరియు బాట్ ప్రత్యుత్తరాలు — టెక్స్ట్, మీడియా మరియు సంఖ్యా-ఎంపిక ఇన్‌పుట్‌లు — తిరిగి WhatsApp కు పంపబడతాయి. ప్రతి చాట్‌ను స్వయంచాలకంగా ప్రారంభిస్తుంది, ఫైల్-అప్‌లోడ్ దశలను నిర్వహిస్తుంది, మరియు ఫ్లో ముగిసినప్పుడు లేదా ఐడిల్ టైమ్‌అవుట్ తర్వాత రీసెట్ అవుతుంది. ప్లగిన్ వర్కర్‌లో శ్యాండ్‌బాక్స్‌లో నడుస్తుంది; పబ్లిక్ URL లేదా webhook అవసరం లేదు.",
+        "config": {
+          "apiHost": {
+            "title": "Typebot హోస్ట్ URL"
+          },
+          "publicId": {
+            "title": "Typebot పబ్లిక్ ID"
+          },
+          "apiToken": {
+            "title": "API టోకెన్"
+          },
+          "respondInGroups": {
+            "title": "గ్రూప్ చాట్‌లలో స్పందించు"
+          },
+          "sessionTimeoutMinutes": {
+            "title": "ఐడిల్ రీసెట్ (నిమిషాలు)"
+          },
+          "passContactVariables": {
+            "title": "కాంటాక్ట్ వేరియబుల్‌లను పంపు"
+          },
+          "mediaHost": {
+            "title": "మీడియా/అప్‌లోడ్ హోస్ట్"
+          }
+        }
+      },
+      "zh-CN": {
+        "name": "Typebot 连接器",
+        "description": "将 Typebot 流程作为 WhatsApp 机器人的大脑运行：传入消息通过实时 Chat API 驱动 Typebot 聊天会话，机器人的回复——文本、媒体和编号选项输入——被发送回 WhatsApp。自动开始每个会话，处理文件上传步骤，并在流程结束或空闲超时后重置。在插件工作器中以沙箱方式运行；无需公共 URL 或 webhook。",
+        "config": {
+          "apiHost": {
+            "title": "Typebot 主机 URL"
+          },
+          "publicId": {
+            "title": "Typebot 公共 ID"
+          },
+          "apiToken": {
+            "title": "API 令牌"
+          },
+          "respondInGroups": {
+            "title": "在群聊中回复"
+          },
+          "sessionTimeoutMinutes": {
+            "title": "空闲重置（分钟）"
+          },
+          "passContactVariables": {
+            "title": "传递联系人变量"
+          },
+          "mediaHost": {
+            "title": "媒体/上传主机"
+          }
+        }
+      },
+      "zh-HK": {
+        "name": "Typebot 連接器",
+        "description": "將 Typebot 流程作為 WhatsApp 機器人的大腦運行：傳入訊息透過實時 Chat API 驅動 Typebot 聊天工作階段，機器人的回覆——文字、媒體及編號選項輸入——會傳回 WhatsApp。自動開始每個對話，處理檔案上傳步驟，並在流程結束或閒置逾時後重設。在插件工作器中以沙箱方式運行；無需公共 URL 或 webhook。",
+        "config": {
+          "apiHost": {
+            "title": "Typebot 主機 URL"
+          },
+          "publicId": {
+            "title": "Typebot 公開 ID"
+          },
+          "apiToken": {
+            "title": "API 權杖"
+          },
+          "respondInGroups": {
+            "title": "在群組對話中回覆"
+          },
+          "sessionTimeoutMinutes": {
+            "title": "閒置重設（分鐘）"
+          },
+          "passContactVariables": {
+            "title": "傳遞聯絡人變數"
+          },
+          "mediaHost": {
+            "title": "媒體/上傳主機"
+          }
+        }
+      }
+    }
   },
   {
     "id": "voice-transcription",
@@ -1111,6 +1983,321 @@
       "es": {
         "name": "Transcripción de Notas de Voz",
         "description": "Transcribe las notas de voz entrantes de WhatsApp a texto mediante un backend de voz a texto compatible con OpenAI (Speaches/faster-whisper autoalojado o Groq/OpenAI) y entrega un evento message.transcription a tu webhook, para que los bots y la IA puedan leer y responder al audio. Fuera de la ruta de entrega de mensajes; desactivado hasta que se habilite."
+      },
+      "fr": {
+        "name": "Transcription de notes vocales",
+        "description": "Transcrit les notes vocales WhatsApp entrantes en texte via un backend de reconnaissance vocale compatible OpenAI (Speaches/faster-whisper auto-hébergé ou Groq/OpenAI hébergé) et envoie un événement `message.transcription` à votre webhook — pour que les bots et l'IA puissent lire et répondre à l'audio. Hors du chemin de livraison des messages ; désactivé jusqu'à activation.",
+        "config": {
+          "sttBaseUrl": {
+            "title": "URL de base STT"
+          },
+          "sttApiKey": {
+            "title": "Clé API STT"
+          },
+          "model": {
+            "title": "Modèle"
+          },
+          "language": {
+            "title": "Indication de langue"
+          },
+          "provider": {
+            "title": "Étiquette du fournisseur"
+          },
+          "timeoutMs": {
+            "title": "Délai d'attente STT (ms)"
+          },
+          "enabledMessageTypes": {
+            "title": "Types de messages à transcrire"
+          },
+          "maxSizeBytes": {
+            "title": "Taille audio max (octets)"
+          },
+          "maxPerHour": {
+            "title": "Transcriptions max / heure / session"
+          },
+          "deliveryWebhookUrl": {
+            "title": "URL du webhook de livraison"
+          },
+          "deliverySecret": {
+            "title": "Secret de livraison"
+          },
+          "deliveryTimeoutMs": {
+            "title": "Délai d'attente de livraison (ms)"
+          },
+          "chatDelivery": {
+            "title": "Livraison dans le chat"
+          }
+        }
+      },
+      "it": {
+        "name": "Trascrizione note vocali",
+        "description": "Trascrive le note vocali WhatsApp in arrivo in testo tramite un backend speech-to-text compatibile con OpenAI (Speaches/faster-whisper self-hosted o Groq/OpenAI in hosting) e consegna un evento `message.transcription` al tuo webhook — così bot e IA possono leggere e rispondere all'audio. Fuori dal percorso di consegna dei messaggi; disabilitato finché non viene abilitato.",
+        "config": {
+          "sttBaseUrl": {
+            "title": "URL base STT"
+          },
+          "sttApiKey": {
+            "title": "Chiave API STT"
+          },
+          "model": {
+            "title": "Modello"
+          },
+          "language": {
+            "title": "Suggerimento lingua"
+          },
+          "provider": {
+            "title": "Etichetta del provider"
+          },
+          "timeoutMs": {
+            "title": "Timeout STT (ms)"
+          },
+          "enabledMessageTypes": {
+            "title": "Tipi di messaggio da trascrivere"
+          },
+          "maxSizeBytes": {
+            "title": "Dimensione max audio (byte)"
+          },
+          "maxPerHour": {
+            "title": "Trascrizioni max / ora / sessione"
+          },
+          "deliveryWebhookUrl": {
+            "title": "URL del webhook di consegna"
+          },
+          "deliverySecret": {
+            "title": "Segreto di consegna"
+          },
+          "deliveryTimeoutMs": {
+            "title": "Timeout di consegna (ms)"
+          },
+          "chatDelivery": {
+            "title": "Consegna in chat"
+          }
+        }
+      },
+      "ar": {
+        "name": "نسخ الملاحظات الصوتية",
+        "description": "ينسخ الملاحظات الصوتية الواردة في WhatsApp إلى نص عبر خلفية تحويل كلام إلى نص متوافقة مع OpenAI (Speaches/faster-whisper ذاتية الاستضافة أو Groq/OpenAI المستضافة) ويسلّم حدث `message.transcription` إلى webhook الخاص بك — حتى تتمكن البوتات والذكاء الاصطناعي من قراءة الصوت والرد عليه. خارج مسار تسليم الرسائل؛ معطّل حتى يتم تفعيله.",
+        "config": {
+          "sttBaseUrl": {
+            "title": "الرابط الأساسي لـ STT"
+          },
+          "sttApiKey": {
+            "title": "مفتاح API لـ STT"
+          },
+          "model": {
+            "title": "النموذج"
+          },
+          "language": {
+            "title": "تلميح اللغة"
+          },
+          "provider": {
+            "title": "تسمية المزوّد"
+          },
+          "timeoutMs": {
+            "title": "مهلة STT (ميلي ثانية)"
+          },
+          "enabledMessageTypes": {
+            "title": "أنواع الرسائل المراد نسخها"
+          },
+          "maxSizeBytes": {
+            "title": "الحد الأقصى لحجم الصوت (بايت)"
+          },
+          "maxPerHour": {
+            "title": "أقصى عدد نسخ / ساعة / جلسة"
+          },
+          "deliveryWebhookUrl": {
+            "title": "رابط webhook للتسليم"
+          },
+          "deliverySecret": {
+            "title": "سرّ التسليم"
+          },
+          "deliveryTimeoutMs": {
+            "title": "مهلة التسليم (ميلي ثانية)"
+          },
+          "chatDelivery": {
+            "title": "التسليم داخل المحادثة"
+          }
+        }
+      },
+      "he": {
+        "name": "תמלול הודעות קוליות",
+        "description": "מתמלל הודעות קוליות נכנסות ב-WhatsApp לטקסט באמצעות שרת דיבור-לטקסט תואם OpenAI (Speaches/faster-whisper באירוח עצמי או Groq/OpenAI באירוח) ומעביר אירוע `message.transcription` ל-webhook שלך — כך שבוטים ו-AI יכולים לקרוא ולהשיב לאודיו. מחוץ לנתיב מסירת ההודעות; מושבת עד שמופעל.",
+        "config": {
+          "sttBaseUrl": {
+            "title": "כתובת בסיס של STT"
+          },
+          "sttApiKey": {
+            "title": "מפתח API של STT"
+          },
+          "model": {
+            "title": "מודל"
+          },
+          "language": {
+            "title": "רמז שפה"
+          },
+          "provider": {
+            "title": "תווית ספק"
+          },
+          "timeoutMs": {
+            "title": "פסק זמן STT (ms)"
+          },
+          "enabledMessageTypes": {
+            "title": "סוגי הודעות לתמלול"
+          },
+          "maxSizeBytes": {
+            "title": "גודל אודיו מרבי (בייטים)"
+          },
+          "maxPerHour": {
+            "title": "מקסימום תמלולים / שעה / סשן"
+          },
+          "deliveryWebhookUrl": {
+            "title": "כתובת webhook למסירה"
+          },
+          "deliverySecret": {
+            "title": "סוד מסירה"
+          },
+          "deliveryTimeoutMs": {
+            "title": "פסק זמן מסירה (ms)"
+          },
+          "chatDelivery": {
+            "title": "מסירה בתוך הצ'אט"
+          }
+        }
+      },
+      "te": {
+        "name": "వాయిస్ నోట్ ట్రాన్స్‌క్రిప్షన్",
+        "description": "ఇన్‌బౌండ్ WhatsApp వాయిస్ నోట్‌లను OpenAI-అనుకూల స్పీచ్-టు-టెక్స్ట్ బ్యాక్‌ఎండ్ (స్వీయ-హోస్ట్ చేసిన Speaches/faster-whisper లేదా హోస్ట్ చేసిన Groq/OpenAI) ద్వారా టెక్స్ట్‌గా మారుస్తుంది మరియు `message.transcription` ఈవెంట్‌ను మీ webhook కు డెలివర్ చేస్తుంది — తద్వారా బాట్‌లు మరియు AI ఆడియోను చదవగలవు మరియు స్పందించగలవు. సందేశ-డెలివరీ మార్గం నుండి బయట; ప్రారంభించే వరకు నిలిపివేయబడింది.",
+        "config": {
+          "sttBaseUrl": {
+            "title": "STT బేస్ URL"
+          },
+          "sttApiKey": {
+            "title": "STT API కీ"
+          },
+          "model": {
+            "title": "మోడల్"
+          },
+          "language": {
+            "title": "భాషా సూచన"
+          },
+          "provider": {
+            "title": "ప్రొవైడర్ లేబుల్"
+          },
+          "timeoutMs": {
+            "title": "STT టైమ్‌అవుట్ (ms)"
+          },
+          "enabledMessageTypes": {
+            "title": "ట్రాన్స్‌క్రైబ్ చేయాల్సిన సందేశ రకాలు"
+          },
+          "maxSizeBytes": {
+            "title": "గరిష్ట ఆడియో పరిమాణం (బైట్లు)"
+          },
+          "maxPerHour": {
+            "title": "గరిష్ట ట్రాన్స్‌క్రిప్షన్‌లు / గంట / సెషన్"
+          },
+          "deliveryWebhookUrl": {
+            "title": "డెలివరీ webhook URL"
+          },
+          "deliverySecret": {
+            "title": "డెలివరీ రహస్యం"
+          },
+          "deliveryTimeoutMs": {
+            "title": "డెలివరీ టైమ్‌అవుట్ (ms)"
+          },
+          "chatDelivery": {
+            "title": "చాట్‌లో డెలివరీ"
+          }
+        }
+      },
+      "zh-CN": {
+        "name": "语音消息转写",
+        "description": "通过兼容 OpenAI 的语音转文字后端（自托管 Speaches/faster-whisper 或托管的 Groq/OpenAI）将传入的 WhatsApp 语音消息转写为文本，并向你的 webhook 投递 `message.transcription` 事件——让机器人和 AI 能够读取并回复语音。不在消息投递路径上；启用前保持禁用。",
+        "config": {
+          "sttBaseUrl": {
+            "title": "STT 基础 URL"
+          },
+          "sttApiKey": {
+            "title": "STT API 密钥"
+          },
+          "model": {
+            "title": "模型"
+          },
+          "language": {
+            "title": "语言提示"
+          },
+          "provider": {
+            "title": "提供商标签"
+          },
+          "timeoutMs": {
+            "title": "STT 超时（毫秒）"
+          },
+          "enabledMessageTypes": {
+            "title": "要转写的消息类型"
+          },
+          "maxSizeBytes": {
+            "title": "最大音频大小（字节）"
+          },
+          "maxPerHour": {
+            "title": "每小时每会话最大转写数"
+          },
+          "deliveryWebhookUrl": {
+            "title": "投递 webhook URL"
+          },
+          "deliverySecret": {
+            "title": "投递密钥"
+          },
+          "deliveryTimeoutMs": {
+            "title": "投递超时（毫秒）"
+          },
+          "chatDelivery": {
+            "title": "聊天内投递"
+          }
+        }
+      },
+      "zh-HK": {
+        "name": "語音訊息轉寫",
+        "description": "透過兼容 OpenAI 的語音轉文字後端（自託管 Speaches/faster-whisper 或託管的 Groq/OpenAI）將傳入的 WhatsApp 語音訊息轉寫為文字，並向你的 webhook 投遞 `message.transcription` 事件——讓機器人及 AI 能夠讀取並回覆語音。不在訊息投遞路徑上；啟用前保持停用。",
+        "config": {
+          "sttBaseUrl": {
+            "title": "STT 基礎 URL"
+          },
+          "sttApiKey": {
+            "title": "STT API 金鑰"
+          },
+          "model": {
+            "title": "模型"
+          },
+          "language": {
+            "title": "語言提示"
+          },
+          "provider": {
+            "title": "提供者標籤"
+          },
+          "timeoutMs": {
+            "title": "STT 逾時（毫秒）"
+          },
+          "enabledMessageTypes": {
+            "title": "要轉寫的訊息類型"
+          },
+          "maxSizeBytes": {
+            "title": "最大音訊大小（位元組）"
+          },
+          "maxPerHour": {
+            "title": "每小時每工作階段最大轉寫數"
+          },
+          "deliveryWebhookUrl": {
+            "title": "投遞 webhook URL"
+          },
+          "deliverySecret": {
+            "title": "投遞密鑰"
+          },
+          "deliveryTimeoutMs": {
+            "title": "投遞逾時（毫秒）"
+          },
+          "chatDelivery": {
+            "title": "對話內投遞"
+          }
+        }
       }
     }
   }
