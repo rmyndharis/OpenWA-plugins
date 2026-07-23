@@ -88,3 +88,15 @@ test('postMedia marks a voice note and threads it (is_voice_message + source_id 
   assert.match(raw, /name="source_id"\r\n\r\nwa5/);
   assert.match(raw, /filename="voice.ogg"/);
 });
+
+test('postMedia on a non-ok response rejects with err.status set (so the 404 mapping-rebuild path can branch on it)', async () => {
+  // Inbound/sent recovery branches on `err.status === 404` to rebuild the dangling conversation mapping.
+  // json() already attaches status; postMedia did NOT — a media 404 would silently dead-letter. This test
+  // pins the status-attaching behaviour in place.
+  const { fn } = fakeFetch({ 'POST /api/v1/accounts/3/conversations/55/messages': { status: 404, body: 'gone' } });
+  const c = new ChatwootClient(fn, cfg);
+  await assert.rejects(
+    c.postMedia(55, 'hi', { filename: 'a.jpg', contentType: 'image/jpeg', data: new Uint8Array([1]) }),
+    (err: Error & { status?: number }) => err.status === 404,
+  );
+});
