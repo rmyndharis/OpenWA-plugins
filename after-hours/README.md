@@ -94,6 +94,13 @@ so schedule edits apply live without a re-enable).
 the next inbound message (config is re-read per event). For example, two sessions can have different
 business hours and away messages.
 
+### Known limitations
+
+- **WhatsApp `@lid` migration:** the per-chat cooldown is keyed by the chat id as received. If a contact
+  migrates between a `@lid` privacy id and a phone-based `@c.us` id, the old entry is orphaned and the
+  new id is treated as a fresh chat (the cooldown simply resets — harmless). A proper fix needs a
+  host-side lid↔phone resolver; tracked upstream.
+
 ## Security
 
 The plugin declares only `messages:send` and makes no outbound network calls. The away message is the

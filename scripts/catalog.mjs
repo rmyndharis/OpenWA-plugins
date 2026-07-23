@@ -22,6 +22,24 @@ function discoverPlugins() {
     .sort();
 }
 
+const SUPPORTED_LOCALES = ['en', 'es', 'fr', 'it', 'ar', 'he', 'te', 'zh-CN', 'zh-HK'];
+
+// Manifest hygiene gates (hard failures) and soft warnings. Keep these aligned with PLUGIN-STANDARD.md.
+function validateManifest(id, manifest) {
+  if (manifest.sessionScoped === undefined) {
+    throw new Error(`${id}: manifest.json must declare "sessionScoped" explicitly (true or false)`);
+  }
+  if (manifest.status === 'stable' && !manifest.testedOpenWAVersion) {
+    throw new Error(`${id}: status "stable" requires testedOpenWAVersion (the newest host actually smoke-tested)`);
+  }
+  if (!manifest.i18n || Object.keys(manifest.i18n).length === 0) {
+    console.warn(`⚠ ${id}: no i18n block — dashboard shows English only`);
+  } else {
+    const missing = SUPPORTED_LOCALES.filter((l) => l !== 'en' && !manifest.i18n[l]);
+    if (missing.length) console.warn(`⚠ ${id}: i18n missing locale(s): ${missing.join(', ')}`);
+  }
+}
+
 // Top released CHANGELOG heading: `## [x.y.z] — YYYY-MM-DD` (skips `## [Unreleased]`).
 function readChangelogTop(id) {
   const path = join(ROOT, id, 'CHANGELOG.md');
@@ -39,6 +57,7 @@ function buildEntry(id) {
       `${id}: version drift — manifest.json is ${manifest.version} but the top CHANGELOG entry is ${changelog.version}`,
     );
   }
+  validateManifest(id, manifest);
   return {
     id: manifest.id,
     name: manifest.name,

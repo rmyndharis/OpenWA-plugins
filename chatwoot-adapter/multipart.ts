@@ -10,7 +10,9 @@ export interface MultipartFile {
 }
 
 // Assemble a multipart/form-data body as raw bytes so a binary attachment survives intact (a string body
-// would be UTF-8 re-encoded and corrupt non-UTF-8 bytes). Ported from voice-transcription. Pure — no ctx.
+// would be UTF-8 re-encoded and corrupt non-UTF-8 bytes). Pure — no ctx.
+// NOTE: intentionally duplicated per plugin (plugins ship as self-contained zips) — keep all copies in
+// sync; scripts/shared-copies.test.mjs fails the build when they drift.
 export function buildMultipartBody(boundary: string, fields: MultipartField[], files: MultipartFile[]): Buffer {
   const parts: Buffer[] = [];
   for (const f of fields) {

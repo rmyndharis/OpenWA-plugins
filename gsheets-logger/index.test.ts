@@ -110,7 +110,11 @@ test('onConfigChange drains the buffer to the old client before swapping', async
     serviceAccountJson: JSON.stringify({ client_email: 'a@b.iam.gserviceaccount.com', private_key: 'KEY' }),
     spreadsheetId: 'NEW_SHEET',
   };
-  await logger.onConfigChange({ config: newConfig } as unknown as never, newConfig);
+  const fakeCtx = {
+    config: newConfig,
+    net: { fetch: async () => ({ ok: true, status: 200, body: '{}' }) },
+  };
+  await logger.onConfigChange(fakeCtx as unknown as never, newConfig);
   await logger.onUnload(); // stop the interval started by onConfigChange
 
   assert.deepEqual(sentToOld, [['old-row']]); // buffered row went to the OLD client

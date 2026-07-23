@@ -1,8 +1,6 @@
 import type { IPlugin, PluginContext, HookContext, IncomingMessage } from '../types/openwa';
 import { parseSchedule, assertValidTimezone, isAfterHours, Schedule } from './schedule.ts';
-
-/** Cap on the per-chat cooldown map (drop oldest past this) so it can't grow unbounded. */
-const MAX_COOLDOWN_ENTRIES = 5000;
+import { allowCooldown } from './cooldown.ts';
 
 export interface AfterHoursConfig {
   timezone: string;
@@ -38,22 +36,6 @@ export function parseConfig(raw: Record<string, unknown>): { config: AfterHoursC
       respondInGroups: raw.respondInGroups === true,
     },
   };
-}
-
-/**
- * Decide whether an after-hours reply may go to `key` now. On allow, records `nowMs` (re-inserting so
- * the map evicts least-recently-used) and caps the map by dropping the LRU entry. `cooldownMs` of 0 always allows.
- */
-export function allowReply(map: Map<string, number>, key: string, nowMs: number, cooldownMs: number): boolean {
-  const last = map.get(key);
-  if (last !== undefined && nowMs - last < cooldownMs) return false;
-  map.delete(key); // re-insert so iteration order tracks recency (LRU by touch)
-  map.set(key, nowMs);
-  if (map.size > MAX_COOLDOWN_ENTRIES) {
-    const oldest = map.keys().next().value as string | undefined;
-    if (oldest !== undefined) map.delete(oldest);
-  }
-  return true;
 }
 
 export default class AfterHours implements IPlugin {
@@ -92,7 +74,7 @@ export default class AfterHours implements IPlugin {
     const sessionId = hook.sessionId;
     const key = `${sessionId}:${m.chatId}`;
     const cooldownMs = Math.max(0, cfg.config.cooldownSec) * 1000;
-    if (!allowReply(this.repliedAt, key, Date.now(), cooldownMs)) return;
+    if (!allowCooldown(this.repliedAt, key, Date.now(), cooldownMs)) return;
 
     try {
       await ctx.messages.reply(sessionId, m.chatId, m.id, cfg.config.awayMessage);

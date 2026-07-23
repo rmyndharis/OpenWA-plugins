@@ -116,6 +116,13 @@ message (config is re-read per event). For example, two sessions can run differe
 state is keyed per `(session, chat)` in storage, so flows for sessions with different menus never
 interfere.
 
+### Known limitations
+
+- **WhatsApp `@lid` migration:** flow state is keyed by the chat id as received. If a contact migrates
+  between a `@lid` privacy id and a phone-based `@c.us` id mid-flow, the in-progress menu state is
+  orphaned and the contact restarts from the greeting on the new id. A proper fix needs a host-side
+  lid↔phone resolver; tracked upstream.
+
 ## Security
 
 Flow state lives in `ctx.storage`, keyed per `(session, chat)` and expiring after 15 minutes — no

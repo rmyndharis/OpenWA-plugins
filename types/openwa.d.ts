@@ -103,8 +103,11 @@ export interface PluginNetResponse {
   // NOTE: these method forms are NOT provided by the sandbox runtime (functions cannot cross the
   // worker structuredClone boundary). Use `body` above; the methods are retained only so older
   // plugins still type-check. Calling them at runtime throws.
+  /** @deprecated Not provided by the sandbox runtime — calling it throws. Use `body` instead. */
   text(): Promise<string>;
+  /** @deprecated Not provided by the sandbox runtime — calling it throws. Use `JSON.parse(body)` instead. */
   json<T = unknown>(): Promise<T>;
+  /** @deprecated Not provided by the sandbox runtime — calling it throws. Use `body` instead. */
   arrayBuffer(): Promise<ArrayBuffer>;
 }
 

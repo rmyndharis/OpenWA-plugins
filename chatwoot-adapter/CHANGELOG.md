@@ -6,6 +6,18 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.5.6] — 2026-07-23
+
+### Fixed
+
+- **A backfilled or mirrored message could be delivered twice when Chatwoot's echo webhook arrived
+  mid-post.** The adapter marks its own `outgoing` posts as "seen" only after Chatwoot confirms the
+  post, but the `message_created` echo webhook can be processed before that confirmation returns —
+  and inbound/backfill hold a different per-chat lock than the webhook path, so nothing serialized
+  the two. The echo then looked unmarked and was relayed to WhatsApp as a duplicate. The post and its
+  echo-marker write now hold a conversation-scoped lock that the webhook dedup also takes, so the
+  echo always waits for the marker and is correctly skipped (regression test included).
+
 ## [0.5.5] — 2026-07-22
 
 ### Fixed

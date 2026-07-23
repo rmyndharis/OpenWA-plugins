@@ -96,6 +96,13 @@ on v0.6.0/v0.6.1 a disable + re-enable is needed after changing rules.
 the next inbound message (config is re-read per event). For example, two sessions can run different FAQ
 rule sets.
 
+### Known limitations
+
+- **WhatsApp `@lid` migration:** the fallback cooldown is keyed by the chat id as received. If a contact
+  migrates between a `@lid` privacy id and a phone-based `@c.us` id, the old entry is orphaned and the
+  new id is treated as a fresh chat (the cooldown simply resets — harmless). A proper fix needs a
+  host-side lid↔phone resolver; tracked upstream.
+
 ## Security
 
 `regex` patterns are operator-authored (trusted) and tested against at most the first 1000 characters

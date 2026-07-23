@@ -5,6 +5,15 @@ All notable changes to this plugin are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] — 2026-07-23
+
+### Added
+
+- Resolve the phone-derived `<digits>@c.us` chat id through `ctx.engine.canonicalChatId` (OpenWA
+  0.8.7+, new `engine:read` permission) before sending, so OTPs still land in the right chat for
+  contacts keyed by a `@lid` privacy id. Best-effort: on older hosts or a resolution failure the
+  phone JID is used unchanged.
+
 ## [0.1.0] — 2026-07-07
 
 ### Added
