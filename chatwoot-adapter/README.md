@@ -15,8 +15,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chatwoot-adapter` |
-| **Version** | 0.5.5 |
-| **Released** | 2026-07-22 |
+| **Version** | 0.5.6 |
+| **Released** | 2026-07-23 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -166,6 +166,15 @@ instance id or route — so re-copy the ingress URL from the mint response.
   adapter never creates a second conversation for it, so this cannot happen to a thread already in use.
   If you do end up with a duplicate, merging the two contacts in Chatwoot is safe.
 - **Chatwoot** — account-level webhooks with timestamped HMAC signing (see Setup).
+
+### Known limitations
+
+- **Mapping storage grows with use (by design).** The `conv:`/`wa:` conversation-mapping entries in
+  plugin storage are never pruned — deleting a mapping would sever a live thread, and there is no safe
+  signal that a Chatwoot conversation will never be written to again. Growth is one small record per
+  WhatsApp chat ever relayed, so it stays modest in practice; `healthCheck` reports retry-queue and
+  dead-letter health if you need operational signals. The 3-day `seen:` dedup markers, by contrast,
+  expire and are pruned hourly.
 
 ### Per-session config
 
