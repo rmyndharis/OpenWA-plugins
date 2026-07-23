@@ -1,9 +1,9 @@
 import { build } from 'esbuild';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { rm, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { zipStore } from './scripts/zip-store.mjs';
 
 const plugin = process.argv[2];
 if (!plugin) {
@@ -68,8 +68,17 @@ if (manifest.configUi?.entry) {
   if (!existsSync(join(dir, ui))) fail(`configUi.entry "${ui}" not found`);
   entries.push(ui.includes('/') ? ui.split('/')[0] : ui);
 }
-const result = spawnSync('zip', ['-r', zipPath, ...entries], { cwd: dir, stdio: 'inherit' });
-if (result.status !== 0) fail('zip failed (is the `zip` CLI installed?)');
+
+// Resolve each entry (file or directory) to zip members with forward-slash relative paths.
+function collectEntryFiles(base, rel) {
+  const abs = join(base, rel);
+  if (statSync(abs).isDirectory()) {
+    return readdirSync(abs, { withFileTypes: true }).flatMap((e) => collectEntryFiles(base, `${rel}/${e.name}`));
+  }
+  return [{ name: rel, data: readFileSync(abs) }];
+}
+const result = entries.flatMap((entry) => collectEntryFiles(dir, entry));
+await writeFile(zipPath, zipStore(result));
 
 // ── Report size + sha256 (release artifacts — surfaced here and in the GitHub Release) ──
 const buf = readFileSync(zipPath);
