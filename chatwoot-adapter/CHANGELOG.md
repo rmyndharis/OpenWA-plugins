@@ -6,6 +6,19 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.5.7] — 2026-07-23
+
+### Fixed
+
+- **New Chatwoot contacts were almost always created without a `phone_number`.** The phone was set
+  only from `msg.senderPhone`, which the host populates solely for `@lid` senders under
+  `RESOLVE_LID_TO_PHONE=true` — so plain `@c.us` chats, and `@lid` chats whose lid→phone mapping was
+  already warmed, reached Chatwoot with no phone, breaking contact search and downstream merges. A new
+  `resolvePhone` helper now derives the number from the host-resolved sender or the canonical `@c.us`
+  chat id (whose JID user-part is the MSISDN), while deliberately ignoring `contact.number` (it carries
+  LID digits, not the real phone, for `@lid` senders). Groups and genuinely unresolved `@lid` chats
+  still create without a phone. Applies to new contacts only; existing rows are untouched.
+
 ## [0.5.6] — 2026-07-23
 
 ### Fixed
