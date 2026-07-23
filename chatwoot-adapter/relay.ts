@@ -102,46 +102,33 @@ export async function relayMessage(
   if (messageType === 'outgoing') await deps.store.markSeen('cw', String(created.id), sessionId);
 }
 
-// Best phone to put on a brand-new Chatwoot contact, or `undefined` when no source knows it. Two sources,
-// chosen in priority order:
+// Best phone for a brand-new Chatwoot contact, or `undefined` when no source knows it. Priority:
+//   1. `msg.senderPhone` — populated by the host ONLY for `@lid` senders under `RESOLVE_LID_TO_PHONE=true`;
+//      MSISDN digits, no `+` guaranteed, so we normalize.
+//   2. User-part of `canonicalChatId` when it ends `@c.us` — covers a warmed lid→pn mapping (the id is
+//      @lid-aware, resolved via the engine's in-memory map — no network) AND every plain `@c.us` chat,
+//      whose JID user-part is by definition the MSISDN (previously created with no phone at all).
 //
-//   1. `msg.senderPhone`. The OpenWA host populates this ONLY for `@lid` senders and ONLY when the env
-//      flag `RESOLVE_LID_TO_PHONE=true` is set; the value is MSISDN digits with no `+` guaranteed, so we
-//      normalize. The cheapest signal when it exists, since the host has already done the work.
-//   2. The user-part of `canonicalChatId` when it ends with `@c.us`. `canonicalChatId` is also @lid-aware
-//      (resolved via the engine's in-memory lid→pn map — no network call), so this covers a contact whose
-//      lid mapping was warmed by any earlier reply to them, and — bonus — every plain `@c.us` chat, where
-//      the JID user-part is by definition the MSISDN. (Today those contacts are created without a phone,
-//      since `senderPhone` is lid-only on the host.)
+// Deliberately NOT consulted: `msg.contact?.number`. For an `@lid` sender it carries the LID digits, not
+// the real phone — matching on it would corrupt Chatwoot's contact search and future merges.
 //
-// Deliberately not consulted: `msg.contact?.number`. It is only present when the host runs
-// `WEBHOOK_CONTACT_DETAILS=true` (off by default), and for a `@lid` sender it carries the LID digits, not
-// the real phone — the host's own MessageContact doc warns "For @lid senders the authoritative number is
-// IncomingMessage.senderPhone". Falsely matching on a lid-derived number would corrupt Chatwoot's contact
-// search and produce future merge surprises, so the helper stops one source short of it.
-//
-// Groups short-circuit to `undefined`: a group has no MSISDN, and the synthetic group contact never gets a
-// phone. An unresolved `@lid` (the third manifest state) also yields `undefined` — pre-fix behavior is
-// preserved when the lid→pn mapping is genuinely unknown, and resolved contacts now carry their real
-// phone as soon as the host has any of the two sources above.
-//
-// Pure and synchronous, so the bulk sweep can call it on a ChatSummary (with `chat.id` already in the
-// neutral dialect — no engine call needed on that path) and the retry drain can replay through it without
-// adding a failure mode.
+// Groups and an unresolved `@lid` (canonical stays `@lid`) yield `undefined` — pre-fix behavior preserved.
+// Pure & synchronous, so the bulk sweep (ChatSummary, id already neutral) and retry drain reuse it freely.
 export function resolvePhone(
   msg: { isGroup: boolean; senderPhone?: string | null },
   canonicalChatId: string,
 ): string | undefined {
   if (msg.isGroup) return undefined;
-  const sender = msg.senderPhone;
-  if (sender) {
-    const digits = sender.replace(/\D/g, '');
-    if (digits) return `+${digits}`;
+  // Digits only, prefixed `+`; undefined if nothing survives (a host error like '--' must not emit a bare '+').
+  const e164 = (raw: string): string | undefined => {
+    const digits = raw.replace(/\D/g, '');
+    return digits ? `+${digits}` : undefined;
+  };
+  if (msg.senderPhone) {
+    const phone = e164(msg.senderPhone);
+    if (phone) return phone;
   }
-  if (canonicalChatId.endsWith('@c.us')) {
-    const digits = canonicalChatId.slice(0, -('@c.us'.length)).replace(/\D/g, '');
-    if (digits) return `+${digits}`;
-  }
+  if (canonicalChatId.endsWith('@c.us')) return e164(canonicalChatId.slice(0, -'@c.us'.length));
   return undefined;
 }
 
