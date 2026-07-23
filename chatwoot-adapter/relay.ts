@@ -102,6 +102,49 @@ export async function relayMessage(
   if (messageType === 'outgoing') await deps.store.markSeen('cw', String(created.id), sessionId);
 }
 
+// Best phone to put on a brand-new Chatwoot contact, or `undefined` when no source knows it. Two sources,
+// chosen in priority order:
+//
+//   1. `msg.senderPhone`. The OpenWA host populates this ONLY for `@lid` senders and ONLY when the env
+//      flag `RESOLVE_LID_TO_PHONE=true` is set; the value is MSISDN digits with no `+` guaranteed, so we
+//      normalize. The cheapest signal when it exists, since the host has already done the work.
+//   2. The user-part of `canonicalChatId` when it ends with `@c.us`. `canonicalChatId` is also @lid-aware
+//      (resolved via the engine's in-memory lid→pn map — no network call), so this covers a contact whose
+//      lid mapping was warmed by any earlier reply to them, and — bonus — every plain `@c.us` chat, where
+//      the JID user-part is by definition the MSISDN. (Today those contacts are created without a phone,
+//      since `senderPhone` is lid-only on the host.)
+//
+// Deliberately not consulted: `msg.contact?.number`. It is only present when the host runs
+// `WEBHOOK_CONTACT_DETAILS=true` (off by default), and for a `@lid` sender it carries the LID digits, not
+// the real phone — the host's own MessageContact doc warns "For @lid senders the authoritative number is
+// IncomingMessage.senderPhone". Falsely matching on a lid-derived number would corrupt Chatwoot's contact
+// search and produce future merge surprises, so the helper stops one source short of it.
+//
+// Groups short-circuit to `undefined`: a group has no MSISDN, and the synthetic group contact never gets a
+// phone. An unresolved `@lid` (the third manifest state) also yields `undefined` — pre-fix behavior is
+// preserved when the lid→pn mapping is genuinely unknown, and resolved contacts now carry their real
+// phone as soon as the host has any of the two sources above.
+//
+// Pure and synchronous, so the bulk sweep can call it on a ChatSummary (with `chat.id` already in the
+// neutral dialect — no engine call needed on that path) and the retry drain can replay through it without
+// adding a failure mode.
+export function resolvePhone(
+  msg: { isGroup: boolean; senderPhone?: string | null },
+  canonicalChatId: string,
+): string | undefined {
+  if (msg.isGroup) return undefined;
+  const sender = msg.senderPhone;
+  if (sender) {
+    const digits = sender.replace(/\D/g, '');
+    if (digits) return `+${digits}`;
+  }
+  if (canonicalChatId.endsWith('@c.us')) {
+    const digits = canonicalChatId.slice(0, -('@c.us'.length)).replace(/\D/g, '');
+    if (digits) return `+${digits}`;
+  }
+  return undefined;
+}
+
 // Get-or-create the Chatwoot contact + conversation for a chat and mirror the mapping. Self-contained so
 // the bulk backfill can call it from a chat summary (no triggering message), and idempotent so a chat
 // already mapped by the live path is a no-op.

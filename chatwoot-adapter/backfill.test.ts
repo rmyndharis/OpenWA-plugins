@@ -11,6 +11,7 @@ function makeDeps(
   over: {
     engine?: Record<string, unknown>;
     store?: Record<string, unknown>;
+    client?: Record<string, unknown>;
     relayGroups?: boolean;
     backfillLimit?: number;
     failOn?: string;
@@ -34,6 +35,7 @@ function makeDeps(
     },
     postMedia: async () => ({ id: 2 }),
     updateContact: async () => {},
+    ...over.client,
   };
   const store = {
     hasSeen: async (_k: string, id: string) => seen.has(id),
@@ -160,4 +162,36 @@ test('bulk creates NO empty conversation for a chat with no fetchable history (B
   await backfillAllChats(deps, 'sessEmpty');
   assert.equal(creates.length, 0); // ensureConversation/createConversation never called
   assert.equal(posts.length, 0);
+});
+
+test('bulk sweep populates `phone_number` on the new Chatwoot contact when the chat id is resolvable', async () => {
+  // Three chats in one sweep: a plain @c.us (gets its real phone from the JID user-part), a group
+  // (no phone — groups never get one), and a cold @lid (no phone — the mapping is genuinely unknown).
+  const chats = [
+    { id: '1234567890@c.us', name: 'A', isGroup: false, unreadCount: 0, timestamp: 1 },
+    { id: '120363@g.us', name: 'G', isGroup: true, unreadCount: 0, timestamp: 2 },
+    { id: '118367890123478@lid', name: 'L', isGroup: false, unreadCount: 0, timestamp: 3 },
+  ];
+  const createCalls: Array<{ identifier: string; phone: string | undefined }> = [];
+  const { deps } = makeDeps({
+    engine: {
+      getChats: async () => chats,
+      // Each chat has one history message so ensureConversation fires on the sweep.
+      getChatHistory: async (_s: string, chatId: string) => [
+        { ...hist(`${chatId}-1`, 10, false, 'hello'), chatId },
+      ],
+    },
+    client: {
+      createContact: async (identifier: string, _name: string, phone?: string) => {
+        createCalls.push({ identifier, phone });
+        return { id: 9, sourceId: 'src' };
+      },
+    },
+  });
+  await backfillAllChats(deps, 'sessPhone');
+  assert.equal(createCalls.length, 3);
+  const byId = Object.fromEntries(createCalls.map(c => [c.identifier, c.phone]));
+  assert.equal(byId['1234567890@c.us'], '+1234567890'); // resolved from the neutral @c.us id
+  assert.equal(byId['120363@g.us'], undefined);             // groups never carry a phone
+  assert.equal(byId['118367890123478@lid'], undefined);     // cold lid — pre-fix behavior preserved
 });
