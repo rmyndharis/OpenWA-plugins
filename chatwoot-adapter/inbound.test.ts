@@ -9,7 +9,14 @@ const msg = {
   timestamp: 0, fromMe: false, isGroup: false, senderPhone: '+621', contact: { pushName: 'Budi' },
 } as IncomingMessage;
 
-function deps(over: { client?: Record<string, unknown>; store?: Record<string, unknown>; engine?: Record<string, unknown> } = {}) {
+function deps(
+  over: {
+    client?: Record<string, unknown>;
+    store?: Record<string, unknown>;
+    engine?: Record<string, unknown>;
+    log?: (m: string, e?: unknown) => void;
+  } = {},
+) {
   let contacts = 0;
   let convs = 0;
   const posted: Array<{ id: number; c: string }> = [];
@@ -23,19 +30,25 @@ function deps(over: { client?: Record<string, unknown>; store?: Record<string, u
     postMedia: async () => ({ id: 2 }),
     ...over.client,
   };
+  // unlinkByChatId + unlinkByConversationId default to actual map deletes against the SAME backing `store`
+  // the default getByChat / link use, so a recovery path that calls one of them actually clears the
+  // cached row (matches the real PluginStorage's semantics). Tests that need to introspect the call can
+  // still override them.
   const mapping = {
     getByChat: async (s: string, c: string) => store.get(`${s}:${c}`) ?? null,
     getByConversation: async () => null,
     link: async (s: string, c: string, _i: string, l: unknown) => void store.set(`${s}:${c}`, l),
     hasSeen: async () => false,
     markSeen: async () => {},
+    unlinkByChatId: async (s: string, c: string) => void store.delete(`${s}:${c}`),
+    unlinkByConversationId: async () => {},
     ...over.store,
   };
   // Default: identity canonicalization (@lid resolution exercised explicitly below).
   const engine = { canonicalChatId: async (_s: string, c: string) => c, ...over.engine };
   const d = {
     lock: new KeyedAsyncLock(), client, store: mapping, engine, instanceId: 'inst',
-    relayGroups: true, relayMedia: true, log: () => {},
+    relayGroups: true, relayMedia: true, log: over.log ?? (() => {}),
   } as unknown as InboundDeps;
   return { deps: d, counts: () => ({ contacts, convs }), posted };
 }
@@ -209,4 +222,98 @@ test('never renames a group contact from a member pushName (#609)', async () => 
   const grp = { ...msg, isGroup: true, chatId: '12@g.us', author: '621@c.us', contact: { pushName: 'Budi' } } as IncomingMessage;
   await handleInbound(d, 'sess', 'Engine', grp);
   assert.equal(updates.length, 0);
+});
+
+test('a 404 on inbound relay mid-flight rebuilds the mapping and retries once (no retry-queue entry, no duplicate conversation)', async () => {
+  // Operator deleted the Chatwoot conversation out-of-band: the cached conv id is dead. The plugin must
+  // drop the stale mapping (forward + scoped + legacy reverse), re-resolve through ensureConversation,
+  // and re-post the message into a fresh conversation instead of looping the dead id forever.
+  const unlinksChat: string[] = [];
+  const unlinksConv: number[] = [];
+  const postedTo: number[] = [];
+  const enqueued: string[] = [];
+  // Seed a stale mapping under the chatId that `handleInbound` will look up (msg.chatId = '621@c.us').
+  const seeded = new Map<string, unknown>([
+    ['sess:621@c.us', { conversationId: 191, contactId: 9, sourceId: 'src' }],
+  ]);
+  const { deps: d } = deps({
+    store: {
+      getByChat: async (s: string, c: string) => seeded.get(`${s}:${c}`) ?? null,
+      link: async (s: string, c: string, _i: string, l: unknown) => void seeded.set(`${s}:${c}`, l),
+      // The default unlinkByChatId in deps() clears the local map — match that semantics against the
+      // seeded map so the rebuild's getByChat actually misses.
+      unlinkByChatId: async (s: string, c: string) => { unlinksChat.push(c); seeded.delete(`${s}:${c}`); },
+      unlinkByConversationId: async (_s: string, conv: number) => void unlinksConv.push(conv),
+      enqueueRetry: async (e: { msg: { id: string } }) => void enqueued.push(e.msg.id),
+    },
+    client: {
+      searchContact: async () => ({ id: 9, sourceId: 'src' }), // contact already on Chatwoot — no createContact
+      findOpenConversation: async () => null, // the old conv is deleted; no orphan open conv
+      createConversation: async () => 192,
+      postText: async (id: number) => {
+        postedTo.push(id);
+        if (id === 191) {
+          const e = new Error('Chatwoot POST .../conversations/191/messages -> 404') as Error & { status?: number };
+          e.status = 404;
+          throw e;
+        }
+        return { id: 1 };
+      },
+    },
+  });
+  await handleInbound(d, 'sess', 'Engine', msg);
+  assert.deepEqual(unlinksChat, ['621@c.us'], 'forward mapping dropped');
+  assert.deepEqual(unlinksConv, [191], 'scoped + legacy reverse mappings dropped');
+  assert.deepEqual(postedTo, [191, 192], 'first post 404s against the dead id; second post succeeds against the rebuilt one');
+  assert.deepEqual(enqueued, [], 'no retry-queue entry — the 404 was recovered in-band');
+  // The rebuild reuses the existing Chatwoot contact (searchContact hit) so no second createContact fires,
+  // and exactly one new conversation is minted for the contact. counts() counts both via the default
+  // createContact/createConversation wrappers on the CLIENT overrides above — when an override replaces
+  // them, the default counters stop incrementing, so we assert by the recorded calls instead.
+  assert.ok(seeded.has('sess:621@c.us'), 'the fresh link is written back under the same chatId');
+  const fresh = seeded.get('sess:621@c.us') as { conversationId: number };
+  assert.equal(fresh.conversationId, 192, 'mapping now points at the new conversation id');
+});
+
+test('a 404 on the REBUILT inbound conversation propagates to the retry queue (no silent loop)', async () => {
+  // Catastrophic case: even the freshly-created conversation is already gone, or Chatwoot is fully down.
+  // The recovery must NOT swallow the second 404 on the rebuilt conv — the failure has to surface so the
+  // existing enqueueRetry + drainRetries (5-attempt cap) takes over.
+  const unlinksConv: number[] = [];
+  const postedTo: number[] = [];
+  const enqueued: string[] = [];
+  const logCalls: string[] = [];
+  // Seed the SAME stale mapping shape as the previous test.
+  const seeded = new Map<string, unknown>([
+    ['sess:621@c.us', { conversationId: 55, contactId: 9, sourceId: 'src' }],
+  ]);
+  const { deps: d } = deps({
+    store: {
+      getByChat: async (s: string, c: string) => seeded.get(`${s}:${c}`) ?? null,
+      link: async (s: string, c: string, _i: string, l: unknown) => void seeded.set(`${s}:${c}`, l),
+      unlinkByChatId: async (s: string, c: string) => { seeded.delete(`${s}:${c}`); },
+      unlinkByConversationId: async (_s: string, conv: number) => void unlinksConv.push(conv),
+      enqueueRetry: async (e: { msg: { id: string } }) => void enqueued.push(e.msg.id),
+    },
+    client: {
+      searchContact: async () => ({ id: 9, sourceId: 'src' }),
+      findOpenConversation: async () => null,
+      createConversation: async () => 200,
+      postText: async (id: number) => {
+        postedTo.push(id);
+        const e = new Error(`Chatwoot POST .../conversations/${id}/messages -> 404`) as Error & { status?: number };
+        e.status = 404;
+        throw e; // BOTH the dead id AND the rebuilt id 404 — the recovery cannot succeed
+      },
+    },
+    log: logCalls.push.bind(logCalls),
+  });
+  await handleInbound(d, 'sess', 'Engine', { ...msg, id: 'm-recover-twice' });
+  assert.deepEqual(unlinksConv, [55], 'still unlinks the dead conv mapping once');
+  assert.deepEqual(postedTo, [55, 200], 'posts were attempted against the dead id and then the rebuilt one');
+  assert.deepEqual(enqueued, ['m-recover-twice'], 'the original 404 surfaces to the retry queue (with the backoff cap)');
+  assert.ok(
+    logCalls.some(l => /inbound 404-recovery failed/.test(l)),
+    'logs the recovery failure so ops can see why the rebuild itself failed',
+  );
 });

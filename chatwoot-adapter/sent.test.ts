@@ -18,6 +18,7 @@ function deps(
     engine?: Record<string, unknown>;
     relayGroups?: boolean;
     relayMedia?: boolean;
+    log?: (m: string, e?: unknown) => void;
   } = {},
 ) {
   let contacts = 0;
@@ -46,7 +47,7 @@ function deps(
   const d = {
     lock: new KeyedAsyncLock(), client, store, engine, instanceId: 'inst',
     relayGroups: over.relayGroups ?? true, relayMedia: over.relayMedia ?? true, backfillLimit: 0, backfillAllOnce: false,
-    log: () => {},
+    log: over.log ?? (() => {}),
   } as unknown as InboundDeps;
   return { deps: d, counts: () => ({ contacts, convs }), posted, seen };
 }
@@ -192,4 +193,100 @@ test('ignores a non-Engine source (defensive)', async () => {
   const { deps: d, posted } = deps();
   await handleSent(d, 'sess', 'API', own);
   assert.equal(posted.length, 0);
+});
+
+test('a 404 on an own-send relay mid-flight rebuilds the mapping via ensureConversation and posts once', async () => {
+  // Operator deleted the Chatwoot conversation out-of-band: the cached conv id is dead. sent.ts's normal
+  // posture is "relay-into-existing-only, never create" (mirrors the lid-migration no-split invariant),
+  // but on a 404 specifically the dangling mapping has to be dropped and a fresh conversation must be
+  // minted so the phone-composed delivery isn't silently lost. Symmetrical to inbound.ts's recovery.
+  const unlinksChat: string[] = [];
+  const unlinksConv: number[] = [];
+  const posts: Array<{ id: number; type?: string }> = [];
+  const searchCalls: string[] = [];
+  let createConvCalls = 0;
+  // Seed the stale mapping in a closure-scoped map so unlinkByChatId actually clears it (matching what
+  // the real PluginStorage would do). Without this, a static getByChat stub would keep returning the
+  // dead row after unlink and ensureConversation would short-circuit.
+  const links = new Map<string, unknown>([
+    ['sess:621@c.us', { conversationId: 55, contactId: 9, sourceId: 'oldSrc', name: 'x' }],
+  ]);
+  const { deps: d } = deps({
+    store: {
+      getByChat: async (_s: string, c: string) => links.get(`sess:${c}`) ?? null,
+      link: async (_s: string, c: string, _i: string, l: unknown) => void links.set(`sess:${c}`, l),
+      unlinkByChatId: async (_s: string, c: string) => { unlinksChat.push(c); links.delete(`sess:${c}`); },
+      unlinkByConversationId: async (_s: string, conv: number) => void unlinksConv.push(conv),
+    },
+    client: {
+      postText: async (id: number, _c: string, o?: { messageType?: string }) => {
+        posts.push({ id, type: o?.messageType });
+        if (id === 55) {
+          const e = new Error(`Chatwoot POST .../conversations/${id}/messages -> 404`) as Error & { status?: number };
+          e.status = 404;
+          throw e;
+        }
+        return { id: 1 };
+      },
+      searchContact: async (identifier: string) => { searchCalls.push(identifier); return { id: 9, sourceId: 'newSrc' }; },
+      findOpenConversation: async () => null, // no orphan — rebuild mints a fresh one
+      createConversation: async () => { createConvCalls++; return 77; },
+    },
+  });
+  await handleSent(d, 'sess', 'Engine', own);
+  assert.deepEqual(unlinksChat, ['621@c.us'], 'forward mapping dropped under the canonical key');
+  assert.deepEqual(unlinksConv, [55], 'scoped + legacy reverse mappings dropped');
+  assert.deepEqual(posts, [
+    { id: 55, type: 'outgoing' },
+    { id: 77, type: 'outgoing' },
+  ], 'first post 404s against the dead id; second post succeeds against the rebuilt one');
+  assert.deepEqual(searchCalls, ['621@c.us'], 'ensureConversation re-resolves the contact by JID');
+  assert.equal(createConvCalls, 1, 'one fresh Chatwoot conversation minted (ensureConversation -> createConversation)');
+});
+
+test('a 404 on the REBUILT own-send conversation logs failure (sent is at-most-once, no retry)', async () => {
+  // Catastrophic case: the freshly-created conversation is also gone / Chatwoot is wedged. sent.ts is
+  // at-most-once (unlike inbound, which enqueues for retry), so the failure must surface once on the log
+  // and STOP — never enqueue, never re-create the contact a second time.
+  const unlinksConv: number[] = [];
+  const logCalls: string[] = [];
+  let searchCalls = 0;
+  let createConvCalls = 0;
+  let postCalls = 0;
+  const links = new Map<string, unknown>([
+    ['sess:621@c.us', { conversationId: 55, contactId: 9, sourceId: 'x', name: 'x' }],
+  ]);
+  const { deps: d } = deps({
+    store: {
+      getByChat: async (_s: string, c: string) => links.get(`sess:${c}`) ?? null,
+      link: async (_s: string, c: string, _i: string, l: unknown) => void links.set(`sess:${c}`, l),
+      unlinkByChatId: async (_s: string, c: string) => void links.delete(`sess:${c}`),
+      unlinkByConversationId: async (_s: string, conv: number) => void unlinksConv.push(conv),
+    },
+    client: {
+      postText: async () => {
+        postCalls++;
+        const e = new Error('Chatwoot POST .../messages -> 404') as Error & { status?: number };
+        e.status = 404;
+        throw e;
+      },
+      searchContact: async () => { searchCalls++; return { id: 9, sourceId: 'src' }; },
+      findOpenConversation: async () => null,
+      createConversation: async () => { createConvCalls++; return 200; },
+    },
+    log: logCalls.push.bind(logCalls),
+  });
+  await handleSent(d, 'sess', 'Engine', { ...own, id: 'o-double-404' });
+  assert.deepEqual(unlinksConv, [55], 'still unlinks the dead conv mapping once');
+  assert.equal(postCalls, 2, 'two posts attempted (one against the dead id, one against the rebuilt one — both 404)');
+  assert.equal(searchCalls, 1, 'one rebuild attempt only — no second createContact');
+  assert.equal(createConvCalls, 1, 'one rebuild attempt only — no second createConversation');
+  assert.ok(
+    logCalls.some(l => /own-send 404-recovery failed/.test(l)),
+    'logs WHY the rebuild itself failed (the second 404), with its own context',
+  );
+  assert.ok(
+    logCalls.some(l => /own-send relay failed/.test(l)),
+    'logs the unrecoverable own-send failure (sent does not retry)',
+  );
 });
