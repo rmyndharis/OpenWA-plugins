@@ -1271,7 +1271,7 @@
   {
     "id": "http-action",
     "name": "HTTP Action Bot",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "type": "extension",
     "status": "beta",
     "description": "Triggers safe REST API requests from WhatsApp commands and renders JSON responses back to chat.",
@@ -1287,11 +1287,11 @@
     ],
     "minOpenWAVersion": "0.8.0",
     "testedOpenWAVersion": null,
-    "releasedAt": "2026-07-11",
+    "releasedAt": "2026-07-27",
     "repoPath": "http-action",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/http-action-v0.1.0/http-action.zip",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/http-action-v0.1.1/http-action.zip",
     "i18n": {
       "es": {
         "name": "Bot de acciones HTTP",

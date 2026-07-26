@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `http-action` |
-| **Version** | 0.1.0 |
-| **Released** | 2026-07-11 |
+| **Version** | 0.1.1 |
+| **Released** | 2026-07-27 |
 | **Status** | beta |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
