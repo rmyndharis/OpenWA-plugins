@@ -11,8 +11,9 @@
 export type HookEvent =
   | 'session:created' | 'session:starting' | 'session:ready' | 'session:qr'
   | 'session:disconnected' | 'session:error' | 'session:deleted'
-  | 'message:received' | 'message:sending' | 'message:sent' | 'message:failed' | 'message:ack'
-  | 'webhook:before' | 'webhook:queued' | 'webhook:delivered' | 'webhook:after' | 'webhook:error';
+  | 'message:received' | 'message:sending' | 'message:sent' | 'message:failed' | 'message:ack' | 'message:persisted'
+  | 'webhook:before' | 'webhook:queued' | 'webhook:delivered' | 'webhook:after' | 'webhook:error'
+  | 'ingress:error';
 
 export interface HookContext<T = unknown> {
   event: HookEvent;
