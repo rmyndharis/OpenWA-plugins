@@ -1285,7 +1285,7 @@
       "whatsapp",
       "openwa"
     ],
-    "minOpenWAVersion": "0.8.7",
+    "minOpenWAVersion": "0.8.0",
     "testedOpenWAVersion": null,
     "releasedAt": "2026-07-11",
     "repoPath": "http-action",
