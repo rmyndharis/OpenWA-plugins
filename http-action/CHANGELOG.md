@@ -3,6 +3,11 @@
 All notable changes to HTTP Action Bot are listed here. Versions follow [Semantic Versioning](https://semver.org/),
 and the top entry's version must match `manifest.json`.
 
+## [0.1.1] — 2026-07-27
+
+### Fixed
+- **`minOpenWAVersion` corrected from 0.8.7 to 0.8.0.** Both capabilities http-action relies on — `conversation:send` and `net.allowConfigHosts` — shipped in OpenWA 0.8.0 (the Integration Fabric release). The 0.8.7 floor was overstated and refused an install on servers that would in fact run the plugin correctly.
+
 ## [0.1.0] — 2026-07-11
 
 ### Added
