@@ -18,6 +18,7 @@
     "openwa"
   ],
   "status": "beta",
+  "testedOpenWAVersion": "0.12.1",
   "minOpenWAVersion": "0.8.0",
   "sdkVersion": "1",
   "provides": [

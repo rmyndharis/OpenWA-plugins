@@ -1286,7 +1286,7 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.8.0",
-    "testedOpenWAVersion": null,
+    "testedOpenWAVersion": "0.12.1",
     "releasedAt": "2026-07-30",
     "repoPath": "http-action",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
@@ -1728,7 +1728,7 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.8.2",
-    "testedOpenWAVersion": "0.8.2",
+    "testedOpenWAVersion": "0.12.1",
     "releasedAt": "2026-07-30",
     "repoPath": "typebot-connector",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
