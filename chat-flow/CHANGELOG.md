@@ -8,6 +8,16 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.0.8] — 2026-07-30
+
+### Fixed
+
+- **Stickers and voice notes drove the menu.** The inbound guard checked that `body` was a string but not
+  that it had content, and every non-text message carries an empty body. With the documented empty
+  `trigger` a bare sticker started the flow; with a flow already open, a photo drew an "Invalid option"
+  reply — and the plugin claimed the event, so a sibling auto-replier never saw it either. A message with
+  no text content is now ignored outright.
+
 ## [1.0.7] — 2026-07-22
 
 ### Fixed

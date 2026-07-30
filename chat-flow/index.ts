@@ -84,7 +84,11 @@ export default class ChatFlow implements IPlugin {
   private async onMessage(ctx: PluginContext, hook: HookContext<IncomingMessage>): Promise<HookResult> {
     if (hook.source !== 'Engine' || !hook.sessionId) return { continue: true };
     const m = hook.data;
-    if (m.fromMe || typeof m.body !== 'string' || !m.chatId || !m.id) return { continue: true };
+    // `!m.body.trim()` matters as much as the type check: every non-text message carries `body: ''`, so a
+    // sticker or a voice note used to reach the menu. With the documented empty `trigger` that STARTED
+    // the flow; with a flow already open it answered "Invalid option" to a photo and claimed the event
+    // from sibling auto-repliers.
+    if (m.fromMe || typeof m.body !== 'string' || !m.body.trim() || !m.chatId || !m.id) return { continue: true };
 
     let liveCfg;
     try {

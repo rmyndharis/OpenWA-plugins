@@ -79,6 +79,12 @@ export default class AfterHours implements IPlugin {
     try {
       await ctx.messages.reply(sessionId, m.chatId, m.id, cfg.config.awayMessage);
     } catch (err) {
+      // The cooldown slot is burned BEFORE the send (allowCooldown records on the allow path), so a
+      // failed reply used to silence this chat for the whole window without anything having been sent.
+      // That is now reachable more often: another plugin vetoing `message:sending` surfaces here as a
+      // thrown BadRequestException, indistinguishable from a transport failure. Give the slot back so
+      // the contact's next message can try again.
+      this.repliedAt.delete(key);
       ctx.logger.error('after-hours: reply failed', err);
     }
   }

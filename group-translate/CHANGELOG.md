@@ -8,6 +8,20 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.0.7] — 2026-07-30
+
+### Fixed
+
+- **An empty translation is dropped instead of thrown away.** Whatever the backend returned was forwarded
+  straight into the send, and a backend that answers 200 with a blank translation is a real case. OpenWA
+  0.12 rejects an empty positional capability argument outright, so that stopped being a blank WhatsApp
+  bubble and became a thrown capability error the coordinator swallowed — a translation that silently
+  never arrives either way. It is now dropped deliberately, at the one place that can tell why.
+- **`timeoutMs` is clamped in code, not just hinted in the schema.** A `configSchema` `min` is a form
+  hint the host never enforces, and the host clamps a fetch timeout of `<= 0` up to 1 ms — so a config of
+  `0` made every translate abort instantly, with the coordinator swallowing the error and nothing logged.
+  Values are now clamped to 500–30000 where it is actually enforceable.
+
 ## [1.0.6] — 2026-07-18
 
 ### Fixed

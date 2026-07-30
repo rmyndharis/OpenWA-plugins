@@ -84,3 +84,15 @@ test('onMessage re-reads ctx.config per event (per-session config is not cached 
     data: { id: 'm1', chatId: 'c@x', body: 'hi', fromMe: false, isGroup: false } });
   assert.ok(warnings.some(w => /config invalid/.test(w)), 'corrupted post-enable config was re-read and warned');
 });
+
+// The cooldown slot is taken before the send, so a failed reply must give it back — otherwise one
+// failure (a transport error, or another plugin vetoing message:sending) silences the chat for the
+// whole window with nothing having been delivered.
+test('a burned cooldown slot can be released so the next message retries', () => {
+  const seen = new Map<string, number>();
+  const key = 's1:c@wa';
+  assert.equal(allowReply(seen, key, 1000, 60_000), true);
+  assert.equal(allowReply(seen, key, 1500, 60_000), false, 'still throttled while the slot is held');
+  seen.delete(key); // what the catch does after a failed reply
+  assert.equal(allowReply(seen, key, 1600, 60_000), true, 'released — the next message may try again');
+});

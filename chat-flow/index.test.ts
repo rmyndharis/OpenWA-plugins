@@ -67,3 +67,13 @@ test('onMessage re-reads ctx.config per event (per-session config is not cached 
     data: { id: 'm1', chatId: 'c@x', body: 'hi', fromMe: false, isGroup: false } });
   assert.ok(warnings.some(w => /config invalid/.test(w)), 'corrupted post-enable config was re-read and warned');
 });
+
+// Every non-text message carries body: ''. Guarding only on the TYPE let a sticker or voice note start
+// the flow (with the documented empty trigger) or draw an "Invalid option" reply mid-flow.
+test('an empty or whitespace body is not a menu key', () => {
+  const isActionable = (body: unknown) => typeof body === 'string' && !!body.trim();
+  assert.equal(isActionable(''), false, 'sticker / voice note / caption-less image');
+  assert.equal(isActionable('   '), false);
+  assert.equal(isActionable(undefined), false);
+  assert.equal(isActionable('1'), true);
+});
