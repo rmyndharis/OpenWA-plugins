@@ -101,8 +101,15 @@ export async function handleMessage(deps: HandleDeps, sessionId: string, msg: In
       text = renderText(action.errorTemplate ?? DEFAULT_ERROR, ctxWith(out.data));
     }
   } catch (e) {
-    text = renderText(action.errorTemplate ?? DEFAULT_ERROR, ctxWith());
     deps.logger.error(`${PLUGIN}: request failed`, e);
+    // Same hazard as the empty-reply fallback below: renderText can throw on a bad template, and an
+    // unguarded throw here would replace an upstream failure the operator can see with silence.
+    try {
+      text = renderText(action.errorTemplate ?? DEFAULT_ERROR, ctxWith());
+    } catch (tplErr) {
+      deps.logger.warn(`${PLUGIN}: action '${action.id}' errorTemplate failed to render`, tplErr);
+      text = DEFAULT_ERROR;
+    }
   }
 
   // A template referencing a field the response does not carry renders to '', and an empty envelope is

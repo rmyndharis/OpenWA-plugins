@@ -98,7 +98,9 @@ curl -X PUT "https://your-openwa-host/plugins/gsheets-logger/config" \
 
 **3. Enable it** — a freshly installed plugin is disabled and never enables itself. Once you have
 enabled it, that decision is remembered: OpenWA ≥ 0.12 re-enables it automatically on every host
-restart (a plugin left in ERROR still needs an explicit re-enable).
+restart. An ERROR status does not exclude it — the host replays your enable decision, not the last
+runtime status. What is not automatic is a worker that crashed mid-run: nothing respawns it until the
+next restart or an explicit re-enable.
 
 ```bash
 curl -X POST "https://your-openwa-host/plugins/gsheets-logger/enable" \

@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseConfig } from './index.ts';
 import { allowCooldown as allowReply } from './cooldown.ts';
@@ -88,17 +88,6 @@ test('onMessage re-reads ctx.config per event (per-session config is not cached 
 // Drives the PLUGIN, not a re-implementation. A failed reply must not silence the chat for the whole
 // cooldown, and must not remove the throttle either: clearing it outright turned a permanently-blocked
 // send (a compliance plugin vetoing message:sending) into one send attempt per inbound message.
-function openWindowAfterNow(): string {
-  const start = new Date(Date.now() + 2 * 60_000);
-  const hh = String(start.getUTCHours()).padStart(2, '0');
-  const mm = String(start.getUTCMinutes()).padStart(2, '0');
-  const end = new Date(start.getTime() + 60_000);
-  const eh = String(end.getUTCHours()).padStart(2, '0');
-  const em = String(end.getUTCMinutes()).padStart(2, '0');
-  const w = `${hh}:${mm}-${eh}:${em}`;
-  return JSON.stringify({ mon: w, tue: w, wed: w, thu: w, fri: w, sat: w, sun: w });
-}
-
 test('a failed away reply is throttled, not retried on every message', async () => {
   const AfterHours = (await import('./index.ts')).default;
   const attempts: string[] = [];
@@ -106,7 +95,10 @@ test('a failed away reply is throttled, not retried on every message', async () 
   const ctx = {
     // Open for one minute starting two minutes from now (UTC), every day — so "now" is deterministically
     // outside business hours whatever time the suite runs at, without needing to inject a clock.
-    config: { schedule: openWindowAfterNow(), timezone: 'UTC', awayMessage: 'tutup', cooldownSec: 3600 },
+    // The clock is mocked to a fixed instant below (a Thursday, 00:16 UTC), so this window is
+    // deterministically closed — no dependence on when the suite happens to run.
+    config: { schedule: JSON.stringify({ thu: '09:00-17:00' }), timezone: 'UTC',
+              awayMessage: 'tutup', cooldownSec: 3600 },
     logger: { log() {}, debug() {}, warn() {}, error() {} },
     messages: {
       sendText: async () => ({ messageId: 'x', timestamp: 0 }),
@@ -120,9 +112,25 @@ test('a failed away reply is throttled, not retried on every message', async () 
   const fire = (id: string) =>
     handler!({ source: 'Engine', sessionId: 's1', data: { id, chatId: 'c@wa', body: 'halo', fromMe: false } });
 
-  await fire('m1');
-  assert.equal(attempts.length, 1, 'first message attempts a reply');
-  await fire('m2');
-  await fire('m3');
-  assert.equal(attempts.length, 1, 'a failing send must not be retried on every inbound message');
+  // Fake the clock so the backoff window is observable. cooldownSec is 3600, so anything that retries
+  // within the hour can only be the failure backoff — not the normal cooldown expiring.
+  mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  try {
+    await fire('m1');
+    assert.equal(attempts.length, 1, 'first message attempts a reply');
+
+    await fire('m2');
+    await fire('m3');
+    assert.equal(attempts.length, 1, 'a failing send must not be retried on every inbound message');
+
+    mock.timers.tick(30_000);
+    await fire('m4');
+    assert.equal(attempts.length, 1, 'still inside the backoff window');
+
+    mock.timers.tick(31_000); // now past 60 s since the failure
+    await fire('m5');
+    assert.equal(attempts.length, 2, 'after the backoff the reply is attempted again, well inside cooldownSec');
+  } finally {
+    mock.timers.reset();
+  }
 });

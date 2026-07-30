@@ -64,10 +64,6 @@ export function shardOf(logicalId: string): number {
 type SeenBucket = Record<string, number>;
 
 export class MappingStore {
-  // Assume pre-0.6.0 per-message markers are present until a prune proves otherwise, so an upgrade never
-  // misses one. Flipped false by pruneSeen the first time it finds none left (immediately on a fresh
-  // install), which retires the extra hasSeen read for good.
-  private legacyMarkersMayExist = true;
 
   // Serializes the read-modify-write inside markSeen, per bucket. A bucket holds many markers, so two
   // concurrent marks — an inbound on one chat and the echo marker for a different conversation — can
@@ -154,9 +150,13 @@ export class MappingStore {
     if (bucket && bucket[logicalId] !== undefined) return true;
     // Upgrade path: a marker written by <=0.5.7 lives in its own key. Missing it would re-post an inbound
     // message on WhatsApp re-delivery and — worse, via the 'cw' marker — send a Chatwoot reply to the
-    // recipient a SECOND time. Costs one extra get per unseen message until the legacy keys are gone;
-    // pruneSeen clears the flag as soon as none remain, so a fresh install stops paying it within an hour.
-    if (!this.legacyMarkersMayExist) return false;
+    // recipient a SECOND time.
+    //
+    // There is deliberately no "no legacy keys left, stop looking" flag. The only way to decide that is a
+    // storage listing, and the host's list() swallows its own errors and resolves [] — indistinguishable
+    // from genuinely empty. A flag built on that retires permanently on one transient failure, and the
+    // failure it causes is a duplicate message the CUSTOMER sees. The price of not having it is one extra
+    // read per not-yet-seen message, against the 43k stat calls per write this release removed.
     return Boolean(await this.storage.get(this.legacySeenKey(kind, id, scope)));
   }
 
@@ -205,8 +205,6 @@ export class MappingStore {
         pruned++;
       }
     }
-    // Anything we listed but did not delete is still there (an adopted marker included).
-    this.legacyMarkersMayExist = keys.length - pruned > 0;
     return { pruned, adopted };
   }
 

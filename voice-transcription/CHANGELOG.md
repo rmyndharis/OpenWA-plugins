@@ -56,6 +56,8 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
   so the plugin enabled cleanly with no backend and then failed every transcription with a net-allow
   error that read like a broken allowlist rather than a missing setting.
 
+## [1.0.2] — 2026-07-18
+
 ### Fixed
 
 - **Declared the `messages:send` permission required by in-chat delivery.** The `chatDelivery` feature

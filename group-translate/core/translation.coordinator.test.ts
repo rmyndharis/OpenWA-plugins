@@ -465,6 +465,27 @@ describe('TranslationCoordinator', () => {
     assert.equal(leaked, undefined, 'Object.prototype must not be polluted via a crafted participant wid');
   });
 
+  // A backend that answers 200 with a blank translation is real. The formatter prefixes every entry with
+  // a flag and language code, so a blank one still renders a non-empty "🇪🇸 ES:" bubble — the emptiness
+  // guard has to live where the translation is COLLECTED, not at the send.
+  test('a blank translation is dropped, not shipped as a flag-only bubble', async () => {
+    const state = freshState({
+      active: true,
+      announced: true,
+      participants: {
+        '111@c.us': { lang: 'en', source: 'learned', enabled: true, samples: 2, updatedAt: 'x' },
+        '222@c.us': { lang: 'es', source: 'learned', enabled: true, samples: 2, updatedAt: 'x' },
+      },
+    });
+    const { store, gateway, translator, mocks } = makeDeps(state);
+    mocks.detect.mockResolvedValue({ lang: 'en', confidence: 0.99 });
+    mocks.translate.mockResolvedValue('   ');   // 200 OK, but blank
+    const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+    await c.handleMessage('s', msg({ author: '111@c.us', body: 'Hello' }));
+    assert.ok(mocks.translate.calls.length > 0, 'guard: the translate path really ran');
+    assert.equal(mocks.sendCombinedReply.calls.length, 0, 'a blank translation must not be sent');
+  });
+
   test('concurrent first messages for the same group announce only once', async () => {
     let current: GroupState = freshState({ active: false, announced: false });
     const sends: string[] = [];

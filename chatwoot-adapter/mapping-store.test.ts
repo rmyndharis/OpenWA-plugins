@@ -153,18 +153,6 @@ test('a pre-0.6.0 per-message marker is still honoured after the upgrade', async
   assert.equal(await store.hasSeen('wa', 'legacy', 'sess'), true);
 });
 
-// ...and the extra read that costs is retired as soon as a prune finds no legacy keys left.
-test('the legacy marker read is dropped once none remain', async () => {
-  const storage = fakeStorage();
-  const reads: string[] = [];
-  const counting: PluginStorage = { ...storage, get: async <T>(k: string) => (reads.push(k), storage.get<T>(k)) };
-  const store = new MappingStore(counting, fakeMappings());
-  await store.pruneSeen(1000, 1000); // no legacy keys → flag cleared
-  reads.length = 0;
-  assert.equal(await store.hasSeen('wa', 'nope', 'sess'), false);
-  assert.equal(reads.filter(k => k.startsWith('seen:')).length, 0, 'should not consult a legacy key');
-  assert.equal(reads.length, 1, 'exactly one bucket read');
-});
 
 test('pruneSeen adopts a legacy marker (stamps a timestamp, does not delete)', async () => {
   const storage = fakeStorage();
@@ -235,4 +223,17 @@ test('concurrent markSeen into the SAME bucket keeps both markers', async () => 
 
   assert.equal(await store.hasSeen('wa', waId, scope), true, 'wa marker lost — an inbound would re-post');
   assert.equal(await store.hasSeen('cw', cwId, scope), true, 'cw marker lost — an agent reply would re-send');
+});
+
+// Regression: the legacy-marker fallback must never retire itself. It was gated on a flag that pruneSeen
+// cleared whenever its listing came back empty — and the host's list() resolves [] on a read error, so one
+// transient failure permanently stopped consulting pre-0.6.0 markers. Missing a 'cw' marker re-sends a
+// Chatwoot agent's reply to the contact: a duplicate the customer sees.
+test('a failed prune listing does not stop pre-0.6.0 markers being honoured', async () => {
+  const storage = fakeStorage();
+  const store = new MappingStore(storage, fakeMappings());
+  await storage.set('seen:sess:cw:4242', { t: 1000 });   // written by <=0.5.7
+  await store.pruneSeen(2000, 1000);                     // a pass whose listing yields nothing useful
+  assert.equal(await store.hasSeen('cw', '4242', 'sess'), true,
+    'the legacy marker must still be found after a prune that saw an empty listing');
 });

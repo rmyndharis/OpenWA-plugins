@@ -354,3 +354,40 @@ test('the sweep does not retire on a single empty listing', async () => {
   await co.handle('s1', voiceMsg({ id: 'b' }));
   assert.ok(listCalls > afterFirst, 'a second pass still runs after one clean-looking listing');
 });
+
+// Regression: the per-session claim chain must survive a coordinator rebuild. The plugin rebuilds the
+// coordinator whenever the resolved config signature changes, which with per-session config can be every
+// message — an instance-scoped chain handed each rebuild a fresh empty map and silently undid the
+// serialization the previous release added.
+test('the dedup claim stays serialized across coordinator rebuilds', async () => {
+  const inner = makeStore();
+  const tick = () => new Promise(r => setTimeout(r, 1));
+  const slow: KvStore & { keys(): string[] } = {
+    get: async <T>(k: string) => { await tick(); return inner.get<T>(k); },
+    set: async (k, v) => { await tick(); return inner.set(k, v); },
+    delete: k => inner.delete(k), list: p => inner.list(p), keys: () => inner.keys(),
+  };
+  const ids = ['a', 'b', 'c', 'd'];
+  // Every note handled by its OWN freshly built coordinator, as a per-session config override causes.
+  await Promise.all(ids.map(id => setup({ store: slow, config: { maxPerHour: 10_000 } }).co.handle('s1', voiceMsg({ id }))));
+  const seen = (await slow.get<string[]>('seen:s1')) ?? [];
+  assert.deepEqual([...seen].sort(), ids, 'a rebuild must not reset the claim chain');
+});
+
+// Regression: the sweep must never retire itself. The host's list() resolves [] on a read error, so an
+// empty listing cannot be told apart from a failed one — any retirement rule built on it strands the very
+// keys the sweep exists to remove.
+test('a transient list() failure does not stop the legacy sweep for good', async () => {
+  const store = makeStore({ 'seen:s1:legacy-1': 1 });
+  let broken = true;
+  const flaky: KvStore & { keys(): string[] } = {
+    ...store,
+    list: async (p?: string) => (broken ? [] : store.list(p)),
+  };
+  const { co } = setup({ store: flaky, config: { maxPerHour: 10_000 } });
+  await co.handle('s1', voiceMsg({ id: 'm1' }));      // listing broken → nothing swept
+  assert.ok(store.keys().includes('seen:s1:legacy-1'), 'still there while storage is broken');
+  broken = false;
+  await co.handle('s1', voiceMsg({ id: 'm2' }));      // storage recovers → sweep must still run
+  assert.ok(!store.keys().includes('seen:s1:legacy-1'), 'the sweep resumed after the transient failure');
+});

@@ -42,3 +42,11 @@ test('group session keys are per participant', () => {
   const b = sessionKey('s1', base({ isGroup: true, chatId: 'g@g.us', author: '62822@c.us' }));
   assert.notEqual(a, b, 'two participants must never share a flow row');
 });
+
+// The per-participant guarantee is the whole reason group support is safe; assert the key CONTAINS the
+// sender, not merely that two senders differ (that also holds if the key were the raw chatId).
+test('a group session key embeds the participant', () => {
+  const k = sessionKey('s1', base({ isGroup: true, chatId: 'g@g.us', author: '62811@c.us' }));
+  assert.ok(k.includes('62811@c.us'), `expected the participant in the key, got ${k}`);
+  assert.ok(k.includes('g@g.us'), 'and the chat');
+});

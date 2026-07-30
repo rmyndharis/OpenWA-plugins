@@ -15,7 +15,9 @@ The version here always matches `manifest.json`'s `version`.
 - **A failed away reply silenced the chat for the whole cooldown.** The per-chat slot is taken *before*
   the send, so a reply that then failed left nothing delivered and nothing retryable until the window
   expired. That path is easier to hit on OpenWA 0.12, where another plugin vetoing `message:sending`
-  surfaces here as a thrown error indistinguishable from a transport failure. The slot is now released
+  surfaces here as a thrown error indistinguishable from a transport failure. The slot is now rewound rather than released — clearing it outright removed the only throttle, so a
+  permanently blocked send turned every inbound message into another attempt. The next try lands a fixed
+  backoff from the failure,
   when the reply fails, so the contact's next message tries again.
 - **`minOpenWAVersion` corrected from 0.6.2 to 0.7.0.** Per-session config — which the 0.1.3 fix and the
   README's "Per-session config: Supported" both depend on — landed in 0.7.0. On a 0.6.x host the plugin
