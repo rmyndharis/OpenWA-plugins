@@ -25,6 +25,13 @@ into message loss and a gateway-wide stall.
   scan. Markers written by earlier versions are still honoured — missing one would re-post an inbound
   message, or send a Chatwoot agent's reply to the recipient a second time — and the extra read that
   costs is retired automatically once the last of them has been pruned.
+- **Marker writes are serialized per bucket.** Sharding replaced one storage key per marker with a
+  read-modify-write over a shared bucket, and every await inside it is a round-trip to the host — so two
+  marks that hash to the same bucket could interleave and the later write would drop the earlier marker.
+  The surrounding per-chat and per-conversation locks cannot prevent that: they are keyed by chat, and a
+  shard is shared across chats. A lost `cw` marker re-sends an agent's reply to the contact; a lost `wa`
+  marker re-posts an inbound to Chatwoot. The one-key-per-marker scheme had no such window, so this
+  restores the guarantee rather than adding a new one.
 - **The retry queue was sized seven times larger than the entire storage quota.** 500 pending entries at
   up to 700 KB of media each is ~350 MiB against a 50 MiB budget, so a media backlog hit the quota at
   around 74 entries: `storage.set` then rejected, the "drop the oldest entry" policy never ran, and the

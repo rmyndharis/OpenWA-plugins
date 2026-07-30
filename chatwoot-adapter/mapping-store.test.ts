@@ -203,3 +203,36 @@ test('pruneSeen cannot corrupt a marker bucket', async () => {
   assert.equal(adopted, 0);
   for (let i = 0; i < 50; i++) assert.equal(await store.hasSeen('wa', `m${i}`, 'sess'), true);
 });
+
+// Regression: markSeen is a read-modify-write over a SHARED bucket, and every await in it is an IPC
+// round-trip. Two marks that hash to the same bucket — an inbound on one chat and the echo marker for a
+// different conversation — used to interleave, and the later write dropped the earlier marker. Losing a
+// 'cw' marker re-sends an agent's reply to the contact. The per-chat locks cannot help: a shard is
+// shared across chats. The pre-0.6.0 one-key-per-marker scheme had no such window.
+function slowStorage(): PluginStorage {
+  const m = new Map<string, unknown>();
+  const tick = () => new Promise(r => setTimeout(r, 1));
+  return {
+    get: async <T>(k: string) => { await tick(); return (m.has(k) ? (m.get(k) as T) : null); },
+    set: async (k, v) => { await tick(); m.set(k, JSON.parse(JSON.stringify(v))); },
+    delete: async k => { await tick(); m.delete(k); },
+    list: async (p = '') => [...m.keys()].filter(k => k.startsWith(p)),
+  };
+}
+
+test('concurrent markSeen into the SAME bucket keeps both markers', async () => {
+  const store = new MappingStore(slowStorage(), fakeMappings());
+  const scope = 'sess';
+  const waId = 'ABCDEF123';
+  const target = shardOf(`${scope}:wa:${waId}`);
+  let cwId = '';
+  for (let i = 1; i < 500_000; i++) {
+    if (shardOf(`${scope}:cw:${i}`) === target) { cwId = String(i); break; }
+  }
+  assert.ok(cwId, 'expected to find an id sharing the shard');
+
+  await Promise.all([store.markSeen('wa', waId, scope), store.markSeen('cw', cwId, scope)]);
+
+  assert.equal(await store.hasSeen('wa', waId, scope), true, 'wa marker lost — an inbound would re-post');
+  assert.equal(await store.hasSeen('cw', cwId, scope), true, 'cw marker lost — an agent reply would re-send');
+});

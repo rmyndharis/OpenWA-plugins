@@ -1,4 +1,5 @@
 import type { PluginStorage, PluginMappingsCapability, IncomingMessage } from '../types/openwa';
+import { KeyedAsyncLock } from './chat-lock.ts';
 
 // A failed inbound relay held for retry. The full message (incl. media) is stored so the retry re-posts
 // it faithfully. `enqueuedAt` is a wall-clock ms used only to pick the oldest entry to drop on overflow.
@@ -67,6 +68,17 @@ export class MappingStore {
   // misses one. Flipped false by pruneSeen the first time it finds none left (immediately on a fresh
   // install), which retires the extra hasSeen read for good.
   private legacyMarkersMayExist = true;
+
+  // Serializes the read-modify-write inside markSeen, per bucket. A bucket holds many markers, so two
+  // concurrent marks — an inbound on one chat and the echo marker for a different conversation — can
+  // hash into the SAME bucket and interleave their get/set, and the later write would drop the earlier
+  // marker. The surrounding per-chat and per-conversation locks cannot prevent it: they are keyed by
+  // chat, and a shard is shared across chats. Losing a 'cw' marker re-sends an agent's reply to the
+  // contact; losing a 'wa' marker re-posts an inbound to Chatwoot. The pre-0.6.0 one-key-per-marker
+  // scheme had no read-modify-write and so no such window — this lock restores that guarantee.
+  // Lock order is always caller-lock → bucket-lock (nothing takes a chat lock while holding this), so
+  // it cannot deadlock against them.
+  private readonly bucketLock = new KeyedAsyncLock();
 
   constructor(
     private readonly storage: PluginStorage,
@@ -151,15 +163,19 @@ export class MappingStore {
   async markSeen(kind: 'wa' | 'cw', id: string, scope?: string, nowMs: number = Date.now()): Promise<void> {
     const logicalId = this.seenId(kind, id, scope);
     const key = this.seenBucketKey(shardOf(logicalId));
-    const bucket = (await this.storage.get<SeenBucket>(key)) ?? {};
-    // Age the bucket out on write, so growth is bounded without a global scan. A bucket that stops
-    // receiving writes keeps its last window of ids — bounded, and harmless (they only ever match ids
-    // that will never recur).
-    const next: SeenBucket = { [logicalId]: nowMs };
-    for (const [k, t] of Object.entries(bucket)) {
-      if (k !== logicalId && nowMs - t <= SEEN_TTL_MS) next[k] = t;
-    }
-    await this.storage.set(key, next);
+    // Serialized per bucket: see bucketLock. Every await between the read and the write is an IPC
+    // round-trip to the host, so the window is wide, not theoretical.
+    await this.bucketLock.run(key, async () => {
+      const bucket = (await this.storage.get<SeenBucket>(key)) ?? {};
+      // Age the bucket out on write, so growth is bounded without a global scan. A bucket that stops
+      // receiving writes keeps its last window of ids — bounded, and harmless (they only ever match ids
+      // that will never recur).
+      const next: SeenBucket = { [logicalId]: nowMs };
+      for (const [k, t] of Object.entries(bucket)) {
+        if (k !== logicalId && nowMs - t <= SEEN_TTL_MS) next[k] = t;
+      }
+      await this.storage.set(key, next);
+    });
   }
 
   // Drain the pre-0.6.0 per-message `seen:` markers. Since 0.6.0 nothing writes them — new markers go into

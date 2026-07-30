@@ -283,3 +283,30 @@ test('audio exactly at the limit is still transcribed', async () => {
   await co.handle('s1', voiceMsg({ media: { mimetype: 'audio/ogg', data: raw.toString('base64') } }));
   assert.equal(provider.calls.length, 1, 'a note exactly at maxSizeBytes must not be rejected');
 });
+
+// Regression: the dedup claim is a read-modify-write over ONE list per session, and handle() is floated
+// off the hook — so a burst of voice notes interleaved and the last writer overwrote the others' ids.
+// Each lost id is a second paid STT call and, with chatDelivery 'reply', a duplicate transcript the
+// CONTACT sees. The pre-1.1.0 one-key-per-note scheme had no such window.
+test('a concurrent burst of voice notes claims every id exactly once', async () => {
+  const inner = makeStore();
+  const tick = () => new Promise(r => setTimeout(r, 1));
+  const slow: KvStore & { keys(): string[] } = {
+    get: async <T>(k: string) => { await tick(); return inner.get<T>(k); },
+    set: async (k, v) => { await tick(); return inner.set(k, v); },
+    delete: k => inner.delete(k),
+    list: p => inner.list(p),
+    keys: () => inner.keys(),
+  };
+  const { co, provider } = setup({ store: slow, config: { maxPerHour: 10_000 } });
+  const ids = ['a', 'b', 'c', 'd'];
+  await Promise.all(ids.map(id => co.handle('s1', voiceMsg({ id }))));
+
+  assert.equal(provider.calls.length, 4, 'each note transcribed once');
+  const seen = (await slow.get<string[]>('seen:s1')) ?? [];
+  assert.deepEqual([...seen].sort(), ids, 'every id retained — a lost one re-transcribes on redelivery');
+
+  // Replaying the burst must now be a complete no-op.
+  await Promise.all(ids.map(id => co.handle('s1', voiceMsg({ id }))));
+  assert.equal(provider.calls.length, 4, 'no duplicate STT call on redelivery');
+});

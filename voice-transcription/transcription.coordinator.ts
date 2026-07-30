@@ -83,6 +83,20 @@ export class TranscriptionCoordinator {
   // repeated for the rest of this coordinator's life. A fresh install lands here on its first message.
   private readonly legacySweptSessions = new Set<string>();
 
+  // Per-session tail for the dedup claim (see handle). Only the claim is serialized — the STT call and
+  // delivery stay concurrent, so a slow transcription never blocks the next note's dedup.
+  private readonly claimTails = new Map<string, Promise<unknown>>();
+
+  private serialize<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.claimTails.get(key) ?? Promise.resolve();
+    const next = prev.catch(() => undefined).then(fn);
+    this.claimTails.set(key, next);
+    void next.catch(() => undefined).finally(() => {
+      if (this.claimTails.get(key) === next) this.claimTails.delete(key);
+    });
+    return next;
+  }
+
   constructor(private readonly deps: CoordinatorDeps) {
     this.now = deps.now ?? (() => Date.now());
   }
@@ -99,10 +113,20 @@ export class TranscriptionCoordinator {
       // quote-reply the CONTACT sees, so this has to survive a worker restart, which is exactly when
       // WhatsApp is most likely to redeliver. Best-effort: read-modify-write is not atomic across a truly
       // simultaneous #466 re-fire (documented).
-      const seenKey = `seen:${sessionId}`;
-      const seen = (await store.get<string[]>(seenKey)) ?? [];
-      if (seen.includes(msg.id)) return;
-      await store.set(seenKey, [msg.id, ...seen].slice(0, SEEN_HISTORY));
+      // Serialized per session: the check and the write are a read-modify-write over ONE list, every
+      // await in between is an IPC round-trip to the host, and `handle()` is deliberately floated off the
+      // hook — so a burst (the engine materializes several voice notes at once) interleaved, and the last
+      // writer overwrote the others' ids. Each lost id is a second paid STT call AND, with
+      // chatDelivery 'reply', a duplicate transcript the CONTACT sees. The pre-1.1.0 one-key-per-note
+      // scheme had no read-modify-write and so no such window; this restores that guarantee.
+      const claimed = await this.serialize(sessionId, async () => {
+        const seenKey = `seen:${sessionId}`;
+        const seen = (await store.get<string[]>(seenKey)) ?? [];
+        if (seen.includes(msg.id)) return false;
+        await store.set(seenKey, [msg.id, ...seen].slice(0, SEEN_HISTORY));
+        return true;
+      });
+      if (!claimed) return;
       await this.sweepLegacySeen(sessionId);
 
       const media = msg.media;

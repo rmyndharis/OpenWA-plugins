@@ -30,6 +30,12 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
   number of sessions rather than to how long the plugin has been running. Keys written by earlier
   versions are swept away a few at a time as transcriptions run, so an upgraded install recovers without
   a long delete loop at enable — which matters now that enabling happens unattended at host boot.
+- **The dedup claim is serialized per session.** Collapsing the per-note keys into one list per session
+  made the check-and-write a read-modify-write, and `handle()` runs deliberately off the message hook —
+  so a burst (the engine materializes several voice notes at once) interleaved and the last writer
+  overwrote the others' ids. Each lost id is a second paid STT call and, with `chatDelivery: reply`, a
+  duplicate transcript the contact sees. Only the claim is serialized; transcription and delivery stay
+  concurrent.
 - **Audio size is checked before the base64 is decoded.** An oversized voice note — precisely what the
   guard exists to reject — was decoded into a Buffer first, on top of the base64 string already held in
   memory, against a 256 MB worker heap that the host does not respawn if it is exhausted.
