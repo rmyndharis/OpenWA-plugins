@@ -65,3 +65,14 @@ test('prefix with empty remainder yields empty args', () => {
   assert.ok(out);
   assert.deepEqual(out!.args, []);
 });
+
+test('an exact trigger tolerates the trailing space a mobile keyboard adds', () => {
+  const actions = [{
+    id: 'p', match: { type: 'exact' as const, value: 'ping', caseSensitive: false },
+    request: { method: 'GET' as const, path: '/p' }, replyTemplate: 'pong',
+  }];
+  assert.ok(matchAction(actions, 'ping'));
+  assert.ok(matchAction(actions, 'ping '), 'a trailing space must still match');
+  assert.ok(matchAction(actions, ' ping'), 'a leading space must still match');
+  assert.equal(matchAction(actions, 'ping me'), null, 'exact must still reject extra words');
+});

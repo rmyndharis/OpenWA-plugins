@@ -5,7 +5,7 @@
 
 ![type: extension](https://img.shields.io/badge/type-extension-blue.svg)
 ![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)
-![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.8.7-25D366.svg)
+![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.8.0-25D366.svg)
 [![downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Frmyndharis%2FOpenWA-plugins%2Fbadges%2Fdownloads%2Fhttp-action.json)](https://github.com/rmyndharis/OpenWA-plugins/releases?q=http-action)
 
 ## Details
@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `http-action` |
-| **Version** | 0.1.1 |
-| **Released** | 2026-07-27 |
+| **Version** | 0.1.2 |
+| **Released** | 2026-07-30 |
 | **Status** | beta |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -60,10 +60,15 @@
 Template variables: `args.0`, `args.1`, … plus `message.id`, `message.body`, `chat.id`, `sender.id`,
 `sender.phone`, `sender.name`, `session.id`, and `response.<path>` (the parsed JSON body).
 
+`sender.id` is the individual who sent the message — in a group that is the participant, not the group.
+`sender.phone` is their digits when those are knowable: it is empty for a `@lid` sender, because a
+privacy id's numeric part is not a phone number and passing it upstream as one would be worse than
+passing nothing. Guard any template that must have a number, e.g. with a `notFoundTemplate`.
+
 ## Setup
 
 1. Have an **HTTPS API** you want to call from WhatsApp — its origin goes in `baseUrl`.
-2. Have OpenWA **≥ 0.8.7** running with a logged-in WhatsApp session.
+2. Have OpenWA **≥ 0.8.0** running with a logged-in WhatsApp session.
 3. Install and enable the plugin (see [Install](#install)), then define your actions
    (see [Configuration](#configuration)).
 
@@ -101,10 +106,11 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 
 ## Compatibility
 
-Status is **development**. It targets OpenWA **≥ 0.8.7** (`allowConfigHosts` + `conversation:send`);
-`testedOpenWAVersion` is not yet set — the plugin needs install and runtime testing on a real OpenWA
-instance before being marked `beta`. Live config edits apply on the next inbound message (config is
-re-read per event).
+Status is **beta**. It targets OpenWA **≥ 0.8.0**, the release that introduced both capabilities it
+relies on (`net.allowConfigHosts` and `conversation:send`). `testedOpenWAVersion` is deliberately unset:
+the plugin has not been install- and runtime-tested on a real OpenWA instance, and that field is only
+worth anything if it is honest. Live config edits apply on the next inbound message (config is re-read
+per event).
 
 ### Per-session config
 

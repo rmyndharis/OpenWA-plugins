@@ -40,6 +40,7 @@ interface Opts { body?: string; status?: number; ok?: boolean; reject?: boolean;
 function makeDeps(o: Opts = {}) {
   const sendCalls: { env: unknown }[] = [];
   const errors: unknown[] = [];
+  const warns: string[] = [];
   const d: HandleDeps = {
     cfg: cfgWith(),
     storage: fakeStore(),
@@ -50,9 +51,9 @@ function makeDeps(o: Opts = {}) {
       return { ok: o.ok ?? true, status: o.status ?? 200, statusText: 'OK', headers: {}, body: o.body ?? '{}' };
     },
     conversations: { send: async (env: unknown) => { sendCalls.push({ env }); } },
-    logger: { log() {}, warn() {}, error: (m: string, e?: unknown) => errors.push([m, e]) },
+    logger: { log() {}, warn: (m: string) => void warns.push(m), error: (m: string, e?: unknown) => errors.push([m, e]) },
   };
-  return { d, sendCalls, errors };
+  return { d, sendCalls, errors, warns };
 }
 
 test('2xx: renders the reply template from the JSON response and sends it quoting the inbound', async () => {
@@ -214,4 +215,86 @@ test('sentinel: the auth token is sent in the header yet never appears in logs o
   assert.ok(capturedHeaders?.Authorization?.includes(SECRET), 'sanity: secret is in the request header (used, not absent)');
   const haystack = `${JSON.stringify(logged)}${JSON.stringify(sendCalls)}`;
   assert.ok(!haystack.includes(SECRET), 'auth token must never appear in logs or the reply');
+});
+
+// ── Sender resolution (0.1.2) ───────────────────────────────────────────────────────────────────────
+
+test('{{sender.phone}} resolves from the JID — the host never sets senderPhone before the hook runs', async () => {
+  const { d, sendCalls } = makeDeps({ body: JSON.stringify({ status: 'ok' }) });
+  d.cfg = cfgWith({
+    actions: JSON.stringify([{
+      id: 'me', match: { type: 'prefix', value: 'me' },
+      request: { method: 'GET', path: '/c/{{sender.phone}}' },
+      replyTemplate: 'phone={{sender.phone}} id={{sender.id}}',
+    }]),
+  });
+  await handleMessage(d, 's1', { ...msg('me'), from: '6281234567890@c.us' } as IncomingMessage);
+  assert.equal((sendCalls[0].env as { text: string }).text, 'phone=6281234567890 id=6281234567890@c.us');
+});
+
+test('in a group, sender.id is the AUTHOR — not the group everyone shares', async () => {
+  const { d, sendCalls } = makeDeps({ body: JSON.stringify({ status: 'ok' }) });
+  d.cfg = cfgWith({
+    respondInGroups: true,
+    actions: JSON.stringify([{
+      id: 'me', match: { type: 'prefix', value: 'me' },
+      request: { method: 'GET', path: '/c/{{sender.id}}' },
+      replyTemplate: 'id={{sender.id}} phone={{sender.phone}}',
+    }]),
+  });
+  const grp = { ...msg('me'), isGroup: true, from: '120363@g.us', chatId: '120363@g.us', author: '6281234567890@c.us' };
+  await handleMessage(d, 's1', grp as IncomingMessage);
+  assert.equal((sendCalls[0].env as { text: string }).text, 'id=6281234567890@c.us phone=6281234567890');
+});
+
+test('a @lid sender yields no phone — a LID user part is not a real number', async () => {
+  const { d, sendCalls } = makeDeps({ body: JSON.stringify({ status: 'ok' }) });
+  d.cfg = cfgWith({
+    actions: JSON.stringify([{
+      id: 'me', match: { type: 'prefix', value: 'me' },
+      request: { method: 'GET', path: '/c/x' },
+      replyTemplate: 'phone=[{{sender.phone}}]',
+    }]),
+  });
+  await handleMessage(d, 's1', { ...msg('me'), from: '118367890123478@lid' } as IncomingMessage);
+  assert.equal((sendCalls[0].env as { text: string }).text, 'phone=[]');
+});
+
+// ── Silent-drop and empty-reply guards (0.1.2) ──────────────────────────────────────────────────────
+
+test('a dedup read failure is logged instead of dropping the command without a trace', async () => {
+  const { d, sendCalls, warns } = makeDeps({});
+  d.storage = { ...d.storage, get: async () => { throw new Error('quota'); } };
+  await handleMessage(d, 's1', msg('cek INV-001'));
+  assert.equal(sendCalls.length, 0, 'still fail-closed — no reply');
+  assert.ok(warns.some((w) => w.includes('dedup read failed')), `expected a warning, got ${JSON.stringify(warns)}`);
+});
+
+test('a template referencing a missing field sends the error template, never an empty bubble', async () => {
+  const { d, sendCalls, warns } = makeDeps({ body: JSON.stringify({ other: 1 }) });
+  d.cfg = cfgWith({
+    actions: JSON.stringify([{
+      id: 'gone', match: { type: 'prefix', value: 'cek ' },
+      request: { method: 'GET', path: '/o/{{args.0}}' },
+      replyTemplate: '{{response.missing}}', // renders to ''
+      errorTemplate: 'Sorry, could not read that.',
+    }]),
+  });
+  await handleMessage(d, 's1', msg('cek INV-001'));
+  assert.equal((sendCalls[0].env as { text: string }).text, 'Sorry, could not read that.');
+  assert.ok(warns.some((w) => w.includes('empty reply')));
+});
+
+test('an empty reply with an empty error template still sends something', async () => {
+  const { d, sendCalls } = makeDeps({ body: JSON.stringify({ other: 1 }) });
+  d.cfg = cfgWith({
+    actions: JSON.stringify([{
+      id: 'gone', match: { type: 'prefix', value: 'cek ' },
+      request: { method: 'GET', path: '/o/{{args.0}}' },
+      replyTemplate: '{{response.missing}}',
+      errorTemplate: '{{response.alsoMissing}}',
+    }]),
+  });
+  await handleMessage(d, 's1', msg('cek INV-001'));
+  assert.ok((sendCalls[0].env as { text: string }).text.trim().length > 0);
 });
