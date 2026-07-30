@@ -89,6 +89,16 @@ export class VoiceTranscriptionPlugin implements IPlugin {
         { action: "transcription_no_delivery" },
       );
     }
+    // The host never enforces a configSchema `required` field, so the plugin enables cleanly with no STT
+    // backend and then fails every transcription with a net-allow error that reads like a misconfigured
+    // allowlist rather than a missing setting. Warn instead of throwing: this runs off the message path,
+    // is fail-open by design, and onEnable now also runs unattended at host boot.
+    if (!readOptionalString(context.config, "sttBaseUrl")) {
+      context.logger.warn(
+        "voice-transcription: sttBaseUrl is not set — every transcription will fail until it is configured",
+        { action: "transcription_no_backend" },
+      );
+    }
     context.logger.log("Voice transcription plugin enabled", {
       action: "transcription_enabled",
     });
@@ -157,6 +167,8 @@ export class VoiceTranscriptionPlugin implements IPlugin {
     const store: KvStore = {
       get: (key) => context.storage.get(key),
       set: (key, value) => context.storage.set(key, value),
+      delete: (key) => context.storage.delete(key),
+      list: (prefix) => context.storage.list(prefix),
     };
     return new TranscriptionCoordinator({
       provider,

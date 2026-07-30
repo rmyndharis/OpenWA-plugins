@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `voice-transcription` |
-| **Version** | 1.0.2 |
-| **Released** | 2026-07-18 |
+| **Version** | 1.1.0 |
+| **Released** | 2026-07-30 |
 | **Status** | beta |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -83,9 +83,11 @@ out of order — do not assume ordering).
    ```
    Preload/keep a small model warm for low latency. Or use hosted Groq (`https://api.groq.com/openai`,
    model `whisper-large-v3-turbo`) / OpenAI with an API key.
-2. **Allow the hosts.** This plugin ships `net.allow` for `localhost`, `127.0.0.1`, `api.groq.com:443`,
-   `api.openai.com:443`. For any **other** STT host or **delivery webhook** host, add `host:port` to
-   `net.allow` in `manifest.json` and re-package (`node package.mjs voice-transcription`).
+2. **Allow the hosts.** Any **https** URL you set as **STT base URL** or **Delivery webhook URL** is
+   allowed automatically — the manifest declares both as `net.allowConfigHosts`, so the host admits
+   whatever you configure without you having to edit and re-package the plugin. The manifest also ships
+   a static `net.allow` for `localhost`, `127.0.0.1`, `api.groq.com:443` and `api.openai.com:443`,
+   which is what covers a plain-`http` local backend (config-derived hosts are https-only).
 3. **For a localhost STT/delivery target**, also set `SSRF_ALLOWED_HOSTS` on the OpenWA host (the SSRF guard
    blocks loopback by default), e.g. `SSRF_ALLOWED_HOSTS=127.0.0.1,localhost`. Prefer a literal
    `http://127.0.0.1:PORT` target (nothing to DNS-rebind).
@@ -113,16 +115,16 @@ curl -X POST http://localhost:2785/plugins/voice-transcription/enable \
 
 | Key | Required | Default | Description |
 | --- | -------- | ------- | ----------- |
-| `sttBaseUrl` | yes | — | OpenAI-compatible STT base URL (`/v1/audio/transcriptions` is appended). Host must be in `net.allow`; localhost also needs `SSRF_ALLOWED_HOSTS`. |
+| `sttBaseUrl` | yes | — | OpenAI-compatible STT base URL (`/v1/audio/transcriptions` is appended). An https host is allowed automatically; localhost also needs `SSRF_ALLOWED_HOSTS`. |
 | `sttApiKey` | no | — | Bearer key for hosted STT (Groq/OpenAI). Stored redacted. |
 | `model` | no | `small` | Whisper model name. |
 | `language` | no | _(auto)_ | BCP-47 hint; blank = auto-detect. |
 | `provider` | no | `faster-whisper` | Label recorded in the delivered event. |
-| `timeoutMs` | no | `20000` | STT request timeout (max 30000). |
+| `timeoutMs` | no | `20000` | STT request timeout (max 25000, below the host's 30000 per-capability ceiling). |
 | `enabledMessageTypes` | no | `["voice"]` | Add `audio` to also transcribe non-PTT audio (more cost). |
 | `maxSizeBytes` | no | `16777216` | Skip audio larger than this (exact cost guard). |
 | `maxPerHour` | no | `60` | Best-effort per-session hourly transcription cap. |
-| `deliveryWebhookUrl` | cond. | — | Endpoint receiving the `message.transcription` event. Host must be in `net.allow`. Optional if you only use `chatDelivery`. |
+| `deliveryWebhookUrl` | cond. | — | Endpoint receiving the `message.transcription` event. Must be https, and is then allowed automatically. Optional if you only use `chatDelivery`. |
 | `deliverySecret` | no | — | Optional. HMAC-SHA256 signs the body in `X-OpenWA-Signature: sha256=<hex>` (same as core webhooks). Stored redacted. |
 | `deliveryTimeoutMs` | no | `5000` | Delivery POST timeout. |
 | `chatDelivery` | no | `off` | Also post the transcript into WhatsApp: `off` (webhook only) · `self` (note to your own number) · `reply` (quote-reply to the sender — visible to them). |
@@ -153,10 +155,12 @@ single WhatsApp session via the dashboard's session scope).
 
 ## Security
 
-- **Outbound HTTP is allow-listed.** Calls go through the host's SSRF-guarded `ctx.net.fetch`; only hosts in
-  `net.allow` are reachable, and internal/loopback IPs stay blocked unless the operator opts in via
-  `SSRF_ALLOWED_HOSTS`. This plugin never ships `net.allow: ["*"]` — it carries your voice audio and an API
-  key, so egress is pinned to the STT and delivery hosts you configure.
+- **Outbound HTTP is allow-listed.** Calls go through the host's SSRF-guarded `ctx.net.fetch`. Reachable
+  hosts are the four static `net.allow` entries plus the https hosts of the STT and delivery URLs you
+  configure (`net.allowConfigHosts`) — nothing else. Internal/loopback IPs stay blocked unless the operator
+  opts in via `SSRF_ALLOWED_HOSTS`. This plugin never ships `net.allow: ["*"]`: it carries your voice audio
+  and an API key, so egress stays pinned to the hosts you named. A config-derived host must be plain https
+  with no embedded credentials, which is what keeps that convenience from widening the allowlist.
 - **Secrets** are stored redacted. `sttApiKey` is sent as a Bearer token only to the STT host;
   `deliverySecret` is **never transmitted** — it HMAC-signs the body (`X-OpenWA-Signature`).
 - **Treat the transcript as untrusted.** `transcription.text` is attacker-controlled speech — the event

@@ -1,7 +1,7 @@
 {
   "id": "voice-transcription",
   "name": "Voice Note Transcription",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Transcribes inbound WhatsApp voice notes to text via an OpenAI-compatible speech-to-text backend (self-hosted Speaches/faster-whisper or hosted Groq/OpenAI) and delivers a `message.transcription` event to your webhook — so bots and AI can read and reply to audio. Off the message-delivery path; disabled until enabled.",
@@ -35,7 +35,8 @@
       "127.0.0.1",
       "api.groq.com:443",
       "api.openai.com:443"
-    ]
+    ],
+    "allowConfigHosts": ["sttBaseUrl", "deliveryWebhookUrl"]
   },
   "sessionScoped": true,
   "sessions": [
@@ -51,7 +52,7 @@
         "type": "string",
         "title": "STT base URL",
         "required": true,
-        "description": "Base URL of an OpenAI-compatible /v1/audio/transcriptions server — e.g. http://localhost:8000 (Speaches/faster-whisper) or https://api.groq.com/openai. Its host MUST be in this plugin's manifest net.allow; a localhost target ALSO requires SSRF_ALLOWED_HOSTS on the OpenWA host (use a literal 127.0.0.1)."
+        "description": "Base URL of an OpenAI-compatible /v1/audio/transcriptions server — e.g. http://localhost:8000 (Speaches/faster-whisper) or https://api.groq.com/openai. An https host you set here is allowed automatically; a localhost/127.0.0.1 target is already allowed but ALSO requires SSRF_ALLOWED_HOSTS on the OpenWA host (use a literal 127.0.0.1)."
       },
       "sttApiKey": {
         "type": "string",
@@ -82,8 +83,8 @@
         "title": "STT timeout (ms)",
         "default": 20000,
         "min": 1000,
-        "max": 30000,
-        "description": "Per-request STT timeout. Runs off the message-delivery path, so it is bounded only by the host net.fetch ceiling (30000ms), not the 5s hook budget."
+        "max": 25000,
+        "description": "Per-request STT timeout. Runs off the message-delivery path, so it is not bound by the 5s hook budget — but it races the host's 30000ms per-capability ceiling, so keep it below that."
       },
       "enabledMessageTypes": {
         "type": "array",
@@ -111,7 +112,7 @@
       "deliveryWebhookUrl": {
         "type": "string",
         "title": "Delivery webhook URL",
-        "description": "Your endpoint that receives the message.transcription event (the bot/AI integration channel). Its host MUST be in this plugin's manifest net.allow. Optional if you only use in-chat delivery."
+        "description": "Your endpoint that receives the message.transcription event (the bot/AI integration channel). Must be https — an https host you set here is allowed automatically. Optional if you only use in-chat delivery."
       },
       "deliverySecret": {
         "type": "string",

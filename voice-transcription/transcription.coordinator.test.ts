@@ -11,11 +11,15 @@ import {
   ChatDeliveryMode,
 } from './transcription.coordinator.ts';
 
-function makeStore(): KvStore {
-  const m = new Map<string, unknown>();
+function makeStore(seed: Record<string, unknown> = {}): KvStore & { keys(): string[] } {
+  const m = new Map<string, unknown>(Object.entries(seed));
   return {
     get: async <T>(k: string) => (m.has(k) ? (m.get(k) as T) : null),
     set: async (k, v) => void m.set(k, v),
+    delete: async (k) => void m.delete(k),
+    // Mirrors the host: list(prefix) filters for you, and a bare list() returns everything.
+    list: async (prefix?: string) => [...m.keys()].filter((k) => !prefix || k.startsWith(prefix)),
+    keys: () => [...m.keys()],
   };
 }
 
@@ -212,4 +216,70 @@ test('a webhook delivery failure does not suppress the in-chat transcript delive
   await assert.doesNotReject(co.handle('s1', voiceMsg()));
   assert.equal(chatSends.length, 1);   // chat sink still fired despite the webhook failure
   assert.ok(warns.length >= 1);        // the webhook failure is still warned
+});
+
+// ── Storage growth (1.1.0) ──────────────────────────────────────────────────────────────────────────
+// The host re-stats every one of a plugin's storage keys on EVERY write. Pre-1.1.0 this plugin wrote one
+// never-deleted key per transcribed voice note plus one per session per hour, so each write cost more
+// than the last, forever.
+
+test('storage keys stay bounded at one dedup list + one rate counter per session', async () => {
+  const store = makeStore();
+  const { co } = setup({ store, config: { maxPerHour: 10_000 } });
+  for (let i = 0; i < 200; i++) await co.handle('s1', voiceMsg({ id: `m${i}` }));
+  assert.deepEqual(store.keys().sort(), ['rate:s1', 'seen:s1']);
+});
+
+test('the dedup list is capped, and still dedups within its window', async () => {
+  const store = makeStore();
+  const { co, provider } = setup({ store, config: { maxPerHour: 10_000 } });
+  for (let i = 0; i < 600; i++) await co.handle('s1', voiceMsg({ id: `m${i}` }));
+  const seen = (await store.get<string[]>('seen:s1'))!;
+  assert.ok(seen.length <= 500, `dedup list grew to ${seen.length}`);
+  const before = provider.calls.length;
+  await co.handle('s1', voiceMsg({ id: 'm599' })); // the most recent id is still remembered
+  assert.equal(provider.calls.length, before, 'a recently-seen message must not be transcribed again');
+});
+
+test('the hourly counter reuses one key across hours instead of leaving one behind per hour', async () => {
+  const store = makeStore();
+  let hour = 0;
+  const { co, provider } = setup({ store, config: { maxPerHour: 1 }, now: () => hour * 3_600_000 });
+  await co.handle('s1', voiceMsg({ id: 'a' }));
+  await co.handle('s1', voiceMsg({ id: 'b' })); // over the cap in the same hour
+  assert.equal(provider.calls.length, 1);
+  hour = 1; // next hour: the budget resets, and no second rate key appears
+  await co.handle('s1', voiceMsg({ id: 'c' }));
+  assert.equal(provider.calls.length, 2);
+  assert.equal(store.keys().filter(k => k.startsWith('rate:')).length, 1);
+});
+
+test('pre-1.1.0 per-message dedup keys are swept away as transcriptions run', async () => {
+  const legacy: Record<string, unknown> = {};
+  for (let i = 0; i < 60; i++) legacy[`seen:s1:old${i}`] = 1;
+  const store = makeStore(legacy);
+  const { co } = setup({ store, config: { maxPerHour: 10_000 } });
+  for (let i = 0; i < 3; i++) await co.handle('s1', voiceMsg({ id: `m${i}` }));
+  assert.equal(store.keys().filter(k => k.startsWith('seen:s1:')).length, 0, 'legacy keys should be gone');
+  assert.ok(store.keys().includes('seen:s1'), 'the new dedup list survives the sweep');
+});
+
+// ── Size guard (1.1.0) ──────────────────────────────────────────────────────────────────────────────
+// Checked before decoding: decoding first materialized an oversized note as a Buffer on top of the
+// base64 string already in memory, against a 256 MB worker heap the host does not respawn.
+
+test('oversized audio is skipped without ever being decoded', async () => {
+  const { co, provider, deliveries } = setup({ config: { maxSizeBytes: 10 } });
+  const big = { media: { mimetype: 'audio/ogg', data: Buffer.alloc(5000).toString('base64') } };
+  await co.handle('s1', voiceMsg(big as Partial<IncomingMessage>));
+  assert.equal(provider.calls.length, 0);
+  assert.equal(deliveries[0].status, 'skipped');
+  assert.equal(deliveries[0].reason, 'too_large');
+});
+
+test('audio exactly at the limit is still transcribed', async () => {
+  const raw = Buffer.alloc(300, 7);
+  const { co, provider } = setup({ config: { maxSizeBytes: raw.byteLength } });
+  await co.handle('s1', voiceMsg({ media: { mimetype: 'audio/ogg', data: raw.toString('base64') } }));
+  assert.equal(provider.calls.length, 1, 'a note exactly at maxSizeBytes must not be rejected');
 });

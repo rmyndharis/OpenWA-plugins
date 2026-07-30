@@ -6,7 +6,40 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
-## [1.0.2] — 2026-07-18
+## [1.1.0] — 2026-07-30
+
+### Added
+
+- **Your own STT and delivery hosts no longer require forking the plugin.** The manifest now declares
+  `sttBaseUrl` and `deliveryWebhookUrl` as `net.allowConfigHosts`, so any **https** URL you configure is
+  admitted by the host's outbound gate automatically. Previously the only allowed hosts were the four
+  baked into `net.allow`, and the setup guide told you to edit `manifest.json` and re-package the plugin
+  to use your own webhook — which meant that following the documented setup produced a plugin whose
+  every delivery attempt was blocked, swallowed by the fail-open delivery path, and invisible because
+  this plugin has no health check. The static `net.allow` entries remain: config-derived hosts are
+  https-only, so they are what still covers a plain-`http` local backend.
+
+### Fixed
+
+- **Storage keys no longer grow without bound.** OpenWA 0.12.0 re-measures a plugin's storage quota on
+  every write by stat-ing every one of its keys, so keys that are written once and never deleted make
+  each subsequent write more expensive — permanently. This plugin wrote one dedup key per transcribed
+  voice note and one counter key per session per hour, and deleted neither. Dedup now uses a single
+  capped list per session (the 500 most recent message ids, ample against any redelivery window) and the
+  rate limiter a single `{bucket, count}` key per session, so the key count is now proportional to the
+  number of sessions rather than to how long the plugin has been running. Keys written by earlier
+  versions are swept away a few at a time as transcriptions run, so an upgraded install recovers without
+  a long delete loop at enable — which matters now that enabling happens unattended at host boot.
+- **Audio size is checked before the base64 is decoded.** An oversized voice note — precisely what the
+  guard exists to reject — was decoded into a Buffer first, on top of the base64 string already held in
+  memory, against a 256 MB worker heap that the host does not respawn if it is exhausted.
+- **`timeoutMs` no longer allows a value that races the host.** The schema permitted 30000 and described
+  it as the host ceiling, but the per-capability budget is also 30000, so the two expired together and
+  the resulting failure was reported as a capability timeout rather than an STT timeout. The maximum is
+  now 25000.
+- **An unset STT base URL is reported at enable.** The host does not enforce a `required` config field,
+  so the plugin enabled cleanly with no backend and then failed every transcription with a net-allow
+  error that read like a broken allowlist rather than a missing setting.
 
 ### Fixed
 

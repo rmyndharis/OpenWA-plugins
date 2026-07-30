@@ -6,7 +6,21 @@ import type { TranscriptDelivery, TranscriptionPayload } from './webhook.deliver
 export interface KvStore {
   get<T = unknown>(key: string): Promise<T | null>;
   set(key: string, value: unknown): Promise<void>;
+  delete(key: string): Promise<void>;
+  list(prefix?: string): Promise<string[]>;
 }
+
+// How many recent message ids the per-session dedup list keeps. The host re-stats every one of a
+// plugin's storage keys on EVERY write, so the pre-1.1.0 scheme — one key per transcribed voice note,
+// never deleted — made each write more expensive than the last, forever. One bounded list per session
+// costs the same single read + write it always did, and the key count is now O(sessions).
+// 500 ids covers eight hours at the default 60/hour cap, far longer than any redelivery window.
+const SEEN_HISTORY = 500;
+
+// Legacy `seen:<sessionId>:<messageId>` keys are swept a few at a time (see sweepLegacySeen) rather than
+// all at once: an upgraded install may hold thousands, and onEnable now runs unattended at host boot,
+// before sessions connect, where a long delete loop would burn the lifecycle budget for nothing.
+const LEGACY_SWEEP_PER_RUN = 25;
 
 export interface CoordinatorLogger {
   warn(message: string, meta?: Record<string, unknown>): void;
@@ -20,6 +34,16 @@ export interface ChatSink {
 
 /** off = no chat message; self = note to the bot's own number; reply = quote-reply to the sender. */
 export type ChatDeliveryMode = 'off' | 'self' | 'reply';
+
+/**
+ * Decoded byte length of a base64 string, without decoding it. Exact for well-formed base64; a value
+ * containing whitespace over-counts, which fails safe (the audio is skipped as too large rather than
+ * being decoded into the worker heap).
+ */
+export function decodedBase64Size(b64: string): number {
+  const pad = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
+  return Math.floor(b64.length / 4) * 3 - pad;
+}
 
 export interface TranscriptionConfig {
   /** Message types to transcribe, e.g. ['voice'] (PTT). */
@@ -55,6 +79,9 @@ export interface CoordinatorDeps {
  */
 export class TranscriptionCoordinator {
   private readonly now: () => number;
+  // Sessions whose pre-1.1.0 dedup keys are fully drained, so the sweep's directory listing is not
+  // repeated for the rest of this coordinator's life. A fresh install lands here on its first message.
+  private readonly legacySweptSessions = new Set<string>();
 
   constructor(private readonly deps: CoordinatorDeps) {
     this.now = deps.now ?? (() => Date.now());
@@ -67,11 +94,16 @@ export class TranscriptionCoordinator {
       if (!config.enabledMessageTypes.includes(msg.type)) return;
       if (!msg.media) return;
 
-      // Idempotency first, so every outcome (including skips) fires at most once per message id.
-      // Best-effort: get-then-set is not atomic across a truly simultaneous #466 re-fire (documented).
-      const seenKey = `seen:${sessionId}:${msg.id}`;
-      if (await store.get(seenKey)) return;
-      await store.set(seenKey, 1);
+      // Idempotency first, so every outcome (including skips) fires at most once per message id. Kept in
+      // durable storage rather than memory: with chatDelivery 'reply' a duplicate transcript is a second
+      // quote-reply the CONTACT sees, so this has to survive a worker restart, which is exactly when
+      // WhatsApp is most likely to redeliver. Best-effort: read-modify-write is not atomic across a truly
+      // simultaneous #466 re-fire (documented).
+      const seenKey = `seen:${sessionId}`;
+      const seen = (await store.get<string[]>(seenKey)) ?? [];
+      if (seen.includes(msg.id)) return;
+      await store.set(seenKey, [msg.id, ...seen].slice(0, SEEN_HISTORY));
+      await this.sweepLegacySeen(sessionId);
 
       const media = msg.media;
       if (media.omitted || !media.data) {
@@ -80,19 +112,26 @@ export class TranscriptionCoordinator {
       }
       if (!media.mimetype || !media.mimetype.startsWith('audio/')) return; // defensive: not audio
 
-      const audio = Buffer.from(media.data, 'base64');
-      if (audio.byteLength > config.maxSizeBytes) {
+      // Size is checked BEFORE decoding. Decoding first meant an oversized note — the very thing this
+      // guard exists to reject — was materialized as a Buffer anyway, on top of the base64 string already
+      // in memory, against a 256 MB worker heap that the host does not respawn if it blows.
+      if (decodedBase64Size(media.data) > config.maxSizeBytes) {
         await this.emit(sessionId, msg, { status: 'skipped', reason: 'too_large' });
         return;
       }
+      const audio = Buffer.from(media.data, 'base64');
 
-      const rateKey = `rate:${sessionId}:${Math.floor(this.now() / 3_600_000)}`;
-      const count = (await store.get<number>(rateKey)) ?? 0;
+      // One key per session holding {bucket, count}, not one key per session per HOUR — the hourly keys
+      // were never deleted, so they accumulated for the life of the install.
+      const rateKey = `rate:${sessionId}`;
+      const bucket = Math.floor(this.now() / 3_600_000);
+      const rate = await store.get<{ bucket: number; count: number }>(rateKey);
+      const count = rate?.bucket === bucket ? rate.count : 0;
       if (count >= config.maxPerHour) {
         await this.emit(sessionId, msg, { status: 'skipped', reason: 'rate_limited' });
         return;
       }
-      await store.set(rateKey, count + 1);
+      await store.set(rateKey, { bucket, count: count + 1 });
 
       let result: SttResult;
       try {
@@ -122,6 +161,25 @@ export class TranscriptionCoordinator {
         messageId: msg.id,
         error: err instanceof Error ? err.message : String(err),
       });
+    }
+  }
+
+  /**
+   * Delete a few pre-1.1.0 `seen:<sessionId>:<messageId>` keys per transcription. Without this an
+   * upgraded install keeps paying the old cost forever: those keys are never read again, but the host
+   * still stats every one of them on every write. Awaited rather than floated — the whole coordinator
+   * already runs off the message-delivery path, and floating it made the cleanup non-deterministic —
+   * but fully best-effort: a failure here must never affect a transcription.
+   */
+  private async sweepLegacySeen(sessionId: string): Promise<void> {
+    if (this.legacySweptSessions.has(sessionId)) return; // nothing left; stop paying for the list()
+    const prefix = `seen:${sessionId}:`; // the trailing ':' is what distinguishes it from `seen:<sid>`
+    try {
+      const stale = (await this.deps.store.list(prefix)).filter(k => k.startsWith(prefix));
+      for (const key of stale.slice(0, LEGACY_SWEEP_PER_RUN)) await this.deps.store.delete(key);
+      if (stale.length <= LEGACY_SWEEP_PER_RUN) this.legacySweptSessions.add(sessionId);
+    } catch {
+      /* best-effort cleanup — never surfaces, and retries on the next transcription */
     }
   }
 
