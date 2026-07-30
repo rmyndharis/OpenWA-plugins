@@ -7,15 +7,11 @@ function res(partial: { ok?: boolean; status?: number; body?: unknown }): Plugin
   return {
     ok: partial.ok ?? true,
     status: partial.status ?? 200,
+    statusText: '',
     headers: {},
     // The sandbox runtime returns the response body as a string and provides NO .json() (functions
     // can't cross the worker structuredClone boundary). The client must JSON.parse(res.body).
     body: partial.body === undefined ? '{}' : JSON.stringify(partial.body),
-    text: async () => '',
-    json: (async () => {
-      throw new Error('res.json() is not available in the sandbox runtime');
-    }) as PluginNetResponse['json'],
-    arrayBuffer: async () => new ArrayBuffer(0),
   };
 }
 

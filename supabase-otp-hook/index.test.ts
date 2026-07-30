@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { PluginContext, PluginManifest, WebhookRequest } from '../types/openwa';
+import type { PluginContext, WebhookRequest } from '../types/openwa';
 import SupabaseSmsHook from './index.ts';
 
 const TS = 1_700_000_000;
@@ -12,21 +12,11 @@ test('onEnable reads config, registers the send-sms webhook, and delivers the OT
 
   const rawBody = JSON.stringify({ user: { phone: '+15551234567' }, sms: { otp: '654321' } });
 
-  const manifest: PluginManifest = {
-    id: 'supabase-otp-hook',
-    name: 'Supabase Auth OTP',
-    version: '0.1.0',
-    type: 'extension',
-    main: 'dist/index.js',
-  };
-
   const ctx = {
     pluginId: 'supabase-otp-hook',
-    manifest,
     // The Standard Webhooks secret is NOT plugin config — it is `instance.secret`, which the host uses
     // to verify the signature before this handler runs. Here the handler only needs appName + fallback.
     config: { appName: 'Acme', fallbackSessionId: 'fallback-sess' },
-    hookManager: {},
     logger: {
       log: (m: string) => { logs.push(m); },
       debug: () => {},
@@ -79,18 +69,9 @@ test('onEnable reads config, registers the send-sms webhook, and delivers the OT
 });
 
 test('onEnable throws when appName is missing', async () => {
-  const manifest: PluginManifest = {
-    id: 'supabase-otp-hook',
-    name: 'Supabase Auth OTP',
-    version: '0.1.0',
-    type: 'extension',
-    main: 'dist/index.js',
-  };
   const ctx = {
     pluginId: 'supabase-otp-hook',
-    manifest,
     config: {}, // missing appName
-    hookManager: {},
     logger: { log: () => {}, debug: () => {}, warn: () => {}, error: () => {} },
     storage: {} as PluginContext['storage'],
     registerHook: () => {},

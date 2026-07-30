@@ -45,7 +45,7 @@ OpenWA-plugins/
   // ── Surfaced by OpenWA ──
   "description": "…",            // rendered in the dashboard card + returned by the API
   "provides": ["feature-tag"],  // rendered as tags in the dashboard card
-  "permissions": [],            // "messages:send" / "engine:read" / "net:fetch" — enforced at runtime
+  "permissions": [],            // see the five values below — enforced at the capability boundary
   "sessions": ["*"],            // capability session scope (static; editing config can't widen it)
   "hooks": ["message:received"],// declared interest
   "configSchema": { … },        // declarative config form (see vocabulary below); mark secrets "secret": true
@@ -158,21 +158,79 @@ session"). See the per-plugin README convention below.
 These behaviors are **observed from the host, not a written host contract** — they are load-bearing for
 correct plugins and were each learned the hard way. Re-verify against OpenWA core when upgrading.
 
-1. **`ctx.net.fetch` responses have no working `.json()` / `.text()` / `.arrayBuffer()`** — those method
-   forms exist on `PluginNetResponse` only so older plugins still type-check; calling them at runtime
-   throws (functions cannot cross the worker structuredClone boundary). Always read `res.body` (a UTF-8
-   string, capped at 10 MiB host-side) and `JSON.parse(res.body)`.
+1. **`ctx.net.fetch` responses have no `.json()` / `.text()` / `.arrayBuffer()`** — functions cannot
+   cross the worker structuredClone boundary, so the response is a plain
+   `{ ok, status, statusText, headers, body }`. Read `res.body` (a UTF-8 string, capped at 10 MiB
+   host-side) and `JSON.parse(res.body)`. Those three method stubs used to be carried on the vendored
+   type as runtime-throwing placeholders; they have been removed, so a plugin that still calls one now
+   fails the typecheck instead of at runtime.
 2. **Hook handlers are bounded to ~5 s.** Never await slow work (HTTP calls, media processing) inside a
    hook: return `{ continue: true }` synchronously and float the promise
    (`void handle().catch(log)`). The same applies to ingress handlers (see supabase-otp-hook's
    fire-and-forget send).
 3. **Hosts declared via config (`net.allowConfigHosts`) must be required, non-empty config** — the net
-   gate reads the RAW `ctx.config`, so a code-side default host is invisible to the gate and every fetch
-   silently no-ops. Fail fast in `readConfig` when the host field is empty.
-4. **Host boot resets every plugin to INSTALLED** — operators must re-enable plugins after a restart.
-   `ctx.config` and `ctx.storage` survive, so dedup/state markers in storage are safe.
+   gate reads the RAW `ctx.config`, so a **code-side** default host is invisible to the gate and every
+   fetch silently no-ops. Fail fast in `readConfig` when the host field is empty. A **manifest**
+   `configSchema` `default` does reach the gate: the host seeds top-level declared defaults into the
+   stored and runtime config at load, so a manifest default and a code default that disagree now
+   resolve to the manifest's, silently. (Top-level only — defaults nested under `properties`/`items`
+   are not seeded. A required field with no declared default deliberately stays absent, because that
+   needs real operator input; the host never enforces `required` itself.)
+4. **Host boot re-enables every plugin the operator had enabled** (OpenWA ≥ 0.12; earlier hosts really
+   did require a manual re-enable). The runtime `status` is still reset on load, but the operator's
+   standing decision is persisted separately and replayed at boot. `ctx.config` and `ctx.storage`
+   survive, so dedup/state markers in storage are safe. What this demands of a plugin:
+   - **`onEnable` must be idempotent** — it now runs unattended on every restart, not just on an
+     operator click.
+   - **`onEnable` must not touch `ctx.engine.*` / `ctx.messages.*` or await network I/O.** Boot restore
+     runs before sessions connect and before the HTTP listener opens; a slow or engine-dependent
+     `onEnable` blocks startup and burns the 30 s lifecycle budget for nothing.
+   - **In-memory state does NOT survive** (each enable spawns a fresh worker). A cooldown or throttle
+     kept only in a `Map` silently re-arms on every restart — persist it or document the reset.
+   - **A plugin left in ERROR is not restored**; nothing respawns a crashed worker, so an operator must
+     re-enable it explicitly.
+   - `onDisable` now runs on graceful shutdown (SIGTERM), and `onUnload` on uninstall/in-place update.
 5. **Cross-host redirects cannot be blocked plugin-side** (`PluginNetRequestInit` exposes no redirect
    option) — redirect-based SSRF defense is the host's job; do not treat it as a plugin release gate.
+6. **`ctx.storage` charges per KEY, not just per byte.** Each key is one JSON file, and the host
+   re-measures the plugin's 50 MiB quota on **every** `set` with a synchronous readdir + stat of every
+   existing key — on the host's event loop. One key per message is therefore a gateway-wide stall
+   waiting to happen: bucket instead (one key per session per hour holding a map, pruned by deleting
+   whole buckets). Always handle a rejected `set` — a swallowed quota error is silent data loss, and a
+   `healthCheck` that ignores it reports green while dropping messages.
+7. **`{ continue: false }` is a veto on exactly two events.** On `message:sending` it blocks the send
+   (the API caller gets HTTP 400) and on `webhook:before` it cancels that delivery. On every
+   notification event (`message:received`, `message:sent`, `session:*`, …) it only stops the remaining
+   handler chain — the host still persists the message, still fires webhooks, and still pushes to the
+   websocket. Use it to claim an event against sibling plugins, never to hide one.
+8. **`webhook:before` is the widest surface a plugin can subscribe to, and nothing gates it.** A
+   handler can cancel any of the operator's webhook deliveries and rewrite the outbound body
+   (`{ payload }` replaces it; the host re-asserts only `event`/`sessionId`/`timestamp` and the
+   dedupe ids, and caps the result at 1 MiB). Treat a `webhook:before` subscription in a submitted
+   plugin with the same scrutiny as an ingress route.
+9. **Host bounds, none of them visible from the types:** 30 s per lifecycle phase; 30 s per capability
+   call, except the send verbs (`messages.sendText`, `messages.reply`, `conversations.send`) at 120 s;
+   5 s per hook dispatch, after which the host fails **open** with `{ continue: true }` and discards
+   your result; 32 concurrent capability calls per plugin (the 33rd throws); 50 MiB storage; 10 MiB
+   fetch response body; 200 log lines / 10 s at 8 KiB per line.
+10. **The worker is crash containment, not a security boundary** (core says so itself). Plugin code can
+   `require('fs')`/`('net')`/`('child_process')`; what the worker actually buys you is a 256 MB heap
+   ceiling and a crash that doesn't take the gateway down. Review submitted plugins accordingly.
+
+**Permissions** — the five values the host enforces, and what each unlocks:
+
+| Permission | Unlocks |
+|---|---|
+| `messages:send` | `ctx.messages.sendText` / `.reply` |
+| `engine:read` | `ctx.engine.*` (group info, contacts, chats, number check, chat history, `canonicalChatId`) |
+| `net:fetch` | `ctx.net.fetch`, further scoped by manifest `net.allow` / `net.allowConfigHosts` |
+| `conversation:send` | `ctx.conversations.send` **and** `ctx.handover.set` **and** `ctx.mappings.*` |
+| `webhook:ingress` | `ctx.registerWebhook`; **required** whenever the manifest declares `ingress`, or the whole plugin fails to load |
+
+An ingress route with `signature.scheme: "none"` is a hard load failure for the entire plugin unless the
+operator sets `ALLOW_UNSIGNED_INGRESS=true`. `mode: "sync-reply"` is inert dead code — declare
+synchronous behavior via `ingress[].response` instead. A `WebhookResponse` returned from your handler is
+ignored; the provider's reply comes from `ingress[].response.ack` (default 202).
 
 `minOpenWAVersion` is advisory (never enforced by the host). Still bump it when a plugin *requires* a
 newer capability: `canonicalChatId` → 0.8.7, Integration SDK v1 (`sdkVersion: 1`) → 0.8.x,

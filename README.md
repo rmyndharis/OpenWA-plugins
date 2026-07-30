@@ -96,7 +96,9 @@ curl -X PUT "https://your-openwa-host/plugins/gsheets-logger/config" \
   -d '{ "config": { "spreadsheetId": "1AbC...defG", "serviceAccountJson": "{...}", "sheetTab": "Logs" } }'
 ```
 
-**3. Enable it** — plugins are installed disabled and never auto-enable, even after a restart:
+**3. Enable it** — a freshly installed plugin is disabled and never enables itself. Once you have
+enabled it, that decision is remembered: OpenWA ≥ 0.12 re-enables it automatically on every host
+restart (a plugin left in ERROR still needs an explicit re-enable).
 
 ```bash
 curl -X POST "https://your-openwa-host/plugins/gsheets-logger/enable" \
