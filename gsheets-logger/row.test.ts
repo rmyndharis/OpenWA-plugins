@@ -93,3 +93,47 @@ test('caps an oversized free-text cell to the Google Sheets 50000-char limit', (
   // A single over-limit cell would 400 the whole append batch and stall all logging; cap it so it can't.
   assert.equal(row[10].length, 50000);
 });
+
+// message:failed now fires from every sender with the real `type`, not just from sendText — and a media
+// send's DTO carries its caption in `caption`. A hardcoded 'text' plus an `input.text` read logged every
+// image/video/document/poll failure as a text message with an empty body.
+test('a failed image send logs its real type and its caption as the body', () => {
+  const row = buildRow({
+    event: 'message:failed', sessionId: 's1', timestamp: new Date(0), source: 'MessageService',
+    data: { sessionId: 's1', type: 'image', error: 'engine down',
+            input: { chatId: '62812@c.us', url: 'https://x/y.jpg', caption: 'invoice' } },
+  } as never);
+  assert.equal(row[COLUMNS.indexOf('type')], 'image');
+  assert.equal(row[COLUMNS.indexOf('body')], 'invoice');
+  assert.equal(row[COLUMNS.indexOf('chatId')], '62812@c.us');
+});
+
+test('a failed text send still logs as text', () => {
+  const row = buildRow({
+    event: 'message:failed', sessionId: 's1', timestamp: new Date(0), source: 'MessageService',
+    data: { sessionId: 's1', type: 'text', error: 'boom', input: { chatId: 'c@wa', text: 'hello' } },
+  } as never);
+  assert.equal(row[COLUMNS.indexOf('type')], 'text');
+  assert.equal(row[COLUMNS.indexOf('body')], 'hello');
+});
+
+// A pre-0.12 host emitted no `type` at all; the row must stay readable rather than log an empty column.
+test('a payload without a type falls back to text', () => {
+  const row = buildRow({
+    event: 'message:failed', sessionId: 's1', timestamp: new Date(0), source: 'MessageService',
+    data: { sessionId: 's1', error: 'boom', input: { chatId: 'c@wa', text: 'hi' } },
+  } as never);
+  assert.equal(row[COLUMNS.indexOf('type')], 'text');
+});
+
+// Bulk sends emit the shared content, with the recipient on the enclosing item — so there is no chatId
+// to log. Blank is the honest value; the row is still attributable by sessionId + error + timestamp.
+test('a bulk failure logs blank recipient columns rather than inventing one', () => {
+  const row = buildRow({
+    event: 'message:failed', sessionId: 's1', timestamp: new Date(0), source: 'BulkMessageService',
+    data: { sessionId: 's1', type: 'image', error: 'rate limited', input: { caption: 'promo' } },
+  } as never);
+  assert.equal(row[COLUMNS.indexOf('chatId')], '');
+  assert.equal(row[COLUMNS.indexOf('type')], 'image');
+  assert.equal(row[COLUMNS.indexOf('body')], 'promo');
+});

@@ -5,7 +5,17 @@ export const COLUMNS = [
   'senderName', 'isGroup', 'type', 'body', 'messageId', 'ackStatus', 'error',
 ] as const;
 
-type FailedPayload = { sessionId?: string; error?: string; input?: { chatId?: string; text?: string } };
+// `message:failed` used to fire only from sendText, so a hardcoded 'text' type and an `input.text` body
+// were accurate. It now fires from every sender (image, video, voice, document, location, contact, poll,
+// sticker, reply, forward, edit, bulk) through one shared failure path that carries the real `type` — and
+// a media send's DTO holds its caption in `caption`, not `text`. A bulk item carries neither `chatId` nor
+// a per-recipient field: its payload is the shared content, so those columns are genuinely blank.
+type FailedPayload = {
+  sessionId?: string;
+  error?: string;
+  type?: string;
+  input?: { chatId?: string; text?: string; caption?: string; body?: string };
+};
 type AckPayload = { messageId?: string; status?: string };
 
 // Google Sheets rejects a cell longer than 50 000 chars with a 400 that fails the whole append batch;
@@ -45,7 +55,8 @@ export function buildRow(ctx: HookContext): string[] {
     const p = (ctx.data ?? {}) as FailedPayload;
     // A failed send carries no recipient field, so the destination (to) mirrors chatId; from is unknown.
     return [timestamp, sessionId, event, direction, strId(p.input?.chatId), '', strId(p.input?.chatId),
-            '', '', 'text', strText(p.input?.text), '', '', strText(p.error)];
+            '', '', strId(p.type ?? 'text'), strText(p.input?.text ?? p.input?.caption ?? p.input?.body),
+            '', '', strText(p.error)];
   }
 
   if (event === 'message:ack') {
