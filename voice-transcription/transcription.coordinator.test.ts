@@ -4,6 +4,7 @@ import type { IncomingMessage } from '../types/openwa';
 import type { SttResult, SttProvider } from './openai-stt.client.ts';
 import type { TranscriptionPayload } from './webhook.delivery.ts';
 import {
+  decodedBase64Size,
   TranscriptionCoordinator,
   KvStore,
   TranscriptionConfig,
@@ -275,6 +276,17 @@ test('oversized audio is skipped without ever being decoded', async () => {
   assert.equal(provider.calls.length, 0);
   assert.equal(deliveries[0].status, 'skipped');
   assert.equal(deliveries[0].reason, 'too_large');
+});
+
+// Padding matters: the naive floor(len/4)*3 - pad form under-counts UNPADDED base64, which would let an
+// oversized note through the guard instead of failing safe.
+test('decodedBase64Size is exact for padded and unpadded input', () => {
+  for (const raw of ['A', 'AB', 'ABC', 'ABCD', 'ABCDE', '', 'hello world!!']) {
+    const b64 = Buffer.from(raw).toString('base64');
+    assert.equal(decodedBase64Size(b64), Buffer.byteLength(raw), `padded: ${JSON.stringify(raw)}`);
+    const unpadded = b64.replace(/=+$/, '');
+    assert.equal(decodedBase64Size(unpadded), Buffer.byteLength(raw), `unpadded: ${JSON.stringify(raw)}`);
+  }
 });
 
 test('audio exactly at the limit is still transcribed', async () => {

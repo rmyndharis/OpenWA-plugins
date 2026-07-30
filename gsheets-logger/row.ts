@@ -7,7 +7,8 @@ export const COLUMNS = [
 
 // `message:failed` used to fire only from sendText, so a hardcoded 'text' type and an `input.text` body
 // were accurate. It now fires from every sender (image, video, voice, document, location, contact, poll,
-// sticker, reply, forward, edit, bulk) through one shared failure path that carries the real `type` — and
+// sticker, reply, forward, bulk) through one shared failure path that carries the real `type` — and
+// NOT from edit, which has no failure path of its own; the `body` fallback below is future-proofing —
 // a media send's DTO holds its caption in `caption`, not `text`. A bulk item carries neither `chatId` nor
 // a per-recipient field: its payload is the shared content, so those columns are genuinely blank.
 type FailedPayload = {

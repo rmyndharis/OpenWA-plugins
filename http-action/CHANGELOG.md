@@ -28,6 +28,10 @@ and the top entry's version must match `manifest.json`.
 - **An empty rendered reply was sent as an empty bubble.** A template referencing a field the response
   does not carry renders to an empty string, and the host coerces the envelope rather than rejecting it.
   The error template is now substituted, and the empty render is logged as the template bug it is.
+- **The empty-reply fallback can no longer swallow the reply.** Rendering the error template can throw
+  (a too-deep path, a prototype key, too many placeholders); outside a try/catch that rejected out of the
+  handler, so the contact got nothing at all where previously an empty bubble was at least sent and the
+  message marked seen. It degrades to the built-in default now.
 - **An `exact` trigger missed a trailing space.** Mobile keyboards routinely append one after an
   autocorrected word, so `ping ` did not match a `ping` trigger. The `exact` comparison is now trimmed;
   the `prefix` arm still slices the original body, so argument positions are unchanged.

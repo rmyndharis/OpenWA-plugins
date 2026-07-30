@@ -2,6 +2,7 @@ import type {
   IPlugin, PluginContext, HookContext, HookResult, IncomingMessage, ConversationSendEnvelope,
 } from '../types/openwa';
 import { readConfig, type HttpActionConfig } from './config.ts';
+import { phoneFromJid } from './jid.ts';
 import { matchAction } from './matcher.ts';
 import { renderText, type TemplateContext } from './url-template.ts';
 import { HttpActionClient, type FetchLike } from './client.ts';
@@ -39,25 +40,6 @@ function truncate(s: string): string {
   return `${s.slice(0, cut)}…`;
 }
 
-// Only these JID domains identify a real WhatsApp user whose local part is an MSISDN. Everything else
-// — `@lid` (privacy id), `@g.us` (group), `@newsletter` (channel), `@broadcast`, `status@broadcast` —
-// also has a numeric local part, which is precisely why an allowlist is required: a denylist of `@lid`
-// alone would emit a group or channel id as if it were a phone number.
-const USER_JID_DOMAINS = new Set(['c.us', 's.whatsapp.net']);
-
-/**
- * Digits of a sender JID, or '' when they would not be a real phone number. Sending a fake number
- * upstream (into a CRM lookup, an authorization check, a request path) is worse than sending nothing,
- * so anything not provably a user JID yields ''.
- */
-function phoneFromJid(jid: string): string {
-  const at = jid.lastIndexOf('@');
-  if (at === -1) return '';
-  if (!USER_JID_DOMAINS.has(jid.slice(at + 1).toLowerCase())) return '';
-  // Strip the multi-device suffix: a Baileys sender can arrive as `628123:12@s.whatsapp.net`.
-  const user = jid.slice(0, at).split(':')[0];
-  return /^\d+$/.test(user) ? user : '';
-}
 
 function buildCtx(msg: IncomingMessage, sessionId: string, args: string[], response?: unknown): TemplateContext {
   // In a group `msg.from` is the GROUP jid, so `author` is the only real sender. Using `from` made
@@ -129,7 +111,15 @@ export async function handleMessage(deps: HandleDeps, sessionId: string, msg: In
   let reply = truncate(sanitize(text));
   if (!reply.trim()) {
     deps.logger.warn(`${PLUGIN}: action '${action.id}' rendered an empty reply; sent the error template instead`);
-    reply = truncate(sanitize(renderText(action.errorTemplate ?? DEFAULT_ERROR, ctxWith()))).trim() || DEFAULT_ERROR;
+    // renderText can THROW (a too-deep path, a prototype key, too many placeholders). Before this
+    // fallback existed an empty bubble was still sent and the message was marked seen; letting the
+    // fallback throw would instead reject out of handleMessage, sending nothing at all.
+    try {
+      reply = truncate(sanitize(renderText(action.errorTemplate ?? DEFAULT_ERROR, ctxWith()))).trim() || DEFAULT_ERROR;
+    } catch (e) {
+      deps.logger.warn(`${PLUGIN}: action '${action.id}' errorTemplate failed to render`, e);
+      reply = DEFAULT_ERROR;
+    }
   }
 
   // replyTo is safe here — replies are always text (media is a non-goal). See §1.4.

@@ -17,6 +17,10 @@ The version here always matches `manifest.json`'s `version`.
   0.12 rejects an empty positional capability argument outright, so that stopped being a blank WhatsApp
   bubble and became a thrown capability error the coordinator swallowed — a translation that silently
   never arrives either way. It is now dropped deliberately, at the one place that can tell why.
+- **An empty translation is dropped where it is produced, not at the send.** The guard first shipped in
+  the gateway could never fire: the formatter prefixes each entry with a flag and language code, so a
+  blank translation still rendered a non-empty `🇪🇸 ES:` bubble. It is now dropped at the point the
+  translation is collected, which also keeps the decision log's count honest.
 - **`timeoutMs` is clamped in code, not just hinted in the schema.** A `configSchema` `min` is a form
   hint the host never enforces, and the host clamps a fetch timeout of `<= 0` up to 1 ms — so a config of
   `0` made every translate abort instantly, with the coordinator swallowing the error and nothing logged.

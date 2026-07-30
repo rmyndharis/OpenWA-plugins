@@ -230,9 +230,15 @@ export interface PluginI18nLocale {
 export type PluginI18n = Record<string, PluginI18nLocale>;
 
 /**
- * Exactly what a SANDBOXED plugin receives. There is no `manifest` and no `hookManager` on the
- * sandbox context (see core `sandbox/worker-bootstrap.ts`) — reading `ctx.manifest.version` would
- * typecheck against an older copy of this file and throw at runtime, so both are omitted here.
+ * What a SANDBOXED plugin receives. There is no `manifest` and no `hookManager` on the sandbox context
+ * (see core `sandbox/worker-bootstrap.ts`) — reading `ctx.manifest.version` would typecheck against an
+ * older copy of this file and throw at runtime, so both are omitted here.
+ *
+ * One member is deliberately NOT vendored: `registerSearchProvider`, which the host does provide. No
+ * plugin here is a search backend, and typing it would mean hand-copying the host's SearchQuery /
+ * SearchResults shapes with nothing to keep them honest. Note it is ungated by any permission, and
+ * under the default SEARCH_PROVIDER=auto a plugin that registers becomes the gateway's ACTIVE search
+ * backend — worth knowing before adding it.
  */
 export interface PluginContext {
   pluginId: string;

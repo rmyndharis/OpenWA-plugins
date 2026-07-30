@@ -85,14 +85,44 @@ test('onMessage re-reads ctx.config per event (per-session config is not cached 
   assert.ok(warnings.some(w => /config invalid/.test(w)), 'corrupted post-enable config was re-read and warned');
 });
 
-// The cooldown slot is taken before the send, so a failed reply must give it back — otherwise one
-// failure (a transport error, or another plugin vetoing message:sending) silences the chat for the
-// whole window with nothing having been delivered.
-test('a burned cooldown slot can be released so the next message retries', () => {
-  const seen = new Map<string, number>();
-  const key = 's1:c@wa';
-  assert.equal(allowReply(seen, key, 1000, 60_000), true);
-  assert.equal(allowReply(seen, key, 1500, 60_000), false, 'still throttled while the slot is held');
-  seen.delete(key); // what the catch does after a failed reply
-  assert.equal(allowReply(seen, key, 1600, 60_000), true, 'released — the next message may try again');
+// Drives the PLUGIN, not a re-implementation. A failed reply must not silence the chat for the whole
+// cooldown, and must not remove the throttle either: clearing it outright turned a permanently-blocked
+// send (a compliance plugin vetoing message:sending) into one send attempt per inbound message.
+function openWindowAfterNow(): string {
+  const start = new Date(Date.now() + 2 * 60_000);
+  const hh = String(start.getUTCHours()).padStart(2, '0');
+  const mm = String(start.getUTCMinutes()).padStart(2, '0');
+  const end = new Date(start.getTime() + 60_000);
+  const eh = String(end.getUTCHours()).padStart(2, '0');
+  const em = String(end.getUTCMinutes()).padStart(2, '0');
+  const w = `${hh}:${mm}-${eh}:${em}`;
+  return JSON.stringify({ mon: w, tue: w, wed: w, thu: w, fri: w, sat: w, sun: w });
+}
+
+test('a failed away reply is throttled, not retried on every message', async () => {
+  const AfterHours = (await import('./index.ts')).default;
+  const attempts: string[] = [];
+  let handler: ((h: unknown) => Promise<unknown>) | undefined;
+  const ctx = {
+    // Open for one minute starting two minutes from now (UTC), every day — so "now" is deterministically
+    // outside business hours whatever time the suite runs at, without needing to inject a clock.
+    config: { schedule: openWindowAfterNow(), timezone: 'UTC', awayMessage: 'tutup', cooldownSec: 3600 },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    messages: {
+      sendText: async () => ({ messageId: 'x', timestamp: 0 }),
+      reply: async () => { attempts.push('try'); throw new Error('blocked by plugin'); },
+    },
+    registerHook: (_e: string, h: (x: unknown) => Promise<unknown>) => { handler = h; },
+  } as never;
+
+  const plugin = new AfterHours();
+  await plugin.onEnable(ctx);
+  const fire = (id: string) =>
+    handler!({ source: 'Engine', sessionId: 's1', data: { id, chatId: 'c@wa', body: 'halo', fromMe: false } });
+
+  await fire('m1');
+  assert.equal(attempts.length, 1, 'first message attempts a reply');
+  await fire('m2');
+  await fire('m3');
+  assert.equal(attempts.length, 1, 'a failing send must not be retried on every inbound message');
 });

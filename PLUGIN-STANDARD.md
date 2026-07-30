@@ -187,8 +187,10 @@ correct plugins and were each learned the hard way. Re-verify against OpenWA cor
      `onEnable` blocks startup and burns the 30 s lifecycle budget for nothing.
    - **In-memory state does NOT survive** (each enable spawns a fresh worker). A cooldown or throttle
      kept only in a `Map` silently re-arms on every restart — persist it or document the reset.
-   - **A plugin left in ERROR is not restored**; nothing respawns a crashed worker, so an operator must
-     re-enable it explicitly.
+   - **An ERROR status does NOT exclude a plugin from restore** — the boot filter keys on the operator's
+     standing enable decision, not on status, and status is reset on every load anyway. What is *not*
+     automatic is recovery mid-run: nothing respawns a worker that crashed after boot, so that plugin
+     stays down until the next restart or an explicit re-enable.
    - `onDisable` now runs on graceful shutdown (SIGTERM), and `onUnload` on uninstall/in-place update.
 5. **Cross-host redirects cannot be blocked plugin-side** (`PluginNetRequestInit` exposes no redirect
    option) — redirect-based SSRF defense is the host's job; do not treat it as a plugin release gate.

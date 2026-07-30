@@ -99,7 +99,7 @@ plugin's **Flow editor**.
 | --- | -------- | ------- | ----------- |
 | `greeting` | yes | — | The greeting + menu sent when the flow starts |
 | `options` | yes | — | The menu tree: array of `{ key, text, options? }` nodes (nests arbitrarily) |
-| `trigger` | no | `""` | Word that starts the flow (case-insensitive); empty = any message starts it |
+| `trigger` | no | `""` | Word that starts the flow (case-insensitive); empty = any message **with text** starts it — a sticker, voice note or caption-less image never does |
 | `respondInGroups` | no | `false` | Whether to run in group chats (each participant walks their own flow) |
 
 ## Compatibility

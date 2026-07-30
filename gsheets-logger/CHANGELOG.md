@@ -13,14 +13,14 @@ The version here always matches `manifest.json`'s `version`.
 - **Every non-text send failure was logged as a text message with an empty body.** `message:failed` used
   to fire only from `sendText`, so hardcoding the `type` column to `text` and reading the body from
   `input.text` was accurate. OpenWA 0.12 routes every sender through one shared failure path that carries
-  the real `type` — image, video, voice, document, location, contact, poll, sticker, reply, forward, edit
-  and bulk — and a media send holds its caption in `caption`, not `text`. An audit sheet is only worth
+  the real `type` — image, video, voice, document, location, contact, poll, sticker, reply, forward
+  and bulk (not edit, which has no failure path of its own) — and a media send holds its caption in `caption`, not `text`. An audit sheet is only worth
   what its worst row is worth: a failed invoice photo appeared as a `text` message with nothing in it.
   The row now logs the reported type and falls back through `text` → `caption` → `body` for the content.
   A payload with no `type` (an older host) still logs as `text`.
-- **Bulk failures log blank recipient columns instead of a wrong one.** A bulk send emits the shared
-  content, with the recipient on the enclosing item, so there is no `chatId` in the payload to log.
-  Blank is the honest value; the row is still attributable by session, error and timestamp.
+  Bulk sends are a related case worth stating rather than a change: their payload is the shared
+  content, with the recipient on the enclosing item, so there is genuinely no `chatId` to log. Those
+  columns stay blank — the row is still attributable by session, error and timestamp.
 
 ## [0.3.0] — 2026-07-23
 

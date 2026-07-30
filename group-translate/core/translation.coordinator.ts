@@ -147,8 +147,11 @@ export class TranslationCoordinator {
     const settled = await Promise.allSettled(targets.map(t => this.translator.translate(text, source, t)));
     const translations: Translation[] = [];
     settled.forEach((r, i) => {
+      // A blank translation is dropped HERE, not at the send: the formatter prefixes each entry with a
+      // flag + language code, so an empty value still renders a non-empty "🇪🇸 ES:" bubble that the
+      // gateway's emptiness guard can never see. Dropping it here also keeps the decision log honest.
       if (r.status === 'fulfilled') {
-        translations.push({ lang: targets[i], text: r.value });
+        if (r.value.trim()) translations.push({ lang: targets[i], text: r.value });
       } else {
         this.logger.warn('translate call failed', {
           action: 'translation_translate_failed',

@@ -38,6 +38,11 @@ export function parseConfig(raw: Record<string, unknown>): { config: AfterHoursC
   };
 }
 
+// How long to wait before re-attempting an away reply that failed. Short enough that a transient
+// failure recovers on the contact's next message, long enough that a permanently-blocked send
+// cannot turn every inbound message into another send attempt.
+const RETRY_BACKOFF_MS = 60_000;
+
 export default class AfterHours implements IPlugin {
   private readonly repliedAt = new Map<string, number>();
 
@@ -80,11 +85,18 @@ export default class AfterHours implements IPlugin {
       await ctx.messages.reply(sessionId, m.chatId, m.id, cfg.config.awayMessage);
     } catch (err) {
       // The cooldown slot is burned BEFORE the send (allowCooldown records on the allow path), so a
-      // failed reply used to silence this chat for the whole window without anything having been sent.
-      // That is now reachable more often: another plugin vetoing `message:sending` surfaces here as a
-      // thrown BadRequestException, indistinguishable from a transport failure. Give the slot back so
-      // the contact's next message can try again.
-      this.repliedAt.delete(key);
+      // failed reply would otherwise silence this chat for the whole window with nothing delivered —
+      // reachable more often now that another plugin vetoing `message:sending` surfaces here as a
+      // thrown error, indistinguishable from a transport failure.
+      //
+      // Shorten the slot rather than clearing it. Clearing removes the ONLY throttle: against a
+      // permanently-failing send (a compliance plugin vetoing this chat) every inbound message would
+      // retry immediately — 60 messages, 60 send attempts, 60 full `message:sending` fan-outs across
+      // every plugin, no backoff. Rewinding the stored timestamp by (backoff - cooldown) makes the next
+      // attempt land exactly RETRY_BACKOFF_MS from now, whether that is shorter OR longer than the
+      // configured cooldown, so a transient failure recovers in a minute and a persistent one still
+      // cannot storm.
+      this.repliedAt.set(key, Date.now() + RETRY_BACKOFF_MS - cooldownMs);
       ctx.logger.error('after-hours: reply failed', err);
     }
   }

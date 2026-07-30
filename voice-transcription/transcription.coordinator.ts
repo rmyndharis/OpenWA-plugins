@@ -42,7 +42,10 @@ export type ChatDeliveryMode = 'off' | 'self' | 'reply';
  */
 export function decodedBase64Size(b64: string): number {
   const pad = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
-  return Math.floor(b64.length / 4) * 3 - pad;
+  // (length - padding) * 3/4 is exact for BOTH padded and unpadded input. The obvious
+  // floor(length/4)*3 - pad form silently UNDER-counts unpadded base64 (a 3-char tail decodes to 2
+  // bytes but rounds to 0), which would let an oversized note through the guard rather than fail safe.
+  return Math.floor(((b64.length - pad) * 3) / 4);
 }
 
 export interface TranscriptionConfig {

@@ -1,4 +1,5 @@
 import type { IncomingMessage, PluginConversationsCapability, ConversationSendEnvelope } from '../types/openwa';
+import { phoneFromJid } from './jid.ts';
 import type { TypebotConfig, OutgoingPart } from './typebot-types.ts';
 import { TypebotHttpError } from './typebot-client.ts';
 import type { TypebotClient, ContinueMessage } from './typebot-client.ts';
@@ -109,25 +110,6 @@ function contactVars(msg: IncomingMessage): Record<string, string> {
   };
 }
 
-// Only these JID domains identify a real WhatsApp user whose local part is an MSISDN. Everything else
-// — `@lid` (privacy id), `@g.us` (group), `@newsletter` (channel), `@broadcast` — also has a numeric
-// local part, which is precisely why an allowlist is required: a denylist of `@lid` alone would feed a
-// group or channel id to a flow as if it were a phone number.
-const USER_JID_DOMAINS = new Set(['c.us', 's.whatsapp.net']);
-
-/**
- * Digits of a sender JID, or '' when they would not be a real phone number. Feeding a CRM lookup a
- * number belonging to nobody is worse than feeding it nothing, so anything not provably a user JID
- * yields ''.
- */
-function phoneFromJid(jid: string): string {
-  const at = jid.lastIndexOf('@');
-  if (at === -1) return '';
-  if (!USER_JID_DOMAINS.has(jid.slice(at + 1).toLowerCase())) return '';
-  // Strip the multi-device suffix: a Baileys sender can arrive as `628123:12@s.whatsapp.net`.
-  const user = jid.slice(0, at).split(':')[0];
-  return /^\d+$/.test(user) ? user : '';
-}
 
 async function send(deps: TurnDeps, sessionId: string, msg: IncomingMessage, part: OutgoingPart): Promise<void> {
   const env: ConversationSendEnvelope = { sessionId, chatId: msg.chatId, ...part };

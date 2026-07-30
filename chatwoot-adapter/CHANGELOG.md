@@ -36,7 +36,11 @@ into message loss and a gateway-wide stall.
   up to 700 KB of media each is ~350 MiB against a 50 MiB budget, so a media backlog hit the quota at
   around 74 entries: `storage.set` then rejected, the "drop the oldest entry" policy never ran, and the
   message was lost outright — it had already been marked seen. The pairing is now 80 × 200 KB ≈ 16 MiB,
-  documented as a pair so neither can be raised without redoing the multiplication.
+  documented as a pair so neither can be raised without redoing the multiplication. Note the trade-off:
+  the lower per-entry media cap means an attachment above roughly 150 KB binary is now *queued* as a
+  placeholder rather than as the file, so if the relay only succeeds on retry the agent sees
+  `📎 invoice.pdf` instead of the document. Previously that held up to ~512 KB. Losing fidelity on the
+  failure path is the price of not losing the message itself on the quota.
 - **A message that could neither be relayed nor queued is now reported.** That failure was swallowed by a
   `.catch` that logged and returned null, and because the retry queue cannot count an entry it never
   managed to store, `healthCheck` went on reporting the plugin healthy while messages disappeared. Such

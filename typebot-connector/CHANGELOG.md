@@ -33,6 +33,10 @@ through OpenWA 0.12.1, rather than against unit tests alone. That run is what fo
   advanced), the contact was left with a half-delivered turn while the plugin believed the prompt was
   out, and their next message was matched against an input they never saw. Each part is now isolated and
   a failure is logged.
+- **A group message with no author is skipped instead of merged.** Group flows are keyed per sender, and
+  an authorless message fell back to a shared `unknown` key — so every such participant drove the SAME
+  Typebot session and one contact's answer advanced another contact's flow. There is no safe way to
+  attribute it, so the turn is skipped.
 - **The abandoned-session sweep is scoped to one WhatsApp session.** Its threshold comes from the
   config resolved for the session whose message triggered it, and `sessionTimeoutMinutes` is
   overridable per session — so an unscoped sweep applied one session's (possibly 5-minute) timeout
