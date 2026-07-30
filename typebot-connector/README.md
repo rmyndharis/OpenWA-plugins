@@ -106,6 +106,9 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
   outbound media/voice.
 - **Auto-starts every chat in scope** (including groups by default). Don't run another auto-reply /
   menu / FAQ plugin on the same session — they will conflict.
+- **In a group, each participant gets their own flow**, keyed by the sender. A group message the
+  engine delivers with no identifiable sender is skipped rather than answered: there is no way to
+  tell whose flow it belongs to, and guessing would feed one contact's answer into another's session.
 - `payment` steps and non-renderable embeds can't be shown on WhatsApp and get a short fallback
   message. Streaming AI blocks are resolved server-side into normal text bubbles.
 

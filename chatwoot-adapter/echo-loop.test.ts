@@ -73,6 +73,7 @@ async function wire(sessionId = 'sess') {
   const inbound = {
     lock, client, store, engine, instanceId: 'inst',
     relayGroups: true, relayMedia: true, backfillLimit: 0, backfillAllOnce: false, log: () => {},
+      onInboundLost: () => {},   // required on InboundDeps; the cast would hide its absence
   } as unknown as InboundDeps;
 
   const sent: Array<{ chatId?: string; text?: string }> = [];
@@ -159,6 +160,7 @@ test("one tenant's mirror marker does not suppress another tenant's reply with t
     lock, store, engine, instanceId: 'instA', relayGroups: true, relayMedia: true,
     backfillLimit: 0, backfillAllOnce: false, log: () => {},
     client: { postText: async () => { posted.push({ id: 60 }); return { id: 60 }; }, postMedia: async () => ({ id: 60 }) },
+      onInboundLost: () => {},   // required on InboundDeps; the cast would hide its absence
   } as unknown as InboundDeps;
   await handleSent(inboundA, 'sessA', 'Engine', { ...own, chatId: 'alice@c.us' } as IncomingMessage);
   assert.equal(posted.length, 1);
@@ -199,6 +201,7 @@ test('an echo webhook processed while the adapter post is still in flight is NOT
   const inbound = {
     lock, client, store, engine, instanceId: 'inst',
     relayGroups: true, relayMedia: true, backfillLimit: 0, backfillAllOnce: false, log: () => {},
+      onInboundLost: () => {},   // required on InboundDeps; the cast would hide its absence
   } as unknown as InboundDeps;
   const sent: Array<{ chatId?: string }> = [];
   const outbound = {

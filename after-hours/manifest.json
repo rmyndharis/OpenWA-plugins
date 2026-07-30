@@ -58,7 +58,7 @@
         "type": "number",
         "default": 3600,
         "title": "Cooldown (seconds per chat)",
-        "description": "Minimum seconds between after-hours replies to the same chat. 0 = reply every time."
+        "description": "Minimum seconds between after-hours replies to the same chat. 0 = reply every time. A reply that FAILS is always followed by a short backoff regardless of this value, so a permanently blocked send cannot turn every incoming message into another send attempt."
       },
       "respondInGroups": {
         "type": "boolean",
