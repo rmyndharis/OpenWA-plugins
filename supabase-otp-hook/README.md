@@ -15,8 +15,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `supabase-otp-hook` |
-| **Version** | 0.2.0 |
-| **Released** | 2026-07-23 |
+| **Version** | 0.3.0 |
+| **Released** | 2026-07-30 |
 | **Status** | beta |
 | **Author** | maplerichie |
 | **License** | MIT |
@@ -40,7 +40,9 @@
   off; a dead session no longer gets swallowed as a silent 202.
 - **Fire-and-forget WhatsApp send** — the ingress worker dispatch is bounded to 5 s, so the send runs
   in the background to avoid a timeout-induced retry that would duplicate the OTP.
-- **Per-user ordering + dedup** — ordered per `user.id`, deduped on `webhook-id`.
+- **Per-user ordering + dedup** — ordered per `user.id`, deduped on `webhook-id`. Ordering and the
+  retry/DLQ path need `QUEUE_ENABLED=true` on the host; with the queue off, ingress runs inline, takes
+  no ordering lock, and makes a single attempt.
 
 ## What it does
 
@@ -54,8 +56,20 @@ to stay within the worker's 5 s dispatch budget.
 ## Setup
 
 Requires OpenWA v0.8.16+ (the `standard-webhooks` signature scheme and the `response`/preflight
-ingress contract) with a logged-in WhatsApp session, and a Supabase project with phone auth. **Install
-and enable the plugin first** (see [Install](#install) below), then wire the connection:
+ingress contract) with a logged-in WhatsApp session, and a Supabase project with phone auth.
+
+**Install the plugin, then set its base config, then enable it** (see [Install](#install) below) — in
+that order. Enabling validates the plugin's **base** (`*`) config and refuses to start without
+`appName`, while the instance you mint in step 1 carries a *per-instance* config. Setting `appName`
+only on the instance therefore leaves enable failing:
+
+```bash
+curl -X PUT "$OPENWA/api/plugins/supabase-otp-hook/config" \
+  -H "Authorization: Bearer $ADMIN_KEY" -H "Content-Type: application/json" \
+  -d '{ "config": { "appName": "Acme" } }'
+```
+
+Then wire the connection:
 
 Wiring order: OpenWA mints the **ingress URL** → paste into Supabase → Supabase generates the
 **webhook secret** → paste it back into OpenWA **as the instance secret** (the host uses it to verify
@@ -108,6 +122,10 @@ node package.mjs supabase-otp-hook            # build the zip
 curl -X POST "$OPENWA/api/plugins/install" \
   -H "Authorization: Bearer $ADMIN_KEY" \
   -F "file=@supabase-otp-hook.zip"
+# Base config BEFORE enable — enabling validates it and refuses to start without appName.
+curl -X PUT "$OPENWA/api/plugins/supabase-otp-hook/config" \
+  -H "Authorization: Bearer $ADMIN_KEY" -H "Content-Type: application/json" \
+  -d '{ "config": { "appName": "Acme" } }'
 curl -X POST "$OPENWA/api/plugins/supabase-otp-hook/enable" \
   -H "Authorization: Bearer $ADMIN_KEY"
 ```
