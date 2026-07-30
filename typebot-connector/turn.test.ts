@@ -113,3 +113,47 @@ test('expired session (404) → clear + startChat restart, new state persisted',
   const state = await store.get('sess:c@c.us');
   assert.equal(state?.sessionId, 'S2');
 });
+
+// ── Contact variables (0.1.1) ───────────────────────────────────────────────────────────────────────
+// Proven on a live 0.12.1 host: the same published flow rendered `num=[628999000]` when the Chat API was
+// called directly, and `num=[]` when driven through this plugin — because senderPhone is assigned by the
+// host only AFTER the message:received chain, and only for @lid senders.
+
+/** Same shape as `deps` above, but the client records the prefilledVariables startChat was called with. */
+function depsCapturingVars() {
+  const seen: Array<Record<string, string>> = [];
+  const conversations: PluginConversationsCapability = { send: async () => {} };
+  const client = {
+    startChat: async (o: { prefilledVariables?: Record<string, string> }) => {
+      seen.push(o?.prefilledVariables ?? {});
+      return { sessionId: 'S1', bubbles: [], input: undefined };
+    },
+    continueChat: async () => ({ bubbles: [], input: undefined }),
+    uploadFile: async () => 'https://cdn/f',
+  };
+  const d: TurnDeps = {
+    cfg, client: client as any, store: new SessionStore(fakeStorage()), lock: new KeyedAsyncLock(),
+    conversations, now: () => 1000, log: () => {},
+  };
+  return { d, seen };
+}
+
+test('waNumber falls back to the JID digits, since senderPhone is never set at hook time', async () => {
+  const { d, seen } = depsCapturingVars();
+  await handleTurn(d, 'sess', 'Engine', msg({ from: '6281234567890@c.us' }));
+  assert.equal(seen[0].waNumber, '6281234567890');
+});
+
+test('a group turn keys waNumber to the AUTHOR, not the group', async () => {
+  const { d, seen } = depsCapturingVars();
+  await handleTurn(d, 'sess', 'Engine', msg({
+    isGroup: true, from: '120363@g.us', chatId: '120363@g.us', author: '6281234567890@c.us',
+  }));
+  assert.equal(seen[0].waNumber, '6281234567890');
+});
+
+test('a @lid sender yields no waNumber — a privacy id is not a phone number', async () => {
+  const { d, seen } = depsCapturingVars();
+  await handleTurn(d, 'sess', 'Engine', msg({ from: '118367890123478@lid' }));
+  assert.equal(seen[0].waNumber, '');
+});

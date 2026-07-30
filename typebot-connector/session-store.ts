@@ -17,4 +17,25 @@ export class SessionStore {
   clear(key: string): Promise<void> {
     return this.storage.delete(this.k(key));
   }
+
+  /**
+   * Drop rows for conversations that were abandoned mid-flow. A completed flow clears its own row
+   * (turn.ts), so only an abandoned one lingers — and it lingers forever, because nothing else ever
+   * revisits that key. That matters beyond disk: the host re-measures its per-plugin storage quota on
+   * EVERY write by stat-ing every key the plugin owns, so abandoned rows make each later turn slower,
+   * permanently. Best-effort: a failure here must never affect a turn.
+   */
+  async pruneIdle(nowMs: number, idleMs: number): Promise<number> {
+    let pruned = 0;
+    // The host filters by prefix, but re-filter: a `list()` can also surface package-owned stems.
+    const keys = (await this.storage.list('sess:')).filter(k => k.startsWith('sess:'));
+    for (const key of keys) {
+      const state = await this.storage.get<SessionState>(key);
+      if (state && nowMs - state.lastActivity > idleMs) {
+        await this.storage.delete(key);
+        pruned++;
+      }
+    }
+    return pruned;
+  }
 }

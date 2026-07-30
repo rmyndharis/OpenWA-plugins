@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `typebot-connector` |
-| **Version** | 0.1.0 |
-| **Released** | 2026-07-03 |
+| **Version** | 0.1.1 |
+| **Released** | 2026-07-30 |
 | **Status** | beta |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -48,6 +48,11 @@ formatted messages, media bubbles as media, and a `choice` step as a numbered li
 is mapped back to the chosen option. Session state lives in Typebot; the plugin persists only the
 session id and the bot's expected next input. A chat resets when the flow ends or after the idle
 timeout.
+
+**Write your flow for chat, not for a web page.** WhatsApp has no input field, so a text input's
+**placeholder is sent to the contact as the prompt**. A placeholder written for a form ("Type here…")
+arrives as a nonsense message; write it as something you would actually say ("Send your order number").
+The same applies to a `choice` step, which arrives as a numbered list the contact answers with a digit.
 
 ## Setup
 
@@ -91,7 +96,7 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 | `apiToken` | no | — | Only for a restricted or preview bot. Leave empty for a public published bot. Stored as a secret. |
 | `respondInGroups` | no | `true` | Run the flow in group chats too. Each sender in a group gets their own flow; replies are quoted. |
 | `sessionTimeoutMinutes` | no | `30` | If a chat is idle this long, the next message starts a fresh flow. |
-| `passContactVariables` | no | `true` | Send the contact's number/name/chat id to the flow as prefilled variables `waNumber`, `waName`, `waChatId`. |
+| `passContactVariables` | no | `true` | Send the contact's number/name/chat id to the flow as prefilled variables `waNumber`, `waName`, `waChatId`. `waNumber` is the sender's digits (the participant's, in a group) and is **empty for a `@lid` sender**, whose privacy id is not a phone number — branch on it defensively. |
 | `mediaHost` | no | — | Only for older self-hosted Typebot that uploads files to a separate S3/MinIO host. Leave empty for Typebot main (same-origin upload proxy). |
 
 ## Compatibility
