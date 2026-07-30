@@ -14,6 +14,11 @@ and the top entry's version must match `manifest.json`.
   JID, whose user part *is* the MSISDN for a plain chat. A `@lid` sender still yields an empty value on
   purpose: a privacy id's numeric part is not a phone number, and sending it upstream as one would be
   worse than sending nothing.
+- **Only a real user JID becomes a phone number.** The JID→digits helper first shipped in this
+  release denylisted `@lid`, which is not enough: a group, channel or broadcast JID has a numeric
+  local part too, so those were emitted as if they were phone numbers — worse than the empty value
+  they replaced. It now allowlists `@c.us` / `@s.whatsapp.net` and strips the `:device` suffix
+  Baileys can append. Caught in self-review before release.
 - **`{{sender.id}}` was the group in group chats.** In a group `msg.from` is the group JID; `author` is
   the participant who actually sent the message. Every member therefore resolved to the same value, so a
   per-user lookup or an authorization check written against `sender.id` silently applied to the group.

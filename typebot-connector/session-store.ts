@@ -25,15 +25,26 @@ export class SessionStore {
    * EVERY write by stat-ing every key the plugin owns, so abandoned rows make each later turn slower,
    * permanently. Best-effort: a failure here must never affect a turn.
    */
-  async pruneIdle(nowMs: number, idleMs: number): Promise<number> {
+  async pruneIdle(nowMs: number, idleMs: number, sessionId: string): Promise<number> {
     let pruned = 0;
-    // The host filters by prefix, but re-filter: a `list()` can also surface package-owned stems.
-    const keys = (await this.storage.list('sess:')).filter(k => k.startsWith('sess:'));
+    // Scoped to ONE WhatsApp session on purpose. `idleMs` comes from the config resolved for the session
+    // whose message triggered the sweep, and `sessionTimeoutMinutes` is overridable per session — so an
+    // unscoped sweep would apply one session's (possibly 5-minute) threshold to every other session's
+    // rows and delete flows that are still live under their own, longer, timeout. A contact halfway
+    // through a long form would silently restart at question one.
+    const prefix = `${this.k('')}${sessionId}:`;
+    const keys = (await this.storage.list(prefix)).filter(k => k.startsWith(prefix));
     for (const key of keys) {
-      const state = await this.storage.get<SessionState>(key);
-      if (state && nowMs - state.lastActivity > idleMs) {
-        await this.storage.delete(key);
-        pruned++;
+      // Per-key isolation: one unreadable row must not abandon the rest of the sweep, because the
+      // caller has already advanced its throttle and would not retry for another hour.
+      try {
+        const state = await this.storage.get<SessionState>(key);
+        if (state && nowMs - state.lastActivity > idleMs) {
+          await this.storage.delete(key);
+          pruned++;
+        }
+      } catch {
+        /* skip this row; the next sweep tries again */
       }
     }
     return pruned;

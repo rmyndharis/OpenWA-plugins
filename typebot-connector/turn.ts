@@ -109,14 +109,23 @@ function contactVars(msg: IncomingMessage): Record<string, string> {
   };
 }
 
+// Only these JID domains identify a real WhatsApp user whose local part is an MSISDN. Everything else
+// — `@lid` (privacy id), `@g.us` (group), `@newsletter` (channel), `@broadcast` — also has a numeric
+// local part, which is precisely why an allowlist is required: a denylist of `@lid` alone would feed a
+// group or channel id to a flow as if it were a phone number.
+const USER_JID_DOMAINS = new Set(['c.us', 's.whatsapp.net']);
+
 /**
- * Digits of a sender JID, or '' when they would not be a real phone number. A `@lid` privacy id also has
- * a numeric user part, but it is not an MSISDN — handing it to a flow as {{waNumber}} would silently feed
- * a CRM lookup a number belonging to nobody, which is worse than feeding it nothing.
+ * Digits of a sender JID, or '' when they would not be a real phone number. Feeding a CRM lookup a
+ * number belonging to nobody is worse than feeding it nothing, so anything not provably a user JID
+ * yields ''.
  */
 function phoneFromJid(jid: string): string {
-  if (jid.endsWith('@lid')) return '';
-  const user = jid.split('@')[0];
+  const at = jid.lastIndexOf('@');
+  if (at === -1) return '';
+  if (!USER_JID_DOMAINS.has(jid.slice(at + 1).toLowerCase())) return '';
+  // Strip the multi-device suffix: a Baileys sender can arrive as `628123:12@s.whatsapp.net`.
+  const user = jid.slice(0, at).split(':')[0];
   return /^\d+$/.test(user) ? user : '';
 }
 

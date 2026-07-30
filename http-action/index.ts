@@ -39,14 +39,23 @@ function truncate(s: string): string {
   return `${s.slice(0, cut)}…`;
 }
 
+// Only these JID domains identify a real WhatsApp user whose local part is an MSISDN. Everything else
+// — `@lid` (privacy id), `@g.us` (group), `@newsletter` (channel), `@broadcast`, `status@broadcast` —
+// also has a numeric local part, which is precisely why an allowlist is required: a denylist of `@lid`
+// alone would emit a group or channel id as if it were a phone number.
+const USER_JID_DOMAINS = new Set(['c.us', 's.whatsapp.net']);
+
 /**
- * Digits of a sender JID, or '' when they would not be a real phone number. A `@lid` privacy id also
- * has a numeric user part, but it is NOT an MSISDN — handing it to a template as `sender.phone` would
- * silently send a fake number upstream, which is worse than sending nothing.
+ * Digits of a sender JID, or '' when they would not be a real phone number. Sending a fake number
+ * upstream (into a CRM lookup, an authorization check, a request path) is worse than sending nothing,
+ * so anything not provably a user JID yields ''.
  */
 function phoneFromJid(jid: string): string {
-  if (jid.endsWith('@lid')) return '';
-  const user = jid.split('@')[0];
+  const at = jid.lastIndexOf('@');
+  if (at === -1) return '';
+  if (!USER_JID_DOMAINS.has(jid.slice(at + 1).toLowerCase())) return '';
+  // Strip the multi-device suffix: a Baileys sender can arrive as `628123:12@s.whatsapp.net`.
+  const user = jid.slice(0, at).split(':')[0];
   return /^\d+$/.test(user) ? user : '';
 }
 

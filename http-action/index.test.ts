@@ -298,3 +298,30 @@ test('an empty reply with an empty error template still sends something', async 
   await handleMessage(d, 's1', msg('cek INV-001'));
   assert.ok((sendCalls[0].env as { text: string }).text.trim().length > 0);
 });
+
+// Regression: phoneFromJid originally denylisted only '@lid'. A group, channel or broadcast JID also
+// has a numeric local part, so those were emitted as if they were phone numbers — the exact failure the
+// helper exists to prevent, and worse than before the helper existed (the field used to be empty).
+test('a non-user JID never yields a phone number', async () => {
+  const cases: Array<[string, string]> = [
+    ['6281234567890@c.us', '6281234567890'],
+    ['6281234567890@s.whatsapp.net', '6281234567890'],
+    ['628123:12@s.whatsapp.net', '628123'],          // multi-device suffix stripped
+    ['118367890123478@lid', ''],                      // privacy id
+    ['120363144038483540@g.us', ''],                  // group
+    ['120363144038483540@newsletter', ''],            // channel
+    ['status@broadcast', ''],
+    ['nonsense', ''],
+  ];
+  for (const [from, want] of cases) {
+    const { d, sendCalls } = makeDeps({ body: JSON.stringify({ ok: 1 }) });
+    d.cfg = cfgWith({
+      actions: JSON.stringify([{
+        id: 'me', match: { type: 'prefix', value: 'me' },
+        request: { method: 'GET', path: '/c/x' }, replyTemplate: 'p=[{{sender.phone}}]',
+      }]),
+    });
+    await handleMessage(d, 's1', { ...msg('me'), from, author: undefined } as IncomingMessage);
+    assert.equal((sendCalls[0].env as { text: string }).text, `p=[${want}]`, `for ${from}`);
+  }
+});

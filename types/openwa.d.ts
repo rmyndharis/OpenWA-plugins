@@ -19,6 +19,7 @@
 //   the send verbs (messages.sendText / messages.reply / conversations.send) which get 120 s;
 //   5 s per hook dispatch (overrun → the host fails OPEN with {continue:true} and drops your result);
 //   32 concurrent capability calls per plugin (the 33rd throws);
+//   16 concurrent net.fetch calls GLOBALLY — shared across ALL plugins and workers, not per plugin;
 //   50 MiB total ctx.storage per plugin; 10 MiB net.fetch response body;
 //   200 log lines / 10 s, 8 KiB per line.
 
@@ -348,10 +349,26 @@ export interface IncomingMessage {
   kind?: ChatKind;
   /** In a GROUP, `from` is the group JID — `author` is the only real sender. */
   author?: string;
+  /** The sender is identified by a privacy id (`@lid`) rather than a phone number. */
+  isLidSender?: boolean;
+  /** A status/story broadcast rather than a real conversation. */
+  isStatusBroadcast?: boolean;
   /**
    * Best-effort sender MSISDN, and only for `@lid` senders with RESOLVE_LID_TO_PHONE enabled. The host
    * assigns it AFTER the `message:received` hook chain has run, so a hook handler always observes
-   * `undefined` — derive digits from `(author ?? from).split('@')[0]` if you need them at hook time.
+   * `undefined`.
+   *
+   * To get digits at hook time, take the local part of the sender JID — but ONLY when the JID is a real
+   * user, on an ALLOWLIST, never a denylist: `@lid` (privacy id), `@g.us` (group), `@newsletter`
+   * (channel) and `@broadcast` all have numeric local parts too, and passing one of those on as a phone
+   * number is worse than passing nothing (it silently keys a CRM lookup or an authorization check to a
+   * number belonging to nobody). Also strip the multi-device suffix Baileys can append:
+   *
+   *   const jid = msg.author ?? msg.from;                    // in a group, `from` is the GROUP
+   *   const at = jid.lastIndexOf('@');
+   *   const dom = at < 0 ? '' : jid.slice(at + 1).toLowerCase();
+   *   const user = at < 0 ? '' : jid.slice(0, at).split(':')[0];   // 628123:12@s.whatsapp.net
+   *   const phone = (dom === 'c.us' || dom === 's.whatsapp.net') && /^\d+$/.test(user) ? user : '';
    */
   senderPhone?: string | null;
   mentionedIds?: string[];

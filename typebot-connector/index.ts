@@ -40,7 +40,9 @@ export function readConfig(raw: Record<string, unknown>): TypebotConfig {
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 export default class TypebotConnector implements IPlugin {
-  private lastSweepAt = 0;
+  // Per WhatsApp session: the sweep itself is scoped to one session's rows, so a single global
+  // throttle would let the first session to fire starve every other session's cleanup for an hour.
+  private readonly lastSweepAt = new Map<string, number>();
 
   async onEnable(ctx: PluginContext): Promise<void> {
     readConfig(ctx.config); // fail fast at enable time
@@ -60,10 +62,10 @@ export default class TypebotConnector implements IPlugin {
         // never delay a reply, and it is deliberately driven by traffic rather than a timer so a disabled
         // plugin leaves nothing running.
         const now = Date.now();
-        if (now - this.lastSweepAt > SWEEP_INTERVAL_MS) {
-          this.lastSweepAt = now;
+        if (now - (this.lastSweepAt.get(sessionId) ?? 0) > SWEEP_INTERVAL_MS) {
+          this.lastSweepAt.set(sessionId, now);
           void store
-            .pruneIdle(now, cfg.sessionTimeoutMinutes * 60_000)
+            .pruneIdle(now, cfg.sessionTimeoutMinutes * 60_000, sessionId)
             .then(n => n && ctx.logger.log(`typebot-connector: pruned ${n} abandoned session(s)`))
             .catch(e => ctx.logger.error('typebot-connector: session prune failed', e));
         }

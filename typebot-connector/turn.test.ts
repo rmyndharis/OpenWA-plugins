@@ -157,3 +157,19 @@ test('a @lid sender yields no waNumber — a privacy id is not a phone number', 
   await handleTurn(d, 'sess', 'Engine', msg({ from: '118367890123478@lid' }));
   assert.equal(seen[0].waNumber, '');
 });
+
+// Same regression as http-action: only a real user JID may become {{waNumber}}. A group/channel id is
+// numeric too, and feeding one to a flow's CRM lookup is worse than feeding nothing.
+test('a non-user JID never becomes waNumber', async () => {
+  for (const [from, want] of [
+    ['6281234567890@c.us', '6281234567890'],
+    ['628123:12@s.whatsapp.net', '628123'],
+    ['118367890123478@lid', ''],
+    ['120363144038483540@g.us', ''],
+    ['120363144038483540@newsletter', ''],
+  ] as Array<[string, string]>) {
+    const { d, seen } = depsCapturingVars();
+    await handleTurn(d, 'sess', 'Engine', msg({ from, author: undefined }));
+    assert.equal(seen[0].waNumber, want, `for ${from}`);
+  }
+});

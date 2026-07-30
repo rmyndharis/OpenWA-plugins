@@ -211,7 +211,8 @@ correct plugins and were each learned the hard way. Re-verify against OpenWA cor
 9. **Host bounds, none of them visible from the types:** 30 s per lifecycle phase; 30 s per capability
    call, except the send verbs (`messages.sendText`, `messages.reply`, `conversations.send`) at 120 s;
    5 s per hook dispatch, after which the host fails **open** with `{ continue: true }` and discards
-   your result; 32 concurrent capability calls per plugin (the 33rd throws); 50 MiB storage; 10 MiB
+   your result; 32 concurrent capability calls per plugin (the 33rd throws); 16 concurrent `net.fetch` calls
+   **globally** — that one is shared across all plugins and workers, not per plugin; 50 MiB storage; 10 MiB
    fetch response body; 200 log lines / 10 s at 8 KiB per line.
 10. **The worker is crash containment, not a security boundary** (core says so itself). Plugin code can
    `require('fs')`/`('net')`/`('child_process')`; what the worker actually buys you is a 256 MB heap

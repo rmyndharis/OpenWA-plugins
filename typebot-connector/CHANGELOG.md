@@ -22,12 +22,23 @@ through OpenWA 0.12.1, rather than against unit tests alone. That run is what fo
   `from`/`chatId` is the group rather than a person. A `@lid` sender still yields an empty string on
   purpose: a privacy id's numeric part is not a phone number, and feeding it to a CRM lookup as one would
   be worse than feeding it nothing.
+- **Only a real user JID becomes a phone number.** The JID→digits helper first shipped in this
+  release denylisted `@lid`, which is not enough: a group, channel or broadcast JID has a numeric
+  local part too, so those were emitted as if they were phone numbers — worse than the empty value
+  they replaced. It now allowlists `@c.us` / `@s.whatsapp.net` and strips the `:device` suffix
+  Baileys can append. Caught in self-review before release.
 - **One failed part silenced the rest of the turn.** The send loop had no per-part isolation, so a single
   failure — an unreachable `mediaHost`, a host media path that refuses the envelope — aborted every part
   after it. Because state is persisted *before* sending (deliberately: the Typebot server has already
   advanced), the contact was left with a half-delivered turn while the plugin believed the prompt was
   out, and their next message was matched against an input they never saw. Each part is now isolated and
   a failure is logged.
+- **The abandoned-session sweep is scoped to one WhatsApp session.** Its threshold comes from the
+  config resolved for the session whose message triggered it, and `sessionTimeoutMinutes` is
+  overridable per session — so an unscoped sweep applied one session's (possibly 5-minute) timeout
+  to every other session's rows and deleted flows still live under their own, longer, timeout: a
+  contact halfway through a long form would have silently restarted at question one. The sweep and
+  its throttle are now both per session. Caught in self-review before release.
 - **Sessions abandoned mid-flow were never cleaned up.** A completed flow clears its own row, but a
   contact who simply stops replying leaves one behind forever. Beyond disk, that has a running cost:
   OpenWA re-measures a plugin's storage quota on every write by stat-ing every key it owns, so abandoned
