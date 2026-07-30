@@ -310,3 +310,35 @@ test('a concurrent burst of voice notes claims every id exactly once', async () 
   await Promise.all(ids.map(id => co.handle('s1', voiceMsg({ id }))));
   assert.equal(provider.calls.length, 4, 'no duplicate STT call on redelivery');
 });
+
+// The pre-1.1.0 rate counter was `rate:<sid>:<hour>` — one key per hour, also never deleted. Sweeping
+// only the `seen:` family would leave a year-old install with ~8760 counter keys: exactly the per-write
+// stat cost the sweep exists to remove.
+test('the legacy sweep clears the old hourly rate keys too', async () => {
+  const legacy: Record<string, unknown> = {};
+  for (let i = 0; i < 30; i++) legacy[`seen:s1:old${i}`] = 1;
+  for (let i = 0; i < 30; i++) legacy[`rate:s1:${400000 + i}`] = 5;
+  const store = makeStore(legacy);
+  const { co } = setup({ store, config: { maxPerHour: 10_000 } });
+  for (let i = 0; i < 4; i++) await co.handle('s1', voiceMsg({ id: `m${i}` }));
+  assert.equal(store.keys().filter(k => k.startsWith('seen:s1:')).length, 0, 'legacy dedup keys gone');
+  assert.equal(store.keys().filter(k => k.startsWith('rate:s1:')).length, 0, 'legacy rate keys gone');
+  assert.ok(store.keys().includes('seen:s1'), 'the 1.1.0 dedup list survives');
+  assert.ok(store.keys().includes('rate:s1'), 'the 1.1.0 rate key survives');
+});
+
+// The host's list() swallows its own errors and resolves []. Retiring on a single empty listing would
+// therefore strand the legacy keys forever on one transient failure — the very thing being fixed.
+test('the sweep does not retire on a single empty listing', async () => {
+  const store = makeStore();
+  let listCalls = 0;
+  const flaky: KvStore & { keys(): string[] } = {
+    ...store,
+    list: async (p?: string) => { listCalls++; return listCalls <= 2 ? [] : store.list(p); },
+  };
+  const { co } = setup({ store: flaky, config: { maxPerHour: 10_000 } });
+  await co.handle('s1', voiceMsg({ id: 'a' }));
+  const afterFirst = listCalls;
+  await co.handle('s1', voiceMsg({ id: 'b' }));
+  assert.ok(listCalls > afterFirst, 'a second pass still runs after one clean-looking listing');
+});

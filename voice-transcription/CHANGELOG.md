@@ -36,6 +36,15 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
   overwrote the others' ids. Each lost id is a second paid STT call and, with `chatDelivery: reply`, a
   duplicate transcript the contact sees. Only the claim is serialized; transcription and delivery stay
   concurrent.
+- **The legacy sweep clears the old hourly rate keys too, and no longer retires on one empty listing.**
+  It originally swept only `seen:<sid>:*`, leaving the pre-1.1.0 `rate:<sid>:<hour>` keys — one per
+  hour, also never deleted — to keep taxing every write on an upgraded install. And because the host's
+  `list()` swallows its own errors and resolves empty, a single transient failure looked like a clean
+  session and permanently retired the sweep, stranding exactly the keys it exists to remove. Both
+  families are swept now, and retirement needs two consecutive clean passes.
+- **`timeoutMs` is clamped in code, not just in the manifest.** A `configSchema` `max` is a form hint
+  the host never enforces, so a stored value above the ceiling still reached the STT client and made
+  the capability timer race the fetch abort — reporting an STT timeout as a capability timeout.
 - **Audio size is checked before the base64 is decoded.** An oversized voice note — precisely what the
   guard exists to reject — was decoded into a Buffer first, on top of the base64 string already held in
   memory, against a 256 MB worker heap that the host does not respawn if it is exhausted.

@@ -173,3 +173,36 @@ test('a non-user JID never becomes waNumber', async () => {
     assert.equal(seen[0].waNumber, want, `for ${from}`);
   }
 });
+
+// Regression: state is persisted BEFORE the send loop (the Typebot server has already advanced), so a
+// part that fails must not abort the parts after it — the contact would be left with a half turn while
+// the plugin believed the prompt was delivered, and their next message would be matched against an
+// input they never saw. Verified in production too: an image whose URL the host refused still let the
+// following choice list through.
+test('one failed part does not silence the rest of the turn', async () => {
+  const sent: ConversationSendEnvelope[] = [];
+  let calls = 0;
+  const conversations: PluginConversationsCapability = {
+    send: async e => {
+      calls++;
+      if (calls === 1) throw new Error('host refused this media');
+      sent.push(e);
+    },
+  };
+  const client = {
+    startChat: async () => ({
+      sessionId: 'S1',
+      bubbles: [{ kind: 'image', url: 'https://x/i.png' }, { kind: 'text', markdown: 'masih terkirim' }],
+      input: undefined,
+    }),
+    continueChat: async () => ({ bubbles: [], input: undefined }),
+    uploadFile: async () => 'https://cdn/f',
+  };
+  const d: TurnDeps = {
+    cfg, client: client as any, store: new SessionStore(fakeStorage()), lock: new KeyedAsyncLock(),
+    conversations, now: () => 1000, log: () => {},
+  };
+  await handleTurn(d, 'sess', 'Engine', msg()); // must not reject
+  assert.equal(calls, 2, 'every part was attempted');
+  assert.deepEqual(sent.map(s => s.text), ['masih terkirim'], 'the part after the failure still went out');
+});

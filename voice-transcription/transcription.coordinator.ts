@@ -82,6 +82,8 @@ export class TranscriptionCoordinator {
   // Sessions whose pre-1.1.0 dedup keys are fully drained, so the sweep's directory listing is not
   // repeated for the rest of this coordinator's life. A fresh install lands here on its first message.
   private readonly legacySweptSessions = new Set<string>();
+  // Sessions that looked clean once. See sweepLegacySeen: one empty listing is not proof.
+  private readonly legacySweepCleanOnce = new Set<string>();
 
   // Per-session tail for the dedup claim (see handle). Only the claim is serialized — the STT call and
   // delivery stay concurrent, so a slow transcription never blocks the next note's dedup.
@@ -197,11 +199,27 @@ export class TranscriptionCoordinator {
    */
   private async sweepLegacySeen(sessionId: string): Promise<void> {
     if (this.legacySweptSessions.has(sessionId)) return; // nothing left; stop paying for the list()
-    const prefix = `seen:${sessionId}:`; // the trailing ':' is what distinguishes it from `seen:<sid>`
+    // BOTH pre-1.1.0 families. The dedup markers were `seen:<sid>:<msgId>` and the rate counter was
+    // `rate:<sid>:<hour>` — one key per hour, also never deleted. Sweeping only the first would leave a
+    // year-old install with ~8760 counter keys, i.e. the exact per-write stat cost this is here to remove.
+    // The trailing ':' is what keeps these from matching the 1.1.0 keys `seen:<sid>` and `rate:<sid>`.
+    const prefixes = [`seen:${sessionId}:`, `rate:${sessionId}:`];
     try {
-      const stale = (await this.deps.store.list(prefix)).filter(k => k.startsWith(prefix));
-      for (const key of stale.slice(0, LEGACY_SWEEP_PER_RUN)) await this.deps.store.delete(key);
-      if (stale.length <= LEGACY_SWEEP_PER_RUN) this.legacySweptSessions.add(sessionId);
+      let remaining = 0;
+      for (const prefix of prefixes) {
+        const stale = (await this.deps.store.list(prefix)).filter(k => k.startsWith(prefix));
+        for (const key of stale.slice(0, LEGACY_SWEEP_PER_RUN)) await this.deps.store.delete(key);
+        remaining += Math.max(0, stale.length - LEGACY_SWEEP_PER_RUN);
+      }
+      // Retire only after TWO consecutive clean passes. The host's `list()` swallows its own errors and
+      // resolves `[]`, so a single empty result is not proof the session is clean — and retiring on a
+      // transient failure would strand the legacy keys forever, which is the thing being fixed.
+      if (remaining === 0) {
+        if (this.legacySweepCleanOnce.has(sessionId)) this.legacySweptSessions.add(sessionId);
+        else this.legacySweepCleanOnce.add(sessionId);
+      } else {
+        this.legacySweepCleanOnce.delete(sessionId);
+      }
     } catch {
       /* best-effort cleanup — never surfaces, and retries on the next transcription */
     }
