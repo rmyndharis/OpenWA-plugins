@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolvePhone } from './relay.ts';
+import { placeholderFor, resolvePhone } from './relay.ts';
 import type { IncomingMessage } from '../types/openwa';
 
 test('group messages never get a phone, regardless of senderPhone or canonical', () => {
@@ -57,4 +57,33 @@ test('`msg.contact?.number` is intentionally NOT consulted — it can carry lid 
     senderPhone: undefined, contact: { number: '118369936273478' },
   } as IncomingMessage;
   assert.equal(resolvePhone(msgWithContact, '118369936273478@lid'), undefined);
+});
+
+// ── placeholderFor ──────────────────────────────────────────────────────────────────────────────────
+// Chatwoot rejects empty content with a 422, and the message is already marked seen by then — so an
+// empty placeholder is a dropped message, not a cosmetic issue.
+
+const bodyless = (type: string, over: Partial<IncomingMessage> = {}): IncomingMessage =>
+  ({ id: 'p1', from: 'x', to: 'y', chatId: 'c@wa', body: '', type, timestamp: 0, fromMe: false, isGroup: false, ...over }) as IncomingMessage;
+
+test('a poll relays as a marker instead of an empty bubble', () => {
+  assert.equal(placeholderFor(bodyless('poll')), '📊 Poll');
+});
+
+test('every bodyless message type yields non-empty content', () => {
+  for (const type of ['voice', 'sticker', 'location', 'image', 'video', 'audio', 'contact', 'poll', 'document',
+                      'call', 'revoked', 'masked', 'unknown', '']) {
+    assert.ok(placeholderFor(bodyless(type)).trim().length > 0, `type '${type}' produced empty content`);
+  }
+});
+
+test('an unrecognized type falls back to its own name rather than an empty string', () => {
+  assert.equal(placeholderFor(bodyless('revoked')), '💬 revoked');
+  assert.equal(placeholderFor(bodyless('some-future-type')), '💬 some-future-type');
+});
+
+test('a real body still wins over any placeholder', () => {
+  assert.equal(placeholderFor(bodyless('unknown', { body: 'actual text' })), 'actual text');
+  // Whitespace is not a body — it would still be a 422.
+  assert.equal(placeholderFor(bodyless('unknown', { body: '   ' })), '💬 unknown');
 });

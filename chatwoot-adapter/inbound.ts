@@ -51,8 +51,11 @@ export async function handleInbound(
     // entry is what drives retry, independent of this marker. Scoped by session so two tenants' WA message
     // ids can't collide in the shared plugin store.
     if (await deps.store.hasSeen('wa', msg.id, sessionId)) return;
-    await deps.store.markSeen('wa', msg.id, sessionId);
     try {
+      // markSeen is INSIDE the try so that a storage failure here takes the same enqueue-for-retry path as
+      // a failed relay. Left outside, a rejected marker write (the host rejects every `set` once the plugin
+      // is at its storage quota) threw straight out of the hook with the message neither relayed nor queued.
+      await deps.store.markSeen('wa', msg.id, sessionId);
       await relayInbound(deps, sessionId, msg);
     } catch (err) {
       deps.log('inbound relay failed; queued for retry', err);
@@ -61,7 +64,10 @@ export async function handleInbound(
       const dropped = await deps.store
         .enqueueRetry({ sessionId, chatId: msg.chatId, msg: slimForRetry(msg), enqueuedAt: Date.now() }, MAX_PENDING_RETRIES)
         .catch(e => {
-          deps.log('enqueue retry failed', e);
+          // The enqueue itself failed, so the message is gone: it is already marked seen (or failed to be),
+          // and nothing is stored for the drain to pick up. Report it — the retry queue cannot count an
+          // entry that was never written, so this is invisible to healthCheck otherwise.
+          deps.onInboundLost(msg.id, e);
           return null;
         });
       if (dropped) deps.log(`retry queue full; dropped oldest pending inbound (msg ${dropped})`);

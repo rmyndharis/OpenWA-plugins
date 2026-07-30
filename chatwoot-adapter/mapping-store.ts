@@ -33,7 +33,41 @@ export interface ChatLink {
 export const SEEN_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 export const SEEN_PRUNE_INTERVAL_MS = 60 * 60 * 1000; // hourly
 
+// Dedup markers live in a FIXED number of sharded buckets, not one storage key per message.
+//
+// The host re-measures its 50 MiB per-plugin storage quota on EVERY `set` by readdir-ing the plugin's
+// data directory and stat-ing every key — synchronously, on the gateway's own event loop. A key per
+// message therefore made each inbound message cost O(total markers) syscalls: a session at 10 msg/min
+// holds ~43k markers within the 3-day TTL, so every message stalled the whole gateway (HTTP, websocket,
+// engine callbacks) while the host stat-ed 43k files, and the prune then issued 43k more round-trips.
+//
+// Sharding by a hash of the logical marker id makes that cost constant — SEEN_SHARDS keys forever — while
+// keeping the per-message work identical to before (one get, one set). Each bucket drops its own expired
+// entries when it is written, so no global scan is needed to bound growth. More shards means more (tiny)
+// files to stat per write but smaller values to parse; 256 keeps both trivial.
+export const SEEN_SHARDS = 256;
+
+// FNV-1a (32-bit). Only needs to spread ids evenly across buckets — not to resist collisions, since a
+// bucket stores the full logical id as its entry key and a collision merely shares a file.
+// Exported so a test can construct two ids that deliberately land in the same bucket.
+export function shardOf(logicalId: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < logicalId.length; i++) {
+    h ^= logicalId.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0) % SEEN_SHARDS;
+}
+
+// One bucket: logical marker id -> first-seen wall-clock ms.
+type SeenBucket = Record<string, number>;
+
 export class MappingStore {
+  // Assume pre-0.6.0 per-message markers are present until a prune proves otherwise, so an upgrade never
+  // misses one. Flipped false by pruneSeen the first time it finds none left (immediately on a fresh
+  // install), which retires the extra hasSeen read for good.
+  private legacyMarkersMayExist = true;
+
   constructor(
     private readonly storage: PluginStorage,
     private readonly mappings: PluginMappingsCapability,
@@ -48,8 +82,23 @@ export class MappingStore {
   private legacyRevKey(conversationId: number): string {
     return `wa:${conversationId}`;
   }
-  private seenKey(kind: 'wa' | 'cw', id: string, scope?: string): string {
+  // The pre-0.6.0 key: ONE storage file per marker. Still read (see hasSeen) until the last of them has
+  // aged out, and still pruned by pruneSeen — never written again.
+  private legacySeenKey(kind: 'wa' | 'cw', id: string, scope?: string): string {
     return scope ? `seen:${scope}:${kind}:${id}` : `seen:${kind}:${id}`;
+  }
+
+  // The logical marker id, scope+kind included so every tenant and both marker kinds share ONE shard
+  // pool — key count stays SEEN_SHARDS no matter how many sessions the host runs.
+  private seenId(kind: 'wa' | 'cw', id: string, scope?: string): string {
+    return scope ? `${scope}:${kind}:${id}` : `${kind}:${id}`;
+  }
+
+  // Deliberately NOT under the `seen:` prefix: pruneSeen treats every `seen:`-prefixed value without a
+  // numeric `.t` as a legacy marker and ADOPTS it by overwriting it with `{ t: now }` — which would erase
+  // a whole bucket every hour. `seenb:` does not match a `seen:` prefix filter, so the two never mix.
+  private seenBucketKey(shard: number): string {
+    return `seenb:s${shard}`;
   }
 
   getByChat(sessionId: string, chatId: string): Promise<ChatLink | null> {
@@ -88,19 +137,39 @@ export class MappingStore {
   // successful send, so a transient failure retries instead of silently dropping the reply). `scope`
   // isolates a tenant's markers; both sides of a given `kind` must pass the same scope.
   async hasSeen(kind: 'wa' | 'cw', id: string, scope?: string): Promise<boolean> {
-    return Boolean(await this.storage.get(this.seenKey(kind, id, scope)));
-  }
-  async markSeen(kind: 'wa' | 'cw', id: string, scope?: string, nowMs: number = Date.now()): Promise<void> {
-    // Store a timestamp (not a bare `1`) so pruneSeen can age the marker out. hasSeen only checks presence.
-    await this.storage.set(this.seenKey(kind, id, scope), { t: nowMs });
+    const logicalId = this.seenId(kind, id, scope);
+    const bucket = await this.storage.get<SeenBucket>(this.seenBucketKey(shardOf(logicalId)));
+    if (bucket && bucket[logicalId] !== undefined) return true;
+    // Upgrade path: a marker written by <=0.5.7 lives in its own key. Missing it would re-post an inbound
+    // message on WhatsApp re-delivery and — worse, via the 'cw' marker — send a Chatwoot reply to the
+    // recipient a SECOND time. Costs one extra get per unseen message until the legacy keys are gone;
+    // pruneSeen clears the flag as soon as none remain, so a fresh install stops paying it within an hour.
+    if (!this.legacyMarkersMayExist) return false;
+    return Boolean(await this.storage.get(this.legacySeenKey(kind, id, scope)));
   }
 
-  // Prune expired `seen:` markers so ctx.storage doesn't grow without bound (one file per marker) and the
-  // retry drain's directory scan stays cheap. Streams keys one at a time (matching the drain's OOM-safe
-  // discipline). A pre-0.5.2 marker stored as a bare `1` has no timestamp: it is ADOPTED (stamped with the
-  // current time) rather than deleted, so it can never re-post a duplicate and ages out one TTL from here.
-  // Touches only `seen:`-prefixed keys — the list() prefix is filtered defensively (a fake ignoring the
-  // arg would otherwise return every key).
+  async markSeen(kind: 'wa' | 'cw', id: string, scope?: string, nowMs: number = Date.now()): Promise<void> {
+    const logicalId = this.seenId(kind, id, scope);
+    const key = this.seenBucketKey(shardOf(logicalId));
+    const bucket = (await this.storage.get<SeenBucket>(key)) ?? {};
+    // Age the bucket out on write, so growth is bounded without a global scan. A bucket that stops
+    // receiving writes keeps its last window of ids — bounded, and harmless (they only ever match ids
+    // that will never recur).
+    const next: SeenBucket = { [logicalId]: nowMs };
+    for (const [k, t] of Object.entries(bucket)) {
+      if (k !== logicalId && nowMs - t <= SEEN_TTL_MS) next[k] = t;
+    }
+    await this.storage.set(key, next);
+  }
+
+  // Drain the pre-0.6.0 per-message `seen:` markers. Since 0.6.0 nothing writes them — new markers go into
+  // the sharded `seenb:` buckets, which age themselves out on write — so this only empties the leftovers
+  // from an upgraded install, and clearing the last one retires hasSeen's legacy read.
+  // Streams keys one at a time (matching the drain's OOM-safe discipline). A pre-0.5.2 marker stored as a
+  // bare `1` has no timestamp: it is ADOPTED (stamped with the current time) rather than deleted, so it can
+  // never re-post a duplicate and ages out one TTL from here. Touches only `seen:`-prefixed keys — the
+  // list() prefix is filtered defensively (a fake ignoring the arg would otherwise return every key), and
+  // `seenb:` buckets do not match that prefix, which is exactly why they use a different one.
   async pruneSeen(nowMs: number, ttlMs: number): Promise<{ pruned: number; adopted: number }> {
     const keys = (await this.storage.list('seen:')).filter(k => k.startsWith('seen:'));
     let pruned = 0;
@@ -120,6 +189,8 @@ export class MappingStore {
         pruned++;
       }
     }
+    // Anything we listed but did not delete is still there (an adopted marker included).
+    this.legacyMarkersMayExist = keys.length - pruned > 0;
     return { pruned, adopted };
   }
 

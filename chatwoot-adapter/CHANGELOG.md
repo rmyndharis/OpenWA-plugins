@@ -6,6 +6,44 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-07-30
+
+Storage-behaviour release, prompted by OpenWA 0.12.0. The host now enforces a 50 MiB per-plugin storage
+quota and re-measures it on **every** write by stat-ing every one of the plugin's storage keys —
+synchronously, on the gateway's own event loop. Two long-standing designs in this adapter turned that
+into message loss and a gateway-wide stall.
+
+### Fixed
+
+- **Dedup markers no longer use one storage key per message.** With a 3-day retention a session at
+  10 messages/minute held roughly 43,000 marker files, so every inbound message made the host stat all
+  43,000 before it could write the next marker — stalling HTTP, websockets and engine callbacks for the
+  whole gateway, and getting worse in proportion to traffic. The hourly prune added a further round-trip
+  per marker. Markers now live in a fixed 256 sharded buckets keyed by a hash of the marker id, so the
+  key count is constant no matter the volume while the per-message cost stays exactly what it was (one
+  read, one write). Buckets drop their own expired entries as they are written, so nothing needs a global
+  scan. Markers written by earlier versions are still honoured — missing one would re-post an inbound
+  message, or send a Chatwoot agent's reply to the recipient a second time — and the extra read that
+  costs is retired automatically once the last of them has been pruned.
+- **The retry queue was sized seven times larger than the entire storage quota.** 500 pending entries at
+  up to 700 KB of media each is ~350 MiB against a 50 MiB budget, so a media backlog hit the quota at
+  around 74 entries: `storage.set` then rejected, the "drop the oldest entry" policy never ran, and the
+  message was lost outright — it had already been marked seen. The pairing is now 80 × 200 KB ≈ 16 MiB,
+  documented as a pair so neither can be raised without redoing the multiplication.
+- **A message that could neither be relayed nor queued is now reported.** That failure was swallowed by a
+  `.catch` that logged and returned null, and because the retry queue cannot count an entry it never
+  managed to store, `healthCheck` went on reporting the plugin healthy while messages disappeared. Such
+  a message is now counted and surfaced in the health message as `LOST`, which also marks the plugin
+  unhealthy.
+- **A storage failure while marking a message seen no longer escapes the handler.** The `markSeen` call
+  sat outside the `try`, so a rejected write left the message neither relayed nor queued for retry; it
+  now takes the same retry path as a failed relay.
+- **Polls relayed as an empty Chatwoot bubble.** `poll` is a message type OpenWA reports with an empty
+  body, and it had no placeholder, so the post was rejected with a 422 and — the message being already
+  marked seen — dropped after five retries, leaving the plugin permanently unhealthy. Polls now relay as
+  `📊 Poll`, and the placeholder fallback can no longer return an empty string for any bodyless type
+  (`call`, `revoked`, `masked`, `unknown`, or any type a future host adds).
+
 ## [0.5.7] — 2026-07-23
 
 ### Fixed

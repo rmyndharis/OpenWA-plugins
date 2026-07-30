@@ -6,11 +6,18 @@ import type { KeyedAsyncLock } from './chat-lock.ts';
 // and the max pending entries kept (older ones are dropped on overflow to bound ctx.storage).
 export const RETRY_INTERVAL_MS = 30_000;
 export const MAX_RETRY_ATTEMPTS = 5;
-export const MAX_PENDING_RETRIES = 500;
 // Cap the media blob persisted per queued entry. A larger blob is stripped (retried as a placeholder)
-// rather than stored — so a queued entry can't exceed the host's per-value storage cap and get rejected,
-// which would lose the whole message (it's already markSeen). ~700 KB base64 ≈ ~512 KB binary.
-export const RETRY_MAX_MEDIA_B64 = 700_000;
+// rather than stored, so a queued entry stays small enough to persist. ~200 KB base64 ≈ ~150 KB binary,
+// which still covers a typical WhatsApp photo faithfully.
+export const RETRY_MAX_MEDIA_B64 = 200_000;
+// These two are a PAIR: the queue's worst case is MAX_PENDING_RETRIES × RETRY_MAX_MEDIA_B64, and it has to
+// fit inside the host's 50 MiB per-plugin storage quota alongside the chat mappings and dedup buckets.
+// 80 × 200 KB ≈ 16 MiB leaves room for both. Before raising either, redo that multiplication: overshooting
+// the quota does not merely fill it, it makes `storage.set` REJECT, and a rejected enqueue is a message
+// that was already marked seen and is now gone (see handleInbound). The pre-0.6.0 pairing was 500 ×
+// 700 KB ≈ 350 MiB — seven times the whole quota, so a media backlog silently hit that wall at ~74 entries,
+// far below the 500 the drop-oldest policy was written to defend.
+export const MAX_PENDING_RETRIES = 80;
 
 // Return a copy safe to persist in the retry queue: an oversized media blob is dropped (marked omitted)
 // so the retry posts a type placeholder instead of failing to persist. Small media is kept for a faithful

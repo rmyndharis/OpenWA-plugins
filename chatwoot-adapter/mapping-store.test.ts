@@ -1,7 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { PluginStorage, PluginMappingsCapability, IncomingMessage } from '../types/openwa';
-import { MappingStore } from './mapping-store.ts';
+import { MappingStore, SEEN_SHARDS, SEEN_TTL_MS, shardOf } from './mapping-store.ts';
+
+// The store shards on `${scope}:${kind}:${id}`, so this finds a second message id that lands in the same
+// bucket as `id` — the only way to exercise the on-write pruning deterministically.
+function idInSameShardAs(kind: 'wa' | 'cw', id: string, scope: string): string {
+  const target = shardOf(`${scope}:${kind}:${id}`);
+  for (let i = 0; i < 100_000; i++) {
+    const candidate = `collide-${i}`;
+    if (shardOf(`${scope}:${kind}:${candidate}`) === target) return candidate;
+  }
+  throw new Error('no colliding id found');
+}
 
 const msg = (id: string, chatId = 'c@wa'): IncomingMessage =>
   ({ id, from: 'x', to: 'y', chatId, body: 'hi', type: 'chat', timestamp: 0, fromMe: false, isGroup: false }) as IncomingMessage;
@@ -100,24 +111,59 @@ test('enqueueRetry drops the OLDEST entry (by enqueuedAt) when the queue is at c
   assert.deepEqual(ids, ['mid', 'new']);
 });
 
-test('markSeen stores a timestamped marker and hasSeen stays truthy', async () => {
-  const storage = fakeStorage();
-  const store = new MappingStore(storage, fakeMappings());
+test('markSeen round-trips through hasSeen, and scope+kind isolate markers', async () => {
+  const store = new MappingStore(fakeStorage(), fakeMappings());
   await store.markSeen('wa', 'm1', 'sess', 1000);
   assert.equal(await store.hasSeen('wa', 'm1', 'sess'), true);
-  assert.deepEqual(await storage.get('seen:sess:wa:m1'), { t: 1000 });
+  assert.equal(await store.hasSeen('wa', 'm1', 'other-sess'), false); // another tenant
+  assert.equal(await store.hasSeen('cw', 'm1', 'sess'), false); // the other marker kind
+  assert.equal(await store.hasSeen('wa', 'm2', 'sess'), false);
 });
 
-test('pruneSeen deletes markers older than the TTL and keeps recent ones', async () => {
+// The property the sharding exists for. The host re-stats every storage key on EVERY write, so a key per
+// message made each inbound message cost O(total markers) syscalls on the gateway's event loop.
+test('marker storage stays bounded at SEEN_SHARDS keys no matter how many messages are seen', async () => {
+  const storage = fakeStorage();
+  const store = new MappingStore(storage, fakeMappings());
+  for (let i = 0; i < 2000; i++) await store.markSeen('wa', `m${i}`, 'sess', 1000 + i);
+  const keys = await storage.list();
+  assert.ok(keys.length <= SEEN_SHARDS, `expected <= ${SEEN_SHARDS} keys, got ${keys.length}`);
+  // Every one of them is still individually recallable.
+  assert.equal(await store.hasSeen('wa', 'm0', 'sess'), true);
+  assert.equal(await store.hasSeen('wa', 'm1999', 'sess'), true);
+});
+
+test('a bucket drops its own expired entries when it is next written', async () => {
   const store = new MappingStore(fakeStorage(), fakeMappings());
-  const TTL = 1000;
-  await store.markSeen('wa', 'old', 'sess', 0); // age 5000 > TTL → pruned
-  await store.markSeen('wa', 'fresh', 'sess', 4500); // age 500 < TTL → kept
-  const { pruned, adopted } = await store.pruneSeen(5000, TTL);
-  assert.equal(pruned, 1);
-  assert.equal(adopted, 0);
+  await store.markSeen('wa', 'old', 'sess', 0);
+  assert.equal(await store.hasSeen('wa', 'old', 'sess'), true);
+  // Land a second marker in the SAME shard, one TTL later: writing the bucket ages 'old' out of it.
+  const collide = idInSameShardAs('wa', 'old', 'sess');
+  await store.markSeen('wa', collide, 'sess', SEEN_TTL_MS + 1);
   assert.equal(await store.hasSeen('wa', 'old', 'sess'), false);
-  assert.equal(await store.hasSeen('wa', 'fresh', 'sess'), true);
+  assert.equal(await store.hasSeen('wa', collide, 'sess'), true);
+});
+
+// A marker written by <=0.5.7 lives in its own `seen:` key. Missing it on upgrade would re-post an inbound
+// message, and via the 'cw' marker would send a Chatwoot reply to the recipient a second time.
+test('a pre-0.6.0 per-message marker is still honoured after the upgrade', async () => {
+  const storage = fakeStorage();
+  const store = new MappingStore(storage, fakeMappings());
+  await storage.set('seen:sess:wa:legacy', { t: 1000 });
+  assert.equal(await store.hasSeen('wa', 'legacy', 'sess'), true);
+});
+
+// ...and the extra read that costs is retired as soon as a prune finds no legacy keys left.
+test('the legacy marker read is dropped once none remain', async () => {
+  const storage = fakeStorage();
+  const reads: string[] = [];
+  const counting: PluginStorage = { ...storage, get: async <T>(k: string) => (reads.push(k), storage.get<T>(k)) };
+  const store = new MappingStore(counting, fakeMappings());
+  await store.pruneSeen(1000, 1000); // no legacy keys → flag cleared
+  reads.length = 0;
+  assert.equal(await store.hasSeen('wa', 'nope', 'sess'), false);
+  assert.equal(reads.filter(k => k.startsWith('seen:')).length, 0, 'should not consult a legacy key');
+  assert.equal(reads.length, 1, 'exactly one bucket read');
 });
 
 test('pruneSeen adopts a legacy marker (stamps a timestamp, does not delete)', async () => {
@@ -131,13 +177,29 @@ test('pruneSeen adopts a legacy marker (stamps a timestamp, does not delete)', a
   assert.deepEqual(await storage.get('seen:sess:wa:legacy'), { t: 9000 }); // now timestamped
 });
 
-test('pruneSeen leaves non-seen keys untouched', async () => {
-  const store = new MappingStore(fakeStorage(), fakeMappings());
+test('pruneSeen leaves non-legacy keys untouched', async () => {
+  const storage = fakeStorage();
+  const store = new MappingStore(storage, fakeMappings());
   await store.link('sess', 'c@wa', 'inst', { conversationId: 1, contactId: 2, sourceId: 'x' });
   await store.enqueueRetry({ sessionId: 'sess', chatId: 'c@wa', msg: msg('r1'), enqueuedAt: 0 }, 500);
-  await store.markSeen('wa', 'old', 'sess', 0);
-  await store.pruneSeen(10_000, 1000);
-  assert.equal(await store.hasSeen('wa', 'old', 'sess'), false); // pruned
+  await storage.set('seen:sess:wa:old', { t: 0 }); // pre-0.6.0 marker, expired
+  await store.markSeen('wa', 'current', 'sess', 9000); // 0.6.0 bucket entry
+  const { pruned } = await store.pruneSeen(10_000, 1000);
+  assert.equal(pruned, 1); // only the legacy marker
+  assert.equal(await store.hasSeen('wa', 'current', 'sess'), true); // bucket survives the prune
   assert.equal(await store.countRetries(), 1); // retry untouched
   assert.deepEqual(await store.getByChat('sess', 'c@wa'), { conversationId: 1, contactId: 2, sourceId: 'x' });
+});
+
+// The bug this guards: pruneSeen adopts any `seen:`-prefixed value that has no numeric `.t` by OVERWRITING
+// it with `{ t: now }`. A bucket is a plain id->timestamp map with no `.t`, so if buckets shared the `seen:`
+// prefix the hourly prune would erase every marker in them.
+test('pruneSeen cannot corrupt a marker bucket', async () => {
+  const storage = fakeStorage();
+  const store = new MappingStore(storage, fakeMappings());
+  for (let i = 0; i < 50; i++) await store.markSeen('wa', `m${i}`, 'sess', 1000);
+  const { pruned, adopted } = await store.pruneSeen(2000, 1000);
+  assert.equal(pruned, 0);
+  assert.equal(adopted, 0);
+  for (let i = 0; i < 50; i++) assert.equal(await store.hasSeen('wa', `m${i}`, 'sess'), true);
 });
