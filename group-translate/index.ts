@@ -23,8 +23,9 @@ import { LibreTranslateClient } from "./libretranslate.client";
 import { PluginChatGateway } from "./plugin-chat.gateway";
 import { PluginConfigStore } from "./plugin-config.store";
 
-// Transformer band. This plugin DOES claim when it swallows: at that point it has replaced the message
-// with its translation, and passing the original on would have a responder answer text nobody sent.
+// Transformer band. This plugin claims only its own /tr admin commands — a control message addressed to
+// the plugin, not conversational content. A translated message is never claimed and still reaches any
+// responder registered after it.
 const HOOK_PRIORITY = 50;
 
 function readString(
