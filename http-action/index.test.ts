@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handleMessage, type HandleDeps } from './index.ts';
+import HttpAction, { handleMessage, type HandleDeps } from './index.ts';
 import { readConfig } from './config.ts';
 import { hasSeen, type StorageLike } from './reliability.ts';
-import type { IncomingMessage } from '../types/openwa';
+import type { IncomingMessage, HookHandler } from '../types/openwa';
 
 function cfgWith(over: Record<string, unknown> = {}) {
   return readConfig({
@@ -34,6 +34,58 @@ const msg = (body: string, id = 'm1'): IncomingMessage => ({
   id, from: '62@s.whatsapp.net', to: 'bot', chatId: 'c1',
   body, type: 'text', timestamp: 0, fromMe: false, isGroup: false,
 }) as IncomingMessage;
+
+// Minimal PluginContext-shaped ctx for the priority/claim tests below — the file's other tests exercise
+// handleMessage directly via HandleDeps, so this is the only place onEnable itself needs to run.
+function makeCtx(overrides: {
+  config?: Record<string, unknown>;
+  registerHook?: (event: string, handler: HookHandler, priority?: number) => void;
+} = {}) {
+  return {
+    config: overrides.config ?? {
+      baseUrl: 'https://api.example.com',
+      actions: JSON.stringify([{
+        id: 'stock', match: { type: 'prefix', value: '/stock' },
+        request: { method: 'GET', path: '/stock/{{args.0}}' },
+        replyTemplate: 'Stock: {{response.status}}',
+      }]),
+    },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    storage: fakeStore(),
+    net: { fetch: async () => ({ ok: true, status: 200, statusText: 'OK', headers: {}, body: '{}' }) },
+    conversations: { send: async () => {} },
+    registerHook: overrides.registerHook ?? (() => {}),
+  };
+}
+
+// Enables a fresh HttpAction (one '/stock' action) and fires one message:received with `body`, returning
+// the synchronous {continue} result. The floated handleMessage call is out of scope — never awaited here.
+async function runHook(body: string) {
+  let handler: HookHandler | undefined;
+  const ctx = makeCtx({ registerHook: (_e, h) => { handler = h; } });
+  await new HttpAction().onEnable(ctx as never);
+  return handler!({
+    event: 'message:received', source: 'Engine', sessionId: 's1', timestamp: new Date(),
+    data: msg(body),
+  });
+}
+
+// ── Co-installation: claim + priority (PLUGIN-STANDARD.md) ─────────────────────────────────────────
+
+test('registers first among responders', async () => {
+  let priority: number | undefined;
+  const ctx = makeCtx({ registerHook: (_e, _h, p) => { priority = p; } });
+  await new HttpAction().onEnable(ctx as never);
+  assert.equal(priority, 70);
+});
+
+test('claims a message that matches a configured command, passes anything else on', async () => {
+  const matched = await runHook('/stock ABC');
+  assert.equal(matched.continue, false, 'the command is addressed to this plugin');
+
+  const other = await runHook('good morning');
+  assert.equal(other.continue, true, 'no command matched — let another bot answer');
+});
 
 interface Opts { body?: string; status?: number; ok?: boolean; reject?: boolean; now?: () => number }
 
