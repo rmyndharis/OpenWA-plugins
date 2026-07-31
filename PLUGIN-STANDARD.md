@@ -196,10 +196,25 @@ may still claim: it knows whether the message is addressed to it even before it 
 will succeed. A claim followed by a failure should produce your own fallback message or silence, never a
 different bot answering something unrelated.
 
-### Known interaction
+### Known interactions
 
-`faq-bot` runs before `after-hours`. If `fallbackReply` is set, `faq-bot` answers and claims every
-message, so the after-hours message never sends. Leave `fallbackReply` empty when both are enabled.
+Both of these follow from the priority table above; neither is a bug in the plugins involved.
+
+**`faq-bot` (80) partially starves `after-hours` (95).** With `fallbackReply` set, `faq-bot` answers and
+claims any message no rule matched — but only the first one in each `fallbackCooldownSec` window
+(default `600`). Later messages in that window are not claimed and reach `after-hours`, which sends the
+away message subject to its own `cooldownSec`. A contact messaging out of hours therefore gets the
+faq-bot fallback first and the after-hours notice afterwards: two different answers to one conversation.
+Leave `fallbackReply` empty when both are enabled, so `after-hours` is the only voice outside business
+hours. (At `fallbackCooldownSec: 0` the fallback claims every message and `after-hours` never sends.)
+
+**`typebot-connector` (85) fully starves `after-hours` (95).** It claims every message in its scope, and
+its scope is every engine-sourced, non-`fromMe` message with a chat id: one-to-one chats always, group
+chats too when `respondInGroups` is on. There is no cooldown and no setting that narrows the one-to-one
+case, so while `typebot-connector` is enabled `after-hours` never fires for a direct chat. This is
+intended: a Typebot bot owns every chat it is in scope for, and handing one of its chats to a second
+responder mid-flow is worse than the starvation. Put out-of-hours messaging inside the Typebot flow
+itself — a business-hours condition at the top of the flow — rather than in `after-hours`.
 
 ## Runtime contract (observed)
 

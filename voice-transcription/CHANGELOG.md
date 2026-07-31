@@ -14,8 +14,8 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
   ran at the default hook priority — the same one an auto-reply plugin claiming its messages also runs
   at by default — so whether this plugin ever saw the voice note at all depended on which plugin happened
   to register first, which could change across a restart or re-enable. It now registers in the
-  transformer band, ahead of every responder, so it is guaranteed to see and transcribe every voice note
-  regardless of what other plugins are installed or when they were enabled.
+  transformer band, ahead of every responder, so it sees and transcribes the voice note before any
+  responder can answer it, instead of racing them for registration order.
 
 ## [1.1.0] — 2026-07-30
 
