@@ -31,13 +31,19 @@ export async function relayInbound(deps: InboundDeps, sessionId: string, msg: In
   // The trigger is the stored marker, NOT "the conversation was just created". The old derivation could
   // only ever fire once: a failed fetch left the conversation in place, so every later message saw
   // created=false and the chat never got its history.
+  //
+  // `=== false` and not `!backfill.done`: the marker must be POSITIVELY present. ensureConversation
+  // stamps `backfillDone: false` on every mapping this version creates, so absent means the mapping
+  // predates the marker — a chat an earlier release already handled, which must be left alone. The
+  // tradeoff is deliberate: a chat whose import failed before the upgrade is never retried, which is
+  // exactly what those installs do today; every chat from here on gets the durable retry.
   const attempts = backfill.attempts ?? 0;
-  if (deps.backfillLimit > 0 && !backfill.done && attempts < MAX_BACKFILL_ATTEMPTS) {
+  if (deps.backfillLimit > 0 && backfill.done === false && attempts < MAX_BACKFILL_ATTEMPTS) {
     if (await backfillHistory(deps, sessionId, msg.chatId, conversationId)) {
-      await deps.store.patch(sessionId, key, { backfillDone: true });
+      await recordBackfill(deps, sessionId, key, { backfillDone: true });
     } else {
       const next = attempts + 1;
-      await deps.store.patch(sessionId, key, { backfillAttempts: next });
+      await recordBackfill(deps, sessionId, key, { backfillAttempts: next });
       if (next >= MAX_BACKFILL_ATTEMPTS) deps.onBackfillExhausted(key);
     }
   }
@@ -91,6 +97,23 @@ export async function handleInbound(
   });
 }
 
+// The import marker is bookkeeping; the message is the product. A rejected write — the host rejects
+// EVERY `set` once the plugin is at its 50 MiB quota — must cost at most one redundant import on the
+// next message. Unguarded it threw past relayMessage, so a perfectly relayable message became a
+// retry-queue entry whose drain re-ran the whole 30 s import behind it. Mirrors refreshContactName.
+async function recordBackfill(
+  deps: InboundDeps,
+  sessionId: string,
+  key: string,
+  patch: { backfillDone?: boolean; backfillAttempts?: number },
+): Promise<void> {
+  try {
+    await deps.store.patch(sessionId, key, patch);
+  } catch (err) {
+    deps.log('backfill marker write failed', err);
+  }
+}
+
 // Resolves the Chatwoot conversation for this chat and reports where its mapping document lives, so the
 // caller patches the SAME document refreshContactName does, plus that document's backfill state.
 async function resolveConversation(
@@ -126,7 +149,7 @@ async function resolveConversation(
     name,
     phone: resolvePhone(msg, canonicalChatId),
   });
-  // ensureConversation wrote the mapping under msg.chatId. A brand-new document carries neither backfill
-  // field, so an empty state is exactly right — and reading it back would only add a storage round trip.
-  return { conversationId, key: msg.chatId, backfill: {} };
+  // ensureConversation wrote the mapping under msg.chatId, stamped `backfillDone: false`. Mirroring that
+  // value here rather than reading the document back saves a storage round trip on every new chat.
+  return { conversationId, key: msg.chatId, backfill: { done: false } };
 }

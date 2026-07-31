@@ -172,6 +172,11 @@ export async function ensureConversation(
     contactId: contact.id,
     sourceId: contact.sourceId,
     name: meta.name,
+    // "Not yet imported" is written down, never inferred from a missing field. Every mapping an earlier
+    // release wrote carries no backfill fields at all, so a trigger of `!backfillDone` would read them
+    // as unimported and replay each chat's whole window into a conversation that was already imported —
+    // duplicates ahead of the live message, in every open chat, on the first message after an upgrade.
+    backfillDone: false,
   });
   return conversationId;
 }

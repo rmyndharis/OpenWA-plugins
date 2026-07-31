@@ -381,7 +381,7 @@ test('a failed history fetch is retried on the next inbound instead of being los
   await handleInbound(deps, 'sess', 'Engine', msgWith({ id: 'm1', body: 'first' }));
   assert.equal(historyCalls, 1);
   assert.equal(links.get('c@c.us')?.backfillAttempts, 1);
-  assert.equal(links.get('c@c.us')?.backfillDone, undefined);
+  assert.equal(links.get('c@c.us')?.backfillDone, false, 'still eligible — a failed attempt is not an import');
   assert.ok(!posts.some(p => p.body === 'earlier'), 'nothing backfilled on the failed attempt');
 
   await handleInbound(deps, 'sess', 'Engine', msgWith({ id: 'm2', body: 'second' }));
@@ -422,14 +422,16 @@ test('backfill stops after MAX_BACKFILL_ATTEMPTS and reports the chat as exhaust
   }
   assert.equal(historyCalls, 3, 'stops attempting after the cap');
   assert.deepEqual(exhausted, ['c@c.us']);
-  assert.equal(links.get('c@c.us')?.backfillDone, undefined, 'exhaustion must never be recorded as done');
+  assert.equal(links.get('c@c.us')?.backfillDone, false, 'exhaustion must never be recorded as done');
 });
 
 test('reports the mapping document key to onBackfillExhausted, not the raw chatId, when the dual-lookup diverges', async () => {
   // Mapping already lives under the canonical @c.us key (a prior @lid contact that migrated), but this
   // inbound still arrives with the raw @lid chatId — the dual-lookup case resolveConversation exists for.
+  // `backfillDone: false` is what ensureConversation writes for a chat this version created; it is what
+  // makes the chat eligible for an import at all.
   const links = new Map<string, Record<string, unknown>>([
-    ['c@c.us', { conversationId: 55, contactId: 9, sourceId: 'src' }],
+    ['c@c.us', { conversationId: 55, contactId: 9, sourceId: 'src', backfillDone: false }],
   ]);
   const exhausted: string[] = [];
   const { deps } = makeDeps({
@@ -454,4 +456,115 @@ test('reports the mapping document key to onBackfillExhausted, not the raw chatI
   // The marker lives under 'c@c.us' (links.get above). An operator shown 'c@lid' would be pointed at a
   // chat id that matches no stored state at all.
   assert.deepEqual(exhausted, ['c@c.us'], 'reported id matches the document the marker is actually patched under');
+});
+
+// ── Upgrade safety: "needs import" is a POSITIVE marker, never inferred from a missing field ──────────
+// Every mapping written before this version carries no backfill fields at all. A trigger of `!done`
+// reads that absence as "never imported" and replays the whole window into a conversation an earlier
+// release already imported under the old `created`-derived scheme — a duplicate wall in every open
+// chat, posted AHEAD of the message that is actually arriving.
+
+test('a mapping that predates the backfill marker is left alone — an upgrade never re-imports an existing chat', async () => {
+  const links = new Map<string, Record<string, unknown>>([
+    // Exactly what a pre-0.7.0 release stored: no backfillDone, no backfillAttempts.
+    ['c@c.us', { conversationId: 55, contactId: 9, sourceId: 'src', name: 'Budi' }],
+  ]);
+  let historyCalls = 0;
+  const { deps, posts } = makeDeps({
+    engine: {
+      canonicalChatId: async (_s: string, c: string) => c,
+      getChatHistory: async () => {
+        historyCalls++;
+        return [
+          { id: 'a1', from: 'x', to: 'y', chatId: 'c@c.us', body: 'ANCIENT-1', type: 'chat',
+            timestamp: 1, fromMe: false, isGroup: false },
+          { id: 'a2', from: 'x', to: 'y', chatId: 'c@c.us', body: 'ANCIENT-2', type: 'chat',
+            timestamp: 2, fromMe: false, isGroup: false },
+        ];
+      },
+    },
+    store: {
+      getByChat: async (_s: string, c: string) => links.get(c) ?? null,
+      patch: async (_s: string, c: string, p: Record<string, unknown>) =>
+        void links.set(c, { ...(links.get(c) ?? {}), ...p }),
+    },
+    backfillLimit: 50,
+  });
+
+  await handleInbound(deps, 'sess', 'Engine', msgWith({ id: 'live', body: 'new message' }));
+  assert.equal(historyCalls, 0, 'an absent marker means a pre-existing chat, not an unimported one');
+  assert.deepEqual(posts.map(p => p.body), ['new message'], 'only the live message is posted');
+});
+
+test('a chat created by this version is stamped backfillDone:false and is imported on its first message', async () => {
+  const links = new Map<string, Record<string, unknown>>();
+  const linked: Array<Record<string, unknown>> = [];
+  let historyCalls = 0;
+  const { deps, posts } = makeDeps({
+    engine: {
+      canonicalChatId: async (_s: string, c: string) => c,
+      getChatHistory: async () => {
+        historyCalls++;
+        return [
+          { id: 'old', from: 'x', to: 'y', chatId: 'c@c.us', body: 'earlier', type: 'chat',
+            timestamp: 1, fromMe: false, isGroup: false },
+        ];
+      },
+    },
+    store: {
+      getByChat: async (_s: string, c: string) => links.get(c) ?? null,
+      link: async (_s: string, c: string, _i: string, l: Record<string, unknown>) => {
+        linked.push({ ...l });
+        links.set(c, { ...l });
+      },
+      patch: async (_s: string, c: string, p: Record<string, unknown>) =>
+        void links.set(c, { ...(links.get(c) ?? {}), ...p }),
+    },
+    backfillLimit: 20,
+  });
+
+  await handleInbound(deps, 'sess', 'Engine', msgWith({ id: 'm1', body: 'first' }));
+  // The stamp is the whole mechanism: without it on disk, the chat's SECOND message reads an absent
+  // marker and is misfiled as pre-existing, so a chat that failed its first import is never retried.
+  assert.equal(linked[0]?.backfillDone, false, 'the created mapping is positively marked as needing import');
+  assert.equal(historyCalls, 1);
+  assert.deepEqual(posts.map(p => p.body), ['earlier', 'first'], 'history replays ahead of the live message');
+  assert.equal(links.get('c@c.us')?.backfillDone, true);
+});
+
+// ── The import marker is bookkeeping; the message is the product ─────────────────────────────────────
+// Both patches sit on the path to relayMessage. Unguarded, a rejected marker write (the host rejects
+// every `set` once the plugin is at its 50 MiB quota) threw past the live relay, so a perfectly
+// relayable message became a retry-queue entry — and the drain then re-ran the whole import behind it.
+
+test('a marker write that fails costs at most a redundant re-import, never the live message', async () => {
+  const queuedDone: string[] = [];
+  const doneMarker = makeDeps({
+    engine: { canonicalChatId: async (_s: string, c: string) => c, getChatHistory: async () => [] },
+    store: {
+      patch: async () => { throw new Error('storage quota exceeded'); },
+      enqueueRetry: async (e: { msg: { id: string } }) => { queuedDone.push(e.msg.id); return null; },
+    },
+    backfillLimit: 20,
+  });
+  await handleInbound(doneMarker.deps, 'sess', 'Engine', msgWith({ id: 'live1', body: 'live1' }));
+  assert.deepEqual(doneMarker.posts.map(p => p.body), ['live1'], 'the live message still relays');
+  assert.deepEqual(queuedDone, [], 'and is not demoted into the retry queue');
+
+  // Same for the attempts counter, written on the failed-import branch.
+  const queuedAttempt: string[] = [];
+  const attemptMarker = makeDeps({
+    engine: {
+      canonicalChatId: async (_s: string, c: string) => c,
+      getChatHistory: async () => { throw new Error('timed out'); },
+    },
+    store: {
+      patch: async () => { throw new Error('storage quota exceeded'); },
+      enqueueRetry: async (e: { msg: { id: string } }) => { queuedAttempt.push(e.msg.id); return null; },
+    },
+    backfillLimit: 20,
+  });
+  await handleInbound(attemptMarker.deps, 'sess', 'Engine', msgWith({ id: 'live2', body: 'live2' }));
+  assert.deepEqual(attemptMarker.posts.map(p => p.body), ['live2'], 'the live message still relays');
+  assert.deepEqual(queuedAttempt, [], 'and is not demoted into the retry queue');
 });
