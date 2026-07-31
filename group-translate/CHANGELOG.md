@@ -8,6 +8,17 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-07-31
+
+### Fixed
+
+- **A group could see an auto-reply answer the untranslated original text.** This plugin swallows the
+  original message once it has posted a translation, but it ran at the default hook priority — the same
+  band an auto-reply plugin runs at by default — so whether the translation or the untranslated message
+  reached a co-installed bot first depended on which plugin happened to register first, and that could
+  change across a restart or re-enable. It now registers in the transformer band, ahead of every
+  responder, so a co-installed bot consistently only ever sees the translated conversation.
+
 ## [1.0.7] — 2026-07-30
 
 ### Fixed

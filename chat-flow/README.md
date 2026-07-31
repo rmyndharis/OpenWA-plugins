@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chat-flow` |
-| **Version** | 1.0.8 |
-| **Released** | 2026-07-30 |
+| **Version** | 1.1.0 |
+| **Released** | 2026-07-31 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |

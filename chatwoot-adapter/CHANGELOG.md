@@ -6,6 +6,30 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-07-31
+
+History-backfill reliability release, plus a registration-order fix.
+
+### Fixed
+
+- **A large history-backfill window could fail outright.** Requesting attachments for every message in a
+  wide window could exceed the host's 30-second import budget, so the whole import failed rather than
+  arriving late. Attachments are now fetched only when the configured window is 25 messages or smaller;
+  above that, older media arrives in Chatwoot as a placeholder line instead of the file. The history
+  backfill setting is clamped to 100, and its description explains the 25-message attachment threshold.
+- **A failed history import for a chat was gone for good.** Whether a chat had been imported used to be
+  inferred rather than recorded, so an import that failed partway had no way to know it needed to try
+  again. It's now stored on the chat's own record, so a chat that failed its import is retried
+  automatically on its next message — up to three attempts before the plugin gives up on that chat.
+- **A Chatwoot outage during import could mark a chat as "imported" with nothing in it.** The import is
+  now only recorded as done once every message in the window has actually posted to Chatwoot.
+- **Chats that gave up on history import are now visible.** They're counted in this plugin's health
+  status, instead of failing silently.
+- **Logged/mirrored messages could go missing when another plugin was also installed.** This plugin
+  registered its inbound and outbound hooks at the default priority, tied with (or behind) plugins that
+  end the event chain for the message they handle. It now registers early, at observer priority, so it
+  always sees a message before anything else decides that message is spoken for.
+
 ## [0.6.0] — 2026-07-30
 
 Storage-behaviour release, prompted by OpenWA 0.12.0. The host now enforces a 50 MiB per-plugin storage

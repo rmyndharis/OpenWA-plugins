@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this plugin adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The version here always matches `manifest.json`'s `version`.
 
+## [0.3.2] — 2026-07-31
+
+### Fixed
+
+- **Logged rows could go missing when another plugin was also installed.** This plugin registered at the
+  default hook priority, tied with (or behind) plugins that end the event chain for the message they
+  handle. It now registers early, at observer priority, so it always sees a message before anything else
+  decides that message is spoken for.
+
 ## [0.3.1] — 2026-07-30
 
 ### Fixed

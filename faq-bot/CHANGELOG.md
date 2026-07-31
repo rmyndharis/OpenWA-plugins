@@ -8,6 +8,19 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-07-31
+
+### Fixed
+
+- **A matched rule or fallback reply could draw a second answer from another auto-reply plugin.** This
+  plugin knew whether it had replied but never acted on it, so a co-installed bot behind it in the hook
+  chain could answer the same message a second time. It now claims a message whenever it actually sends a
+  reply — for a matched rule or the fallback — and never claims when nothing was delivered, so a failed
+  send or an unmatched message still leaves the next plugin free to answer.
+- **This plugin now registers at an explicit responder priority**, after a command prefix and an in-flow
+  state machine, before a catch-all bot — instead of the registration-order default, which could put it
+  ahead of or behind another responder depending on enable order.
+
 ## [0.1.8] — 2026-07-30
 
 ### Fixed

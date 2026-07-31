@@ -6,6 +6,17 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-07-31
+
+### Fixed
+
+- **A voice note could go untranscribed if another auto-reply plugin was also installed.** This plugin
+  ran at the default hook priority — the same one an auto-reply plugin claiming its messages also runs
+  at by default — so whether this plugin ever saw the voice note at all depended on which plugin happened
+  to register first, which could change across a restart or re-enable. It now registers in the
+  transformer band, ahead of every responder, so it is guaranteed to see and transcribe every voice note
+  regardless of what other plugins are installed or when they were enabled.
+
 ## [1.1.0] — 2026-07-30
 
 ### Added

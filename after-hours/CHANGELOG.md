@@ -8,6 +8,18 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-07-31
+
+### Fixed
+
+- **A delivered away message could draw a second answer from another auto-reply plugin.** This plugin
+  knew whether it had replied but never acted on it, so a co-installed bot behind it in the hook chain
+  could answer the same message too. It now claims a message only when the away reply actually sent — a
+  suppressed or failed send still leaves the next plugin free to answer.
+- **This plugin now registers last among responders**, since the away message is a catch-all that should
+  only speak when nothing more specific has already answered — instead of the registration-order default,
+  which could put it ahead of another responder depending on enable order.
+
 ## [0.1.4] — 2026-07-30
 
 ### Fixed
