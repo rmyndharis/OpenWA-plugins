@@ -103,3 +103,15 @@ test('onEnable rejects a non-https or credentialed baseUrl (fail fast, not per-m
   await assert.rejects(new ChatwootAdapter().onEnable(fakeCtx({ ...goodConfig, baseUrl: 'https://user:pw@chat.acme.com' }).ctx), /credential/);
   await assert.rejects(new ChatwootAdapter().onEnable(fakeCtx({ ...goodConfig, baseUrl: 'not a url' }).ctx), /valid URL/);
 });
+
+test('healthCheck reports chats whose history import gave up', async () => {
+  const plugin = new ChatwootAdapter();
+  await plugin.onEnable(fakeCtx(goodConfig).ctx);
+  // Driving this through the real path needs a hook registration plus three consecutive failing
+  // backfills, which inbound.test.ts already covers; this cast pins only the healthCheck wiring.
+  (plugin as unknown as { onBackfillExhausted: (c: string) => void }).onBackfillExhausted('c@c.us');
+  const health = await plugin.healthCheck();
+  assert.match(health.message ?? '', /1 chat\(s\) gave up on history import/);
+  // A gave-up history import doesn't touch the live relay, so it must not flip the health verdict.
+  assert.equal(health.healthy, true);
+});

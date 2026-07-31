@@ -66,9 +66,16 @@ export default class ChatwootAdapter implements IPlugin {
   // rejecting a write because the plugin is at its storage quota. Counted separately from dead-lettering:
   // a dead letter was at least retried MAX_RETRY_ATTEMPTS times, this one never got a single attempt.
   private lostCount = 0;
+  // Chats whose history import burned MAX_BACKFILL_ATTEMPTS. In-memory like the other health counters:
+  // the durable state that actually stops the retries lives on each chat's mapping document.
+  private backfillExhausted = new Set<string>();
   private draining = false;
   private lastSeenPruneAt = 0;
   private seenPruning = false;
+
+  private onBackfillExhausted = (chatId: string): void => {
+    this.backfillExhausted.add(chatId);
+  };
 
   async onEnable(ctx: PluginContext): Promise<void> {
     this.clearRetryTimer(); // idempotent re-enable: never leak a timer from a prior enable
@@ -96,12 +103,7 @@ export default class ChatwootAdapter implements IPlugin {
         this.lostCount++;
         ctx.logger.error(`inbound message ${msgId} LOST: could not be relayed and could not be queued`, e);
       },
-      // Logged only: unlike a lost inbound message, a chat that gives up on its history import hasn't
-      // dropped anything from the live relay, so this doesn't yet feed a healthCheck counter the way
-      // onInboundLost's does.
-      onBackfillExhausted: (chatId: string) => {
-        ctx.logger.error(`chat ${chatId} gave up on history import after ${MAX_BACKFILL_ATTEMPTS} attempts`);
-      },
+      onBackfillExhausted: this.onBackfillExhausted,
     });
 
     ctx.registerHook('message:received', async (h: HookContext): Promise<HookResult> => {
@@ -238,6 +240,12 @@ export default class ChatwootAdapter implements IPlugin {
     if (this.deadLetterCount > 0) parts.push(`${this.deadLetterCount} dead-lettered after ${MAX_RETRY_ATTEMPTS} attempts`);
     // Listed last but the most serious: these never reached the queue at all, so `pending` cannot show them.
     if (this.lostCount > 0) parts.push(`${this.lostCount} LOST (could not be queued — check the plugin storage quota)`);
+    // Not unhealthy on its own: the live relay is unaffected and the operator may simply have chats the
+    // engine cannot serve history for. It still has to be visible — the alternative is what this whole
+    // change exists to remove, a permanent gap nobody is told about.
+    if (this.backfillExhausted.size > 0) {
+      parts.push(`${this.backfillExhausted.size} chat(s) gave up on history import after ${MAX_BACKFILL_ATTEMPTS} attempts`);
+    }
     return {
       healthy: this.deadLetterCount === 0 && this.lostCount === 0 && !saturated,
       message: parts.join('; ') || undefined,
