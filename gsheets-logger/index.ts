@@ -6,6 +6,10 @@ const LOGGED_EVENTS: HookEvent[] = ['message:received', 'message:sent', 'message
 const BUFFER_KEY = 'buffer';
 const MAX_BUFFER = 5000;
 
+// Observer band. Must run before any responder: a responder returning {continue:false} ends the chain,
+// and at the default priority of 100 this plugin would simply stop seeing claimed messages.
+const HOOK_PRIORITY = 10;
+
 // Baked from manifest.json at build time by package.mjs (esbuild `define`). The sandbox does not pass
 // `manifest` into ctx, so this is how the plugin knows its own version at runtime. Falls back to a dev
 // marker when run un-bundled (e.g. the test runner).
@@ -86,10 +90,14 @@ export default class GSheetsLogger implements IPlugin {
     if (Array.isArray(restored)) this.buffer = restored;
 
     for (const event of LOGGED_EVENTS) {
-      ctx.registerHook(event, async (hook: HookContext) => {
-        this.enqueue(hook);
-        return { continue: true };
-      });
+      ctx.registerHook(
+        event,
+        async (hook: HookContext) => {
+          this.enqueue(hook);
+          return { continue: true }; // observer: never claims, see PLUGIN-STANDARD.md
+        },
+        HOOK_PRIORITY,
+      );
     }
     this.startTimer(config.flushIntervalSec);
     ctx.logger.log(`gsheets-logger v${PLUGIN_VERSION} enabled → sheet ${config.spreadsheetId} (tab "${config.sheetTab}")`);

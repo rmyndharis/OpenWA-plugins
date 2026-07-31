@@ -8,6 +8,10 @@ import { backfillAllChats } from './backfill.ts';
 import { handleOutbound } from './outbound.ts';
 import { drainRetries, RETRY_INTERVAL_MS, MAX_RETRY_ATTEMPTS, MAX_PENDING_RETRIES } from './retry.ts';
 
+// Observer band. Must run before any responder: a responder returning {continue:false} ends the chain,
+// and at the default priority of 100 this plugin would simply stop seeing claimed messages.
+const HOOK_PRIORITY = 20;
+
 interface ChatwootFullConfig {
   baseUrl: string;
   apiToken: string;
@@ -106,41 +110,49 @@ export default class ChatwootAdapter implements IPlugin {
       onBackfillExhausted: this.onBackfillExhausted,
     });
 
-    ctx.registerHook('message:received', async (h: HookContext): Promise<HookResult> => {
-      const sessionId = h.sessionId;
-      const msg = h.data as IncomingMessage;
-      if (sessionId && msg) {
-        const cfg = readConfig(ctx.config);
-        const deps = buildDeps(cfg, sessionId);
-        // Fire-and-forget off the hook so a slow/failing Chatwoot API never blocks the WA pipeline. The
-        // mapping mirror is keyed on sessionId (a session-scoped instance is 1:1 with its session).
-        void handleInbound(deps, sessionId, h.source, msg).catch(e => ctx.logger.error('inbound hook failed', e));
-        // Opt-in one-time bulk history sweep. Fired off the hook (outside handleInbound's per-chat lock),
-        // guarded internally so it runs once per session; a no-op after the first sweep completes.
-        if (cfg.backfillAllOnce && cfg.backfillLimit > 0) {
-          void backfillAllChats(deps, sessionId).catch(e => ctx.logger.error('bulk backfill failed', e));
+    ctx.registerHook(
+      'message:received',
+      async (h: HookContext): Promise<HookResult> => {
+        const sessionId = h.sessionId;
+        const msg = h.data as IncomingMessage;
+        if (sessionId && msg) {
+          const cfg = readConfig(ctx.config);
+          const deps = buildDeps(cfg, sessionId);
+          // Fire-and-forget off the hook so a slow/failing Chatwoot API never blocks the WA pipeline. The
+          // mapping mirror is keyed on sessionId (a session-scoped instance is 1:1 with its session).
+          void handleInbound(deps, sessionId, h.source, msg).catch(e => ctx.logger.error('inbound hook failed', e));
+          // Opt-in one-time bulk history sweep. Fired off the hook (outside handleInbound's per-chat lock),
+          // guarded internally so it runs once per session; a no-op after the first sweep completes.
+          if (cfg.backfillAllOnce && cfg.backfillLimit > 0) {
+            void backfillAllChats(deps, sessionId).catch(e => ctx.logger.error('bulk backfill failed', e));
+          }
         }
-      }
-      return { continue: true };
-    });
+        return { continue: true }; // observer: never claims, see PLUGIN-STANDARD.md
+      },
+      HOOK_PRIORITY,
+    );
 
     // The account's OWN outbound sends (linked phone / WhatsApp app / OpenWA REST API) arrive on
     // message:sent, not message:received. Relay them as 'outgoing' so the Chatwoot thread mirrors the full
     // WhatsApp conversation (#615). The adapter's own Chatwoot-agent replies also surface here but are
     // echo-suppressed inside handleSent. Gated per-event so a live relayOwnMessages flip applies at once.
-    ctx.registerHook('message:sent', async (h: HookContext): Promise<HookResult> => {
-      const sessionId = h.sessionId;
-      const msg = h.data as IncomingMessage;
-      if (sessionId && msg) {
-        const cfg = readConfig(ctx.config);
-        if (cfg.relayOwnMessages) {
-          void handleSent(buildDeps(cfg, sessionId), sessionId, h.source, msg).catch(e =>
-            ctx.logger.error('sent hook failed', e),
-          );
+    ctx.registerHook(
+      'message:sent',
+      async (h: HookContext): Promise<HookResult> => {
+        const sessionId = h.sessionId;
+        const msg = h.data as IncomingMessage;
+        if (sessionId && msg) {
+          const cfg = readConfig(ctx.config);
+          if (cfg.relayOwnMessages) {
+            void handleSent(buildDeps(cfg, sessionId), sessionId, h.source, msg).catch(e =>
+              ctx.logger.error('sent hook failed', e),
+            );
+          }
         }
-      }
-      return { continue: true };
-    });
+        return { continue: true }; // observer: never claims, see PLUGIN-STANDARD.md
+      },
+      HOOK_PRIORITY,
+    );
 
     ctx.registerWebhook('chatwoot', async (req: WebhookRequest) =>
       handleOutbound(

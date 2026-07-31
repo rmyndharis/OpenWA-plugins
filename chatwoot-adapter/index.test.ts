@@ -8,6 +8,7 @@ function fakeCtx(config: Record<string, unknown>) {
   const hooks: string[] = [];
   const routes: string[] = [];
   const cbs: Record<string, (h: unknown) => Promise<{ continue: boolean }>> = {};
+  const priorities: Record<string, number | undefined> = {};
   let fetches = 0;
   const storageMap = new Map<string, unknown>();
   const ctx = {
@@ -24,10 +25,14 @@ function fakeCtx(config: Record<string, unknown>) {
     handover: { set: async () => ({}) },
     engine: { canonicalChatId: async (_s: string, c: string) => c },
     logger: { log: () => {}, debug: () => {}, warn: () => {}, error: () => {} },
-    registerHook: (event: string, cb: (h: unknown) => Promise<{ continue: boolean }>) => { hooks.push(event); cbs[event] = cb; },
+    registerHook: (event: string, cb: (h: unknown) => Promise<{ continue: boolean }>, priority?: number) => {
+      hooks.push(event);
+      cbs[event] = cb;
+      priorities[event] = priority;
+    },
     registerWebhook: (route: string) => void routes.push(route),
   } as unknown as PluginContext;
-  return { ctx, hooks, routes, cbs, fetches: () => fetches, storageMap };
+  return { ctx, hooks, routes, cbs, fetches: () => fetches, storageMap, priorities };
 }
 
 const goodConfig = { baseUrl: 'https://chat.acme.com', apiToken: 'tok', accountId: 3, inboxId: 7 };
@@ -37,6 +42,14 @@ test('onEnable registers the message:received + message:sent hooks and the chatw
   await new ChatwootAdapter().onEnable(ctx);
   assert.deepEqual(hooks, ['message:received', 'message:sent']);
   assert.deepEqual(routes, ['chatwoot']);
+});
+
+// Observer band (PLUGIN-STANDARD.md "Co-installation"): must run before any responder, or a claiming
+// responder (chat-flow, group-translate) silently ends the chain before the relay ever sees the message.
+test('relays at observer priority on both hooks', async () => {
+  const { ctx, priorities } = fakeCtx(goodConfig);
+  await new ChatwootAdapter().onEnable(ctx);
+  assert.deepEqual(priorities, { 'message:received': 20, 'message:sent': 20 });
 });
 
 test('message:sent is registered even when relayOwnMessages=false (gate is per-event, not at enable)', async () => {
