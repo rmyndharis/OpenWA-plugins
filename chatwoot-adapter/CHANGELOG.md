@@ -23,7 +23,8 @@ History-backfill reliability release, plus a registration-order fix.
   automatically on its next message — up to three attempts before the plugin gives up on that chat.
   **Upgrading does not re-import your existing conversations.** History import applies to chats first
   seen from this version onward; a chat that was already open in Chatwoot before the upgrade is left
-  exactly as it is, so no thread gets a second copy of its history.
+  exactly as it is, so no thread gets a second copy of its history — unless you turn on the one-time
+  bulk-import option afterward, which re-imports history into chats that already have it.
 - **A Chatwoot outage during import could mark a chat as "imported" with nothing in it.** The import is
   now only recorded as done once every message in the window has actually posted to Chatwoot.
 - **Chats that gave up on history import are now visible.** They're counted in this plugin's health
