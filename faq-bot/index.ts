@@ -39,15 +39,20 @@ export function parseConfig(raw: Record<string, unknown>): {
   };
 }
 
+// Responder band: keyword rules are more specific than a bot that answers everything, less specific than
+// a command prefix.
+const HOOK_PRIORITY = 80;
+
 export default class FaqBot implements IPlugin {
   private readonly fallbackAt = new Map<string, number>();
 
   async onEnable(ctx: PluginContext): Promise<void> {
     this.warnSkipped(ctx); // fail-fast + surface any invalid regex rules at enable
-    ctx.registerHook('message:received', async (hook: HookContext) => {
-      await this.onMessage(ctx, hook);
-      return { continue: true };
-    });
+    ctx.registerHook(
+      'message:received',
+      async (hook: HookContext) => ({ continue: !(await this.onMessage(ctx, hook)) }),
+      HOOK_PRIORITY,
+    );
   }
 
   async onConfigChange(ctx: PluginContext): Promise<void> {
@@ -65,10 +70,12 @@ export default class FaqBot implements IPlugin {
     }
   }
 
-  private async onMessage(ctx: PluginContext, hook: HookContext): Promise<void> {
-    if (hook.source !== 'Engine' || !hook.sessionId) return;
+  // Returns true when this plugin answered, so the hook can claim the message and stop another bot from
+  // answering the same thing. Every early exit means "not mine".
+  private async onMessage(ctx: PluginContext, hook: HookContext): Promise<boolean> {
+    if (hook.source !== 'Engine' || !hook.sessionId) return false;
     const m = (hook.data ?? {}) as Partial<IncomingMessage>;
-    if (m.fromMe || typeof m.body !== 'string' || !m.chatId || !m.id) return;
+    if (m.fromMe || typeof m.body !== 'string' || !m.chatId || !m.id) return false;
 
     // Re-parse per event so a per-session config override (resolved by the host for this hook fire) is
     // honored — a snapshot cached at enable would ignore overrides set via the dashboard after enable.
@@ -77,27 +84,29 @@ export default class FaqBot implements IPlugin {
       cfg = parseConfig(ctx.config);
     } catch (e) {
       ctx.logger.warn(`faq-bot: skipping message, config invalid: ${e instanceof Error ? e.message : String(e)}`);
-      return;
+      return false;
     }
 
-    if (m.isGroup && !cfg.config.respondInGroups) return;
+    if (m.isGroup && !cfg.config.respondInGroups) return false;
 
     const sessionId = hook.sessionId;
     const rule = matchRule(cfg.rules, m.body);
     try {
       if (rule) {
         await ctx.messages.reply(sessionId, m.chatId, m.id, rule.reply);
-        return;
+        return true;
       }
       if (cfg.config.fallbackReply) {
         const key = `${sessionId}:${m.chatId}`;
         const cooldownMs = Math.max(0, cfg.config.fallbackCooldownSec) * 1000;
         if (allowCooldown(this.fallbackAt, key, Date.now(), cooldownMs)) {
           await ctx.messages.reply(sessionId, m.chatId, m.id, cfg.config.fallbackReply);
+          return true;
         }
       }
     } catch (err) {
       ctx.logger.error('faq-bot: reply failed', err);
     }
+    return false; // nothing delivered — a later plugin may still have an answer
   }
 }

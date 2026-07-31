@@ -5,6 +5,81 @@ import { allowCooldown as allowFallback } from './cooldown.ts';
 
 const rules = JSON.stringify([{ mode: 'contains', pattern: 'hi', reply: 'hello' }]);
 
+// Minimal ctx builder shared by the two tests below. The file's regression test further down builds its
+// own inline ctx (it needs a live `config` getter); this one only needs static overrides.
+function makeCtx(overrides: {
+  config?: Record<string, unknown>;
+  registerHook?: (event: string, handler: unknown, priority?: number) => void;
+  reply?: (sessionId: string, chatId: string, quoted: string, text: string) => Promise<{ messageId: string; timestamp: number }>;
+} = {}) {
+  return {
+    config: overrides.config ?? { rules },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    registerHook: overrides.registerHook ?? (() => {}),
+    messages: {
+      reply: overrides.reply ?? (async () => ({ messageId: 'x', timestamp: 0 })),
+      sendText: async () => ({ messageId: 'x', timestamp: 0 }),
+    },
+  };
+}
+
+// Enables a fresh FaqBot with the given (rule-array) config, fires one message:received carrying `body`,
+// and returns the {continue} result the host would see. `rules` is stringified here (not by the caller)
+// so the test data reads as the plugin's rule objects, not the wire-format JSON string ctx.config expects.
+async function runHook(
+  config: { rules: Array<{ mode: string; pattern: string; reply: string }> } & Record<string, unknown>,
+  body: string,
+) {
+  const { rules: ruleList, ...rest } = config;
+  let handler: ((hook: unknown) => Promise<{ continue: boolean }>) | undefined;
+  const ctx = makeCtx({
+    config: { ...rest, rules: JSON.stringify(ruleList) },
+    registerHook: (_e, h) => { handler = h as (hook: unknown) => Promise<{ continue: boolean }>; },
+  });
+  const { default: FaqBot } = await import('./index.ts');
+  await new FaqBot().onEnable(ctx as never);
+  return handler!({
+    source: 'Engine', sessionId: 's1', timestamp: new Date(),
+    data: { id: 'm1', chatId: 'c@x', body, fromMe: false, isGroup: false },
+  });
+}
+
+// Responder band (PLUGIN-STANDARD.md "Co-installation"): keyword rules are more specific than a bot that
+// answers everything, less specific than a command prefix.
+test('registers at the faq-bot responder priority', async () => {
+  let priority: number | undefined;
+  const ctx = makeCtx({ registerHook: (_e, _h, p) => { priority = p; } });
+  const { default: FaqBot } = await import('./index.ts');
+  await new FaqBot().onEnable(ctx as never);
+  assert.equal(priority, 80);
+});
+
+test('claims the message when a rule answered it, passes it on when nothing matched', async () => {
+  const answered = await runHook({ rules: [{ mode: 'contains', pattern: 'hi', reply: 'hello' }] }, 'hi there');
+  assert.equal(answered.continue, false, 'a rule replied — no other bot should answer too');
+
+  const unmatched = await runHook({ rules: [{ mode: 'contains', pattern: 'hi', reply: 'hello' }] }, 'unrelated');
+  assert.equal(unmatched.continue, true, 'nothing was sent — the chain must continue');
+});
+
+// A send that throws delivers nothing. Claiming it anyway would silence the chat entirely — every later
+// plugin sees a message that was "handled" when in fact no reply ever reached the contact.
+test('a reply that throws does not claim the message', async () => {
+  let handler: ((hook: unknown) => Promise<{ continue: boolean }>) | undefined;
+  const ctx = makeCtx({
+    config: { rules },
+    registerHook: (_e, h) => { handler = h as (hook: unknown) => Promise<{ continue: boolean }>; },
+    reply: async () => { throw new Error('blocked by plugin'); },
+  });
+  const { default: FaqBot } = await import('./index.ts');
+  await new FaqBot().onEnable(ctx as never);
+  const result = await handler!({
+    source: 'Engine', sessionId: 's1', timestamp: new Date(),
+    data: { id: 'm1', chatId: 'c@x', body: 'hi there', fromMe: false, isGroup: false },
+  });
+  assert.equal(result.continue, true, 'the send failed — a later plugin may still have an answer');
+});
+
 test('parseConfig requires rules', () => {
   assert.throws(() => parseConfig({}), /rules is required/);
   assert.throws(() => parseConfig({ rules: '   ' }), /rules is required/);

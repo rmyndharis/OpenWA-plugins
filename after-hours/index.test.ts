@@ -5,6 +5,102 @@ import { allowCooldown as allowReply } from './cooldown.ts';
 
 const schedule = JSON.stringify({ mon: '09:00-17:00', sun: null });
 
+// Minimal ctx builder shared by the two tests below. The file's regression/throttle tests further down
+// build their own inline ctx (they need a live `config` getter or attempt-counting), so this one only
+// needs static overrides.
+function makeCtx(overrides: {
+  config?: Record<string, unknown>;
+  registerHook?: (event: string, handler: unknown, priority?: number) => void;
+  reply?: (sessionId: string, chatId: string, quoted: string, text: string) => Promise<{ messageId: string; timestamp: number }>;
+} = {}) {
+  return {
+    config: overrides.config ?? {},
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    registerHook: overrides.registerHook ?? (() => {}),
+    messages: {
+      reply: overrides.reply ?? (async () => ({ messageId: 'x', timestamp: 0 })),
+      sendText: async () => ({ messageId: 'x', timestamp: 0 }),
+    },
+  };
+}
+
+// Schedule opens only Thursday 09:00-17:00 UTC; runHook() below pins the clock to a Thursday well before
+// that window opens (same construction as "a failed away reply is throttled" further down), so
+// isAfterHours is deterministically true regardless of when the suite runs.
+const closedNowConfig = {
+  schedule: JSON.stringify({ thu: '09:00-17:00' }),
+  timezone: 'UTC',
+  awayMessage: 'tutup',
+  cooldownSec: 3600,
+};
+
+// Enables a plugin per distinct config object and fires message:received carrying `body`, returning the
+// {continue} result the host would see. Reuses the SAME plugin instance (and its cooldown/backoff state)
+// across calls that pass the identical config reference — a fresh instance per call would reset the
+// cooldown map and hide the very suppression the cooldown test exists to prove; a real host likewise
+// keeps one plugin instance alive across messages for an enabled session.
+const sessions = new WeakMap<object, (hook: unknown) => Promise<{ continue: boolean }>>();
+
+async function runHook(config: Record<string, unknown>, body: string) {
+  let handler = sessions.get(config);
+  if (!handler) {
+    const ctx = makeCtx({ config, registerHook: (_e, h) => { handler = h as (hook: unknown) => Promise<{ continue: boolean }>; } });
+    const { default: AfterHours } = await import('./index.ts');
+    await new AfterHours().onEnable(ctx as never);
+    sessions.set(config, handler!);
+  }
+  return handler!({
+    source: 'Engine', sessionId: 's1', timestamp: new Date(),
+    data: { id: 'm1', chatId: 'c@x', body, fromMe: false, isGroup: false },
+  });
+}
+
+// Responder band, last (PLUGIN-STANDARD.md "Co-installation"): the away message is the catch-all that
+// speaks only when nothing more specific answered.
+test('registers at the after-hours responder priority', async () => {
+  let priority: number | undefined;
+  const ctx = makeCtx({ config: { schedule, awayMessage: 'Closed' }, registerHook: (_e, _h, p) => { priority = p; } });
+  const { default: AfterHours } = await import('./index.ts');
+  await new AfterHours().onEnable(ctx as never);
+  assert.equal(priority, 95);
+});
+
+test('claims only when it actually replied; a cooldown-suppressed message is passed on', async () => {
+  mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  try {
+    const first = await runHook(closedNowConfig, 'anybody there');
+    assert.equal(first.continue, false, 'the away message went out — claim it');
+
+    const second = await runHook(closedNowConfig, 'hello again'); // same chat, inside the cooldown
+    assert.equal(second.continue, true, 'nothing was sent, so nothing was claimed');
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+// A send that throws delivers nothing. Claiming it anyway would silence the chat entirely — every later
+// plugin sees a message that was "handled" when in fact no away message ever reached the contact.
+test('a reply that throws does not claim the message', async () => {
+  let handler: ((hook: unknown) => Promise<{ continue: boolean }>) | undefined;
+  const ctx = makeCtx({
+    config: closedNowConfig,
+    registerHook: (_e, h) => { handler = h as (hook: unknown) => Promise<{ continue: boolean }>; },
+    reply: async () => { throw new Error('blocked by plugin'); },
+  });
+  const { default: AfterHours } = await import('./index.ts');
+  await new AfterHours().onEnable(ctx as never);
+  mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  try {
+    const result = await handler!({
+      source: 'Engine', sessionId: 's1', timestamp: new Date(),
+      data: { id: 'm1', chatId: 'c@x', body: 'anybody there', fromMe: false, isGroup: false },
+    });
+    assert.equal(result.continue, true, 'the send failed — a later plugin may still have an answer');
+  } finally {
+    mock.timers.reset();
+  }
+});
+
 test('parseConfig requires schedule and awayMessage', () => {
   assert.throws(() => parseConfig({ awayMessage: 'x' }), /schedule is required/);
   assert.throws(() => parseConfig({ schedule, awayMessage: '' }), /awayMessage is required/);
