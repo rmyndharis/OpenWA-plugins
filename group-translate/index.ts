@@ -23,6 +23,10 @@ import { LibreTranslateClient } from "./libretranslate.client";
 import { PluginChatGateway } from "./plugin-chat.gateway";
 import { PluginConfigStore } from "./plugin-config.store";
 
+// Transformer band. This plugin DOES claim when it swallows: at that point it has replaced the message
+// with its translation, and passing the original on would have a responder answer text nobody sent.
+const HOOK_PRIORITY = 50;
+
 function readString(
   cfg: Record<string, unknown>,
   key: string,
@@ -74,8 +78,10 @@ export class TranslationPlugin implements IPlugin {
   onEnable(context: PluginContext): Promise<void> {
     this.coordinator = this.buildCoordinator(context);
     this.coordinatorSignature = this.configSignature(context.config);
-    context.registerHook("message:received", (ctx) =>
-      this.onMessage(context, ctx as HookContext<IncomingMessage>),
+    context.registerHook(
+      "message:received",
+      (ctx) => this.onMessage(context, ctx as HookContext<IncomingMessage>),
+      HOOK_PRIORITY,
     );
     context.logger.log("Translation plugin enabled", {
       action: "translation_enabled",

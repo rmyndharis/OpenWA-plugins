@@ -23,6 +23,10 @@ import {
   ChatDeliveryMode,
 } from "./transcription.coordinator.ts";
 
+// Transformer band: runs after the observers, before any responder. This plugin delivers a transcript
+// out-of-band and must never claim — the contact's message still needs whatever bot would answer it.
+const HOOK_PRIORITY = 40;
+
 function readString(
   cfg: Record<string, unknown>,
   key: string,
@@ -84,8 +88,10 @@ export class VoiceTranscriptionPlugin implements IPlugin {
     this.ctxRef = context;
     this.coordinator = this.build(context);
     this.coordinatorSignature = this.configSignature(context.config);
-    context.registerHook("message:received", (ctx) =>
-      Promise.resolve(this.onMessage(ctx as HookContext<IncomingMessage>)),
+    context.registerHook(
+      "message:received",
+      (ctx) => Promise.resolve(this.onMessage(ctx as HookContext<IncomingMessage>)),
+      HOOK_PRIORITY,
     );
     if (
       !readOptionalString(context.config, "deliveryWebhookUrl") &&

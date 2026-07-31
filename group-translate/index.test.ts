@@ -23,6 +23,7 @@ function fakeContext(config: Record<string, unknown>) {
   let hook:
     | ((ctx: HookContext<IncomingMessage>) => Promise<HookResult>)
     | undefined;
+  let priority: number | undefined;
   const net = {
     fetch: async () =>
       ({
@@ -42,15 +43,17 @@ function fakeContext(config: Record<string, unknown>) {
     registerHook: (
       _event: string,
       handler: (c: HookContext<IncomingMessage>) => Promise<HookResult>,
+      p?: number,
     ) => {
       hook = handler;
+      priority = p;
     },
     messages: {},
     engine: {},
     net,
     hookManager: {},
   } as unknown as PluginContext;
-  return { ctx, getHook: () => hook };
+  return { ctx, getHook: () => hook, getPriority: () => priority };
 }
 
 const engineCtx = (
@@ -73,6 +76,15 @@ const engineCtx = (
     author: "x@s.whatsapp.net",
     ...data,
   } as IncomingMessage,
+});
+
+// Transformer band (PLUGIN-STANDARD.md "Co-installation"): must run ahead of every responder, or a
+// responder answers the untranslated original before this plugin's translation replaces it.
+test("registers in the transformer band, ahead of every responder", async () => {
+  const { ctx, getPriority } = fakeContext({});
+  const plugin = new TranslationPlugin();
+  await plugin.onEnable(ctx);
+  assert.equal(getPriority(), 50);
 });
 
 // Regression: the message hook must rebuild the coordinator when a coordinator-affecting config field

@@ -45,6 +45,7 @@ function fakeContext(opts: {
   let hook:
     | ((ctx: HookContext<IncomingMessage>) => Promise<HookResult>)
     | undefined;
+  let priority: number | undefined;
   const ctx = {
     pluginId: "voice-transcription",
     manifest: { id: "voice-transcription" },
@@ -58,15 +59,19 @@ function fakeContext(opts: {
     registerHook: (
       event: string,
       handler: (c: HookContext<IncomingMessage>) => Promise<HookResult>,
+      p?: number,
     ) => {
-      if (event === "message:received") hook = handler;
+      if (event === "message:received") {
+        hook = handler;
+        priority = p;
+      }
     },
     messages: {},
     engine: {},
     net: opts.net,
     hookManager: {},
   } as unknown as PluginContext;
-  return { ctx, getHook: () => hook };
+  return { ctx, getHook: () => hook, getPriority: () => priority };
 }
 
 const engineCtx = (data: IncomingMessage): HookContext<IncomingMessage> => ({
@@ -99,6 +104,23 @@ test("the message:received hook returns {continue:true} without awaiting STT (no
   assert.deepEqual((winner as { result: HookResult }).result, {
     continue: true,
   });
+});
+
+// Transformer band (PLUGIN-STANDARD.md "Co-installation"): runs after the observers, before any
+// responder. Must never claim — this plugin delivers a transcript out-of-band, so the contact's
+// original message still needs whatever bot would otherwise answer it.
+test("registers in the transformer band and never claims", async () => {
+  const net = { fetch: () => new Promise<PluginNetResponse>(() => {}) };
+  const { ctx, getHook, getPriority } = fakeContext({ net });
+  const plugin = new VoiceTranscriptionPlugin();
+  await plugin.onEnable(ctx);
+  assert.equal(getPriority(), 40);
+  const result = await getHook()!(engineCtx(voiceMsg()));
+  assert.equal(
+    result.continue,
+    true,
+    "a transcriber must never take the message from a responder",
+  );
 });
 
 test("does not start transcription for non-Engine sources", async () => {
