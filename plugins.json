@@ -1558,9 +1558,9 @@
     "testedOpenWAVersion": "0.8.16",
     "releasedAt": "2026-07-30",
     "repoPath": "supabase-otp-hook",
-    "repoUrl": "https://github.com/maplerichie/OpenWA-plugins",
-    "homepage": "https://github.com/maplerichie/OpenWA-plugins/tree/main/supabase-otp-hook",
-    "download": "https://github.com/maplerichie/OpenWA-plugins/releases/download/supabase-otp-hook-v0.3.0/supabase-otp-hook.zip",
+    "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
+    "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/supabase-otp-hook",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/supabase-otp-hook-v0.3.0/supabase-otp-hook.zip",
     "i18n": {
       "es": {
         "name": "OTP de Supabase Auth",
