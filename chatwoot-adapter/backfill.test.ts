@@ -263,3 +263,19 @@ test('bulk sweep isolates a failed chat: the rest of the sweep still creates and
   // bulk-backfill step.
   assert.deepEqual(logs, ['history fetch failed for fail@c.us']);
 });
+
+test('the bulk sweep records each imported chat so the lazy path does not refetch it', async () => {
+  const patches: Array<{ chatId: string; patch: Record<string, unknown> }> = [];
+  const { deps } = makeDeps({
+    engine: {
+      getChats: async () => [{ id: 'c@c.us', name: 'C', isGroup: false }],
+      getChatHistory: async () => [hist('m1', 10, false, 'earlier')],
+    },
+    store: {
+      patch: async (_s: string, chatId: string, patch: Record<string, unknown>) =>
+        void patches.push({ chatId, patch }),
+    },
+  });
+  await backfillAllChats(deps, 'sess');
+  assert.deepEqual(patches, [{ chatId: 'c@c.us', patch: { backfillDone: true } }]);
+});

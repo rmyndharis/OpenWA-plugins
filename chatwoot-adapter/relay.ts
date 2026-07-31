@@ -21,6 +21,9 @@ export interface InboundDeps {
   // lost. The only way this failure reaches an operator: the retry queue can't count an entry it never
   // managed to store, so healthCheck would otherwise report green while dropping messages.
   onInboundLost: (msgId: string, err: unknown) => void;
+  // Called once when a chat's history import has burned MAX_BACKFILL_ATTEMPTS. Mirrors onInboundLost:
+  // the durable per-chat counter stops the retries, this makes the give-up visible on healthCheck.
+  onBackfillExhausted: (chatId: string) => void;
 }
 
 function senderLabel(msg: IncomingMessage): string {

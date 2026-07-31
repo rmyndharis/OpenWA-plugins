@@ -96,6 +96,9 @@ export async function backfillAllChats(deps: InboundDeps, sessionId: string): Pr
             phone: resolvePhone(chat, chat.id),
           });
           await replayHistory(deps, sessionId, conversationId, ordered);
+          // Share the lazy path's marker: this chat is imported, so its next inbound message must not
+          // spend another getChatHistory call rediscovering that.
+          await deps.store.patch(sessionId, chat.id, { backfillDone: true });
         } catch (err) {
           deps.log(`bulk backfill failed for ${chat.id}`, err);
         }

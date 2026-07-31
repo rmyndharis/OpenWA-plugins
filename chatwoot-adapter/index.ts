@@ -2,7 +2,7 @@ import type { IPlugin, PluginContext, IncomingMessage, HookContext, HookResult, 
 import { ChatwootClient } from './chatwoot-client.ts';
 import { MappingStore, SEEN_TTL_MS, SEEN_PRUNE_INTERVAL_MS } from './mapping-store.ts';
 import { KeyedAsyncLock } from './chat-lock.ts';
-import { handleInbound, relayInbound } from './inbound.ts';
+import { handleInbound, relayInbound, MAX_BACKFILL_ATTEMPTS } from './inbound.ts';
 import { handleSent } from './sent.ts';
 import { backfillAllChats } from './backfill.ts';
 import { handleOutbound } from './outbound.ts';
@@ -95,6 +95,12 @@ export default class ChatwootAdapter implements IPlugin {
       onInboundLost: (msgId: string, e: unknown) => {
         this.lostCount++;
         ctx.logger.error(`inbound message ${msgId} LOST: could not be relayed and could not be queued`, e);
+      },
+      // Logged only: unlike a lost inbound message, a chat that gives up on its history import hasn't
+      // dropped anything from the live relay, so this doesn't yet feed a healthCheck counter the way
+      // onInboundLost's does.
+      onBackfillExhausted: (chatId: string) => {
+        ctx.logger.error(`chat ${chatId} gave up on history import after ${MAX_BACKFILL_ATTEMPTS} attempts`);
       },
     });
 
