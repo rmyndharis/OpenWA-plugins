@@ -58,7 +58,9 @@ function makeDeps(
     backfillLimit: over.backfillLimit ?? 20,
     backfillAllOnce: false,
     log: () => {},
-      onInboundLost: () => {},   // required on InboundDeps; the cast would hide its absence
+    // Both callbacks are required on InboundDeps; the cast would hide an omitted one.
+    onInboundLost: () => {},
+    onBackfillExhausted: () => {},
   } as unknown as InboundDeps;
   return { deps, posts, creates, seen };
 }
