@@ -10,7 +10,7 @@
   "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/typebot-connector",
   "repository": "https://github.com/rmyndharis/OpenWA-plugins",
   "keywords": ["typebot", "chatbot", "flow", "bot", "no-code", "two-way", "whatsapp", "openwa"],
-  "status": "beta",
+  "status": "stable",
   "minOpenWAVersion": "0.8.2",
   "testedOpenWAVersion": "0.12.1",
   "sdkVersion": "1",

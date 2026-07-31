@@ -16,7 +16,7 @@
 | **Identifier** | `typebot-connector` |
 | **Version** | 0.2.1 |
 | **Released** | 2026-07-31 |
-| **Status** | beta |
+| **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
