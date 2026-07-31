@@ -55,7 +55,12 @@ export async function handleTurn(deps: TurnDeps, sessionId: string, source: stri
           await send(deps, sessionId, msg, { type: 'text', text: 'Sorry, that upload failed — please try sending the file again.' });
           return; // state stays intact so the user can retry
         }
-        message = { type: 'text', text: '', attachedFileUrls: [url] };
+        // A `file input` block's answer IS the file: Typebot validates message.text as the URL and rejects an
+        // empty text with attachedFileUrls. A text input with attachments enabled is the opposite — there the
+        // answer is the typed text and the file rides along in attachedFileUrls.
+        message = state.awaiting.kind === 'file'
+          ? { type: 'text', text: url }
+          : { type: 'text', text: '', attachedFileUrls: [url] };
       } else {
         message = intent.message;
       }
