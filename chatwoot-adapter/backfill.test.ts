@@ -196,3 +196,49 @@ test('bulk sweep populates `phone_number` on the new Chatwoot contact when the c
   assert.equal(byId['120363@g.us'], undefined);             // groups never carry a phone
   assert.equal(byId['118367890123478@lid'], undefined);     // cold lid — pre-fix behavior preserved
 });
+
+test('media is requested only for a window small enough to fit the 30s capability budget', async () => {
+  const seenArgs: Array<{ limit: number; includeMedia: boolean }> = [];
+  const engine = {
+    getChatHistory: async (_s: string, _c: string, limit: number, includeMedia: boolean) => {
+      seenArgs.push({ limit, includeMedia });
+      return [];
+    },
+  };
+  const small = makeDeps({ engine, backfillLimit: 25 });
+  await backfillHistory(small.deps, 'sess', 'c@c.us', 55);
+  const large = makeDeps({ engine, backfillLimit: 26 });
+  await backfillHistory(large.deps, 'sess', 'c@c.us', 55);
+
+  assert.deepEqual(seenArgs, [
+    { limit: 25, includeMedia: true },
+    { limit: 26, includeMedia: false },
+  ]);
+});
+
+test('backfillHistory distinguishes a failed fetch from a genuinely empty history', async () => {
+  const emptyChat = makeDeps({ engine: { getChatHistory: async () => [] } });
+  assert.equal(await backfillHistory(emptyChat.deps, 'sess', 'c@c.us', 55), true);
+
+  const failing = makeDeps({
+    engine: {
+      getChatHistory: async () => {
+        throw new Error("capability 'engine.getChatHistory' timed out after 30000ms");
+      },
+    },
+  });
+  assert.equal(await backfillHistory(failing.deps, 'sess', 'c@c.us', 55), false);
+});
+
+test('bulk sweep creates no conversation for a chat whose history fetch failed', async () => {
+  const { deps, creates } = makeDeps({
+    engine: {
+      getChats: async () => [{ id: 'c@c.us', name: 'C', isGroup: false }],
+      getChatHistory: async () => {
+        throw new Error('timed out');
+      },
+    },
+  });
+  await backfillAllChats(deps, 'sess');
+  assert.deepEqual(creates, []);
+});
