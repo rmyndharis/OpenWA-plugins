@@ -6,6 +6,17 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-07-31
+
+### Fixed
+
+- **Uploading a file at a Typebot file-upload step got stuck in a loop.** The photo or document reached
+  storage every time, but the flow answered "Invalid message. Please, try again." and asked for the same
+  file again, indefinitely. A file-upload step expects the uploaded file's URL as the answer itself, while
+  a text step that merely allows an attachment expects the typed answer with the file attached alongside
+  it — the plugin was sending the second shape for both, so a file-upload step never accepted what it was
+  sent. Each is now answered the way it expects, and a file-upload step advances the flow like any other.
+
 ## [0.2.0] — 2026-07-31
 
 ### Fixed

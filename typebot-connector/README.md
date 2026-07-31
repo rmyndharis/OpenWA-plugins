@@ -14,7 +14,7 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `typebot-connector` |
-| **Version** | 0.2.0 |
+| **Version** | 0.2.1 |
 | **Released** | 2026-07-31 |
 | **Status** | beta |
 | **Author** | Yudhi Armyndharis |
