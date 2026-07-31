@@ -91,7 +91,7 @@ test('backfillHistory skips messages already seen (dedup with the live path)', a
   assert.deepEqual(posts.map(p => p.body), ['new']);
 });
 
-test('backfillHistory swallows a getChatHistory failure (best-effort)', async () => {
+test('backfillHistory returns false on a getChatHistory failure, without posting anything', async () => {
   const { deps, posts } = makeDeps({
     engine: {
       getChatHistory: async () => {
@@ -230,15 +230,36 @@ test('backfillHistory distinguishes a failed fetch from a genuinely empty histor
   assert.equal(await backfillHistory(failing.deps, 'sess', 'c@c.us', 55), false);
 });
 
-test('bulk sweep creates no conversation for a chat whose history fetch failed', async () => {
-  const { deps, creates } = makeDeps({
+test('bulk sweep isolates a failed chat: the rest of the sweep still creates and replays (#609)', async () => {
+  const chats = [
+    { id: 'fail@c.us', name: 'F', isGroup: false },
+    { id: 'ok@c.us', name: 'OK', isGroup: false },
+  ];
+  const createCalls: string[] = [];
+  const logs: string[] = [];
+  const { deps, posts } = makeDeps({
     engine: {
-      getChats: async () => [{ id: 'c@c.us', name: 'C', isGroup: false }],
-      getChatHistory: async () => {
-        throw new Error('timed out');
+      getChats: async () => chats,
+      getChatHistory: async (_s: string, chatId: string) => {
+        if (chatId === 'fail@c.us') throw new Error('timed out');
+        return [{ ...hist('ok1', 10, false, 'hello from ok'), chatId }];
+      },
+    },
+    client: {
+      createContact: async (identifier: string) => {
+        createCalls.push(identifier);
+        return { id: 9, sourceId: 'src' };
       },
     },
   });
-  await backfillAllChats(deps, 'sess');
-  assert.deepEqual(creates, []);
+  deps.log = (m: string) => void logs.push(m);
+  await backfillAllChats(deps, 'sessIsolate');
+
+  assert.deepEqual(createCalls, ['ok@c.us']); // only the surviving chat gets a conversation
+  assert.deepEqual(posts.map(p => p.body), ['hello from ok']); // and its history is replayed, unaffected
+  // fetchHistory's own catch is the ONLY thing that should log for the failed chat. A guard that regressed
+  // to `ordered.length` (no optional chaining) would throw on the `null`, get caught by the surrounding
+  // per-chat catch, and log a SECOND time -- misreporting an already-explained failed fetch as a crashed
+  // bulk-backfill step.
+  assert.deepEqual(logs, ['history fetch failed for fail@c.us']);
 });
