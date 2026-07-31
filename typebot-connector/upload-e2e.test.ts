@@ -123,9 +123,11 @@ test('file input, proxy branch: PUT raw bytes, then continueChat carries the ret
   assert.deepEqual(Buffer.from(calls[1].init!.body as Uint8Array), PNG);
 
   // continueChat carries fileUrl from generate-upload-url — NOT presignedUrl, which is single-use.
+  // A `file input` block's answer IS the file: Typebot validates message.text as the URL and rejects an
+  // empty text with attachedFileUrls (verified against a live Typebot v3.17.2 instance).
   assert.equal(calls[2].url, 'https://typebot.io/api/v1/sessions/S1/continueChat');
   const cont = JSON.parse(calls[2].init!.body as string);
-  assert.deepEqual(cont.message, { type: 'text', text: '', attachedFileUrls: ['https://cdn/p.png'] });
+  assert.deepEqual(cont.message, { type: 'text', text: 'https://cdn/p.png' });
 
   // The next prompt reaches WhatsApp and the advanced state is persisted.
   assert.deepEqual(sent.map(s => s.text), ['Got it']);
@@ -174,6 +176,62 @@ test('file input, S3 branch: multipart POST with every policy field before the f
   assert.deepEqual(raw.subarray(start, start + PNG.length), PNG);
 
   const cont = JSON.parse(calls[2].init!.body as string);
-  assert.deepEqual(cont.message, { type: 'text', text: '', attachedFileUrls: ['https://cdn/s3.png'] });
+  assert.deepEqual(cont.message, { type: 'text', text: 'https://cdn/s3.png' });
   assert.deepEqual(sent.map(s => s.text), ['Received']);
+});
+
+// Different construct from a `file input` block: here the flow is a TEXT input with attachments enabled,
+// so the typed text is the answer and the upload rides along in attachedFileUrls. Conflating the two was
+// the root cause of the file-input regression above — this scenario pins the other side of that branch so
+// the two constructs can't be silently swapped again.
+test('text input with attachments enabled: continueChat carries the text plus attachedFileUrls', async () => {
+  const { fetchFn, calls } = recorder([
+    ok({ presignedUrl: 'https://typebot.io/api/uploads/tok', formData: {}, fileUrl: 'https://cdn/p.png' }),
+    noBody(200),
+    ok({
+      sessionId: 'S1',
+      messages: [{ id: 'm2', type: 'text', content: { type: 'markdown', markdown: 'Got it' } }],
+      input: { id: 'blk2', type: 'text input' },
+    }),
+  ]);
+  const sent: ConversationSendEnvelope[] = [];
+  const conversations: PluginConversationsCapability = { send: async e => void sent.push(e) };
+  const store = new SessionStore(fakeStorage());
+  await store.set('sess:c@c.us', {
+    sessionId: 'S1',
+    awaiting: { kind: 'text', blockId: 'blk', attachmentsEnabled: true },
+    lastActivity: 1000,
+  });
+  const msg = {
+    id: 'm',
+    from: 'c@c.us',
+    to: 'me',
+    chatId: 'c@c.us',
+    body: '',
+    type: 'image',
+    timestamp: 0,
+    fromMe: false,
+    isGroup: false,
+    media: { mimetype: 'image/png', filename: 'p.png', data: PNG.toString('base64') },
+  } as IncomingMessage;
+
+  await handleTurn(
+    {
+      cfg,
+      client: new TypebotClient(fetchFn, cfg),
+      store,
+      lock: new KeyedAsyncLock(),
+      conversations,
+      now: () => 1000,
+      log: () => {},
+    },
+    'sess',
+    'Engine',
+    msg,
+  );
+
+  assert.equal(calls[2].url, 'https://typebot.io/api/v1/sessions/S1/continueChat');
+  const cont = JSON.parse(calls[2].init!.body as string);
+  assert.deepEqual(cont.message, { type: 'text', text: '', attachedFileUrls: ['https://cdn/p.png'] });
+  assert.deepEqual(sent.map(s => s.text), ['Got it']);
 });
