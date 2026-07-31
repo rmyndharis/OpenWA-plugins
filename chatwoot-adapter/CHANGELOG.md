@@ -6,6 +6,29 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-07-31
+
+No behaviour change. 0.7.0 has now been smoke-tested against a newer host, so the tested-version field
+is updated to match.
+
+### Verified
+
+- **0.7.0 confirmed working against a live OpenWA 0.12.1 host**, with a connected WhatsApp session and a
+  real Chatwoot instance. It installed in place over the previous build with its configuration and API
+  token preserved, the message hook registered at priority 20, and live inbound messages relayed to
+  Chatwoot.
+- **History-backfill bookkeeping behaved as designed.** A newly mapped chat got `backfillDone: false`
+  written at creation; a failing history fetch incremented `backfillAttempts` and left `backfillDone`
+  false rather than being recorded as a completed import; and after three failed attempts the plugin
+  stopped fetching history for that chat, with plugin health reporting `1 chat(s) gave up on history
+  import after 3 attempts` while remaining healthy overall.
+- **Upgrading left existing conversations alone.** A mapping document in the pre-0.7.0 shape — carrying
+  neither backfill field, as every chat mapped by an older version does — was untouched: no history
+  fetch was attempted and nothing was written to it.
+- **Not covered:** a successful history import. The test host's engine does not support history
+  retrieval, so the path where every message in the backfill window posts and the import is marked
+  complete was not exercised.
+
 ## [0.7.0] — 2026-07-31
 
 History-backfill reliability release, plus a registration-order fix.
