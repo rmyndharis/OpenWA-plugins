@@ -7,7 +7,12 @@
 // handler only parses the payload and fires the WhatsApp send.
 //
 // The return value is ignored — only whether this handler THROWS matters: a throw makes the host retry
-// (3×, backoff) then DLQ for redrive; returning (any value) completes the job with no retry.
+// (3×, backoff) then DLQ for redrive. Returning completes the JOB, but that is not quite "no retry":
+// delivery is at-least-once. If the outcome is never recorded (a crash between dispatch and the write),
+// the ingress row stays 'pending' and the host's reconciler re-dispatches it, running this handler a
+// second time. The replay carries the SAME payload, so the contact receives the SAME code again — noisy,
+// not a security problem. That is why there is no per-delivery dedup store here: it would add an
+// unbounded key-per-delivery to the OTP critical path to suppress a duplicate of an identical message.
 //
 // Failure handling:
 // - Missing/malformed phone/otp → return (permanent client error; a retry won't fix a bad payload).
@@ -28,13 +33,6 @@ export interface HandlerDeps {
   config: SupabaseSmsConfig;
   messages: Pick<PluginMessagingCapability, 'sendText'>;
   log: (message: string, meta?: Record<string, unknown>) => void;
-  /**
-   * Optional `ctx.engine.canonicalChatId` (OpenWA 0.8.7+). When present, the phone-derived
-   * `<digits>@c.us` chat id is resolved to the session's canonical id before sending, so an OTP
-   * still lands in the right chat when the contact is keyed by a `@lid` privacy id. Absent (older
-   * host or no engine:read permission) the raw phone JID is used unchanged.
-   */
-  canonicalChatId?: (sessionId: string, chatId: string) => Promise<string>;
 }
 
 interface SupabaseSmsPayload {
@@ -94,26 +92,12 @@ export async function handleSendSms(deps: HandlerDeps, req: WebhookRequest): Pro
     return;
   }
 
-  // Resolve to the canonical chat id when the host supports it (best-effort: any failure keeps the
-  // phone-derived JID). See HandlerDeps.canonicalChatId. Bounded to 2 s: this is the ONLY await before
-  // the fire-and-forget send, and a wedged engine bridge must not stall the ingress job into a
-  // timeout → retry → duplicate OTP.
-  let targetChatId = chatId;
-  if (deps.canonicalChatId) {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      targetChatId = await Promise.race([
-        deps.canonicalChatId(sessionId, chatId),
-        new Promise<string>((_, reject) => {
-          timer = setTimeout(() => reject(new Error('canonicalChatId timeout')), 2000);
-        }),
-      ]);
-    } catch {
-      /* keep the phone-derived JID */
-    } finally {
-      clearTimeout(timer);
-    }
-  }
+  // There is deliberately NO canonicalChatId call here. It looked like it protected an OTP addressed to
+  // a `@lid` contact, but it cannot: `phoneToChatId` always yields `<digits>@c.us`, and the host's
+  // resolver returns a `user`-kind jid unchanged (`toNeutralJid`, engine/identity/wa-id.ts) — so the
+  // call was a guaranteed round-trip to the same string. It cost a 2 s race, the `engine:read`
+  // permission, and a live-engine dependency on the OTP critical path, all for nothing.
+  const targetChatId = chatId;
 
   if (cfg.debug) {
     deps.log('supabase-otp-hook: inbound delivery', {

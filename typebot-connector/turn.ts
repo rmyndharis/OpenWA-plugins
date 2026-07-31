@@ -1,4 +1,5 @@
 import type { IncomingMessage, PluginConversationsCapability, ConversationSendEnvelope } from '../types/openwa';
+import { phoneFromJid } from './jid.ts';
 import type { TypebotConfig, OutgoingPart } from './typebot-types.ts';
 import { TypebotHttpError } from './typebot-client.ts';
 import type { TypebotClient, ContinueMessage } from './typebot-client.ts';
@@ -80,17 +81,35 @@ export async function handleTurn(deps: TurnDeps, sessionId: string, source: stri
       await deps.store.clear(key); // flow ended
     }
 
-    for (const part of renderResponse(resp)) await send(deps, sessionId, msg, part);
+    // Per-part isolation. State above already recorded that the prompt was delivered, so letting one
+    // failed part abort the loop left the contact with a half-turn and no way to advance: the next thing
+    // they typed was matched against an input whose prompt they never saw. A media part can also fail on
+    // its own (unreachable mediaHost, host media path), and that must not silence the text that follows.
+    for (const part of renderResponse(resp)) {
+      try {
+        await send(deps, sessionId, msg, part);
+      } catch (err) {
+        deps.log(`failed to deliver a ${part.type} part of this turn; continuing with the rest`, err);
+      }
+    }
   });
 }
 
 function contactVars(msg: IncomingMessage): Record<string, string> {
+  // `senderPhone` is assigned by the host AFTER the message:received chain has run, and only for @lid
+  // senders — so at hook time it is ALWAYS unset and {{waNumber}} reached every flow empty. Verified on a
+  // live 0.12.1 host: the same flow rendered `num=[628999000]` when called directly and `num=[]` through
+  // this plugin. Read it first anyway (harmless, and correct if the host ever moves the resolution), then
+  // fall back to the JID's user part, which for a plain @c.us chat IS the number.
+  // A group message is keyed by `author`; `from`/`chatId` there is the group, not a person.
+  const jid = msg.author ?? msg.from;
   return {
-    waNumber: msg.senderPhone ?? '',
+    waNumber: msg.senderPhone ?? phoneFromJid(jid),
     waName: msg.contact?.pushName ?? msg.contact?.name ?? '',
     waChatId: msg.chatId,
   };
 }
+
 
 async function send(deps: TurnDeps, sessionId: string, msg: IncomingMessage, part: OutgoingPart): Promise<void> {
   const env: ConversationSendEnvelope = { sessionId, chatId: msg.chatId, ...part };

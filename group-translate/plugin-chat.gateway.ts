@@ -13,11 +13,18 @@ export class PluginChatGateway implements ChatGateway {
     private readonly engine: PluginEngineReadCapability,
   ) {}
 
+  // Whatever the translation backend returned is forwarded straight through, and an empty result is a
+  // real possibility (a backend that answers 200 with a blank translation). The host now rejects an
+  // empty positional argument outright — "argument 2 must be a non-empty string" — so an empty
+  // translation stopped being a blank WhatsApp bubble and became a thrown capability error, swallowed by
+  // the coordinator's catch. Dropping it here keeps the failure quiet either way, but says why.
   async sendText(sessionId: string, chatId: string, text: string): Promise<void> {
+    if (!text.trim()) return;
     await this.messages.sendText(sessionId, chatId, text);
   }
 
   async sendCombinedReply(sessionId: string, chatId: string, quotedMessageId: string, text: string): Promise<void> {
+    if (!text.trim()) return;
     await this.messages.reply(sessionId, chatId, quotedMessageId, text);
   }
 

@@ -4,6 +4,7 @@ import type { IncomingMessage } from '../types/openwa';
 import type { SttResult, SttProvider } from './openai-stt.client.ts';
 import type { TranscriptionPayload } from './webhook.delivery.ts';
 import {
+  decodedBase64Size,
   TranscriptionCoordinator,
   KvStore,
   TranscriptionConfig,
@@ -11,11 +12,15 @@ import {
   ChatDeliveryMode,
 } from './transcription.coordinator.ts';
 
-function makeStore(): KvStore {
-  const m = new Map<string, unknown>();
+function makeStore(seed: Record<string, unknown> = {}): KvStore & { keys(): string[] } {
+  const m = new Map<string, unknown>(Object.entries(seed));
   return {
     get: async <T>(k: string) => (m.has(k) ? (m.get(k) as T) : null),
     set: async (k, v) => void m.set(k, v),
+    delete: async (k) => void m.delete(k),
+    // Mirrors the host: list(prefix) filters for you, and a bare list() returns everything.
+    list: async (prefix?: string) => [...m.keys()].filter((k) => !prefix || k.startsWith(prefix)),
+    keys: () => [...m.keys()],
   };
 }
 
@@ -212,4 +217,177 @@ test('a webhook delivery failure does not suppress the in-chat transcript delive
   await assert.doesNotReject(co.handle('s1', voiceMsg()));
   assert.equal(chatSends.length, 1);   // chat sink still fired despite the webhook failure
   assert.ok(warns.length >= 1);        // the webhook failure is still warned
+});
+
+// ── Storage growth (1.1.0) ──────────────────────────────────────────────────────────────────────────
+// The host re-stats every one of a plugin's storage keys on EVERY write. Pre-1.1.0 this plugin wrote one
+// never-deleted key per transcribed voice note plus one per session per hour, so each write cost more
+// than the last, forever.
+
+test('storage keys stay bounded at one dedup list + one rate counter per session', async () => {
+  const store = makeStore();
+  const { co } = setup({ store, config: { maxPerHour: 10_000 } });
+  for (let i = 0; i < 200; i++) await co.handle('s1', voiceMsg({ id: `m${i}` }));
+  assert.deepEqual(store.keys().sort(), ['rate:s1', 'seen:s1']);
+});
+
+test('the dedup list is capped, and still dedups within its window', async () => {
+  const store = makeStore();
+  const { co, provider } = setup({ store, config: { maxPerHour: 10_000 } });
+  for (let i = 0; i < 600; i++) await co.handle('s1', voiceMsg({ id: `m${i}` }));
+  const seen = (await store.get<string[]>('seen:s1'))!;
+  assert.ok(seen.length <= 500, `dedup list grew to ${seen.length}`);
+  const before = provider.calls.length;
+  await co.handle('s1', voiceMsg({ id: 'm599' })); // the most recent id is still remembered
+  assert.equal(provider.calls.length, before, 'a recently-seen message must not be transcribed again');
+});
+
+test('the hourly counter reuses one key across hours instead of leaving one behind per hour', async () => {
+  const store = makeStore();
+  let hour = 0;
+  const { co, provider } = setup({ store, config: { maxPerHour: 1 }, now: () => hour * 3_600_000 });
+  await co.handle('s1', voiceMsg({ id: 'a' }));
+  await co.handle('s1', voiceMsg({ id: 'b' })); // over the cap in the same hour
+  assert.equal(provider.calls.length, 1);
+  hour = 1; // next hour: the budget resets, and no second rate key appears
+  await co.handle('s1', voiceMsg({ id: 'c' }));
+  assert.equal(provider.calls.length, 2);
+  assert.equal(store.keys().filter(k => k.startsWith('rate:')).length, 1);
+});
+
+test('pre-1.1.0 per-message dedup keys are swept away as transcriptions run', async () => {
+  const legacy: Record<string, unknown> = {};
+  for (let i = 0; i < 60; i++) legacy[`seen:s1:old${i}`] = 1;
+  const store = makeStore(legacy);
+  const { co } = setup({ store, config: { maxPerHour: 10_000 } });
+  for (let i = 0; i < 3; i++) await co.handle('s1', voiceMsg({ id: `m${i}` }));
+  assert.equal(store.keys().filter(k => k.startsWith('seen:s1:')).length, 0, 'legacy keys should be gone');
+  assert.ok(store.keys().includes('seen:s1'), 'the new dedup list survives the sweep');
+});
+
+// ── Size guard (1.1.0) ──────────────────────────────────────────────────────────────────────────────
+// Checked before decoding: decoding first materialized an oversized note as a Buffer on top of the
+// base64 string already in memory, against a 256 MB worker heap the host does not respawn.
+
+test('oversized audio is skipped without ever being decoded', async () => {
+  const { co, provider, deliveries } = setup({ config: { maxSizeBytes: 10 } });
+  const big = { media: { mimetype: 'audio/ogg', data: Buffer.alloc(5000).toString('base64') } };
+  await co.handle('s1', voiceMsg(big as Partial<IncomingMessage>));
+  assert.equal(provider.calls.length, 0);
+  assert.equal(deliveries[0].status, 'skipped');
+  assert.equal(deliveries[0].reason, 'too_large');
+});
+
+// Padding matters: the naive floor(len/4)*3 - pad form under-counts UNPADDED base64, which would let an
+// oversized note through the guard instead of failing safe.
+test('decodedBase64Size is exact for padded and unpadded input', () => {
+  for (const raw of ['A', 'AB', 'ABC', 'ABCD', 'ABCDE', '', 'hello world!!']) {
+    const b64 = Buffer.from(raw).toString('base64');
+    assert.equal(decodedBase64Size(b64), Buffer.byteLength(raw), `padded: ${JSON.stringify(raw)}`);
+    const unpadded = b64.replace(/=+$/, '');
+    assert.equal(decodedBase64Size(unpadded), Buffer.byteLength(raw), `unpadded: ${JSON.stringify(raw)}`);
+  }
+});
+
+test('audio exactly at the limit is still transcribed', async () => {
+  const raw = Buffer.alloc(300, 7);
+  const { co, provider } = setup({ config: { maxSizeBytes: raw.byteLength } });
+  await co.handle('s1', voiceMsg({ media: { mimetype: 'audio/ogg', data: raw.toString('base64') } }));
+  assert.equal(provider.calls.length, 1, 'a note exactly at maxSizeBytes must not be rejected');
+});
+
+// Regression: the dedup claim is a read-modify-write over ONE list per session, and handle() is floated
+// off the hook — so a burst of voice notes interleaved and the last writer overwrote the others' ids.
+// Each lost id is a second paid STT call and, with chatDelivery 'reply', a duplicate transcript the
+// CONTACT sees. The pre-1.1.0 one-key-per-note scheme had no such window.
+test('a concurrent burst of voice notes claims every id exactly once', async () => {
+  const inner = makeStore();
+  const tick = () => new Promise(r => setTimeout(r, 1));
+  const slow: KvStore & { keys(): string[] } = {
+    get: async <T>(k: string) => { await tick(); return inner.get<T>(k); },
+    set: async (k, v) => { await tick(); return inner.set(k, v); },
+    delete: k => inner.delete(k),
+    list: p => inner.list(p),
+    keys: () => inner.keys(),
+  };
+  const { co, provider } = setup({ store: slow, config: { maxPerHour: 10_000 } });
+  const ids = ['a', 'b', 'c', 'd'];
+  await Promise.all(ids.map(id => co.handle('s1', voiceMsg({ id }))));
+
+  assert.equal(provider.calls.length, 4, 'each note transcribed once');
+  const seen = (await slow.get<string[]>('seen:s1')) ?? [];
+  assert.deepEqual([...seen].sort(), ids, 'every id retained — a lost one re-transcribes on redelivery');
+
+  // Replaying the burst must now be a complete no-op.
+  await Promise.all(ids.map(id => co.handle('s1', voiceMsg({ id }))));
+  assert.equal(provider.calls.length, 4, 'no duplicate STT call on redelivery');
+});
+
+// The pre-1.1.0 rate counter was `rate:<sid>:<hour>` — one key per hour, also never deleted. Sweeping
+// only the `seen:` family would leave a year-old install with ~8760 counter keys: exactly the per-write
+// stat cost the sweep exists to remove.
+test('the legacy sweep clears the old hourly rate keys too', async () => {
+  const legacy: Record<string, unknown> = {};
+  for (let i = 0; i < 30; i++) legacy[`seen:s1:old${i}`] = 1;
+  for (let i = 0; i < 30; i++) legacy[`rate:s1:${400000 + i}`] = 5;
+  const store = makeStore(legacy);
+  const { co } = setup({ store, config: { maxPerHour: 10_000 } });
+  for (let i = 0; i < 4; i++) await co.handle('s1', voiceMsg({ id: `m${i}` }));
+  assert.equal(store.keys().filter(k => k.startsWith('seen:s1:')).length, 0, 'legacy dedup keys gone');
+  assert.equal(store.keys().filter(k => k.startsWith('rate:s1:')).length, 0, 'legacy rate keys gone');
+  assert.ok(store.keys().includes('seen:s1'), 'the 1.1.0 dedup list survives');
+  assert.ok(store.keys().includes('rate:s1'), 'the 1.1.0 rate key survives');
+});
+
+// The host's list() swallows its own errors and resolves []. Retiring on a single empty listing would
+// therefore strand the legacy keys forever on one transient failure — the very thing being fixed.
+test('the sweep does not retire on a single empty listing', async () => {
+  const store = makeStore();
+  let listCalls = 0;
+  const flaky: KvStore & { keys(): string[] } = {
+    ...store,
+    list: async (p?: string) => { listCalls++; return listCalls <= 2 ? [] : store.list(p); },
+  };
+  const { co } = setup({ store: flaky, config: { maxPerHour: 10_000 } });
+  await co.handle('s1', voiceMsg({ id: 'a' }));
+  const afterFirst = listCalls;
+  await co.handle('s1', voiceMsg({ id: 'b' }));
+  assert.ok(listCalls > afterFirst, 'a second pass still runs after one clean-looking listing');
+});
+
+// Regression: the per-session claim chain must survive a coordinator rebuild. The plugin rebuilds the
+// coordinator whenever the resolved config signature changes, which with per-session config can be every
+// message — an instance-scoped chain handed each rebuild a fresh empty map and silently undid the
+// serialization the previous release added.
+test('the dedup claim stays serialized across coordinator rebuilds', async () => {
+  const inner = makeStore();
+  const tick = () => new Promise(r => setTimeout(r, 1));
+  const slow: KvStore & { keys(): string[] } = {
+    get: async <T>(k: string) => { await tick(); return inner.get<T>(k); },
+    set: async (k, v) => { await tick(); return inner.set(k, v); },
+    delete: k => inner.delete(k), list: p => inner.list(p), keys: () => inner.keys(),
+  };
+  const ids = ['a', 'b', 'c', 'd'];
+  // Every note handled by its OWN freshly built coordinator, as a per-session config override causes.
+  await Promise.all(ids.map(id => setup({ store: slow, config: { maxPerHour: 10_000 } }).co.handle('s1', voiceMsg({ id }))));
+  const seen = (await slow.get<string[]>('seen:s1')) ?? [];
+  assert.deepEqual([...seen].sort(), ids, 'a rebuild must not reset the claim chain');
+});
+
+// Regression: the sweep must never retire itself. The host's list() resolves [] on a read error, so an
+// empty listing cannot be told apart from a failed one — any retirement rule built on it strands the very
+// keys the sweep exists to remove.
+test('a transient list() failure does not stop the legacy sweep for good', async () => {
+  const store = makeStore({ 'seen:s1:legacy-1': 1 });
+  let broken = true;
+  const flaky: KvStore & { keys(): string[] } = {
+    ...store,
+    list: async (p?: string) => (broken ? [] : store.list(p)),
+  };
+  const { co } = setup({ store: flaky, config: { maxPerHour: 10_000 } });
+  await co.handle('s1', voiceMsg({ id: 'm1' }));      // listing broken → nothing swept
+  assert.ok(store.keys().includes('seen:s1:legacy-1'), 'still there while storage is broken');
+  broken = false;
+  await co.handle('s1', voiceMsg({ id: 'm2' }));      // storage recovers → sweep must still run
+  assert.ok(!store.keys().includes('seen:s1:legacy-1'), 'the sweep resumed after the transient failure');
 });

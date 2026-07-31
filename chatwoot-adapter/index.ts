@@ -62,6 +62,10 @@ export default class ChatwootAdapter implements IPlugin {
   private retryTimer: ReturnType<typeof setInterval> | null = null;
   private store: MappingStore | null = null;
   private deadLetterCount = 0;
+  // Inbound messages that could neither be relayed nor queued — actual data loss, almost always the host
+  // rejecting a write because the plugin is at its storage quota. Counted separately from dead-lettering:
+  // a dead letter was at least retried MAX_RETRY_ATTEMPTS times, this one never got a single attempt.
+  private lostCount = 0;
   private draining = false;
   private lastSeenPruneAt = 0;
   private seenPruning = false;
@@ -88,6 +92,10 @@ export default class ChatwootAdapter implements IPlugin {
       backfillLimit: cfg.backfillLimit,
       backfillAllOnce: cfg.backfillAllOnce,
       log: (m: string, e?: unknown) => ctx.logger.error(m, e),
+      onInboundLost: (msgId: string, e: unknown) => {
+        this.lostCount++;
+        ctx.logger.error(`inbound message ${msgId} LOST: could not be relayed and could not be queued`, e);
+      },
     });
 
     ctx.registerHook('message:received', async (h: HookContext): Promise<HookResult> => {
@@ -222,6 +230,11 @@ export default class ChatwootAdapter implements IPlugin {
     const parts: string[] = [];
     if (pending > 0) parts.push(`${pending} inbound message(s) pending retry${saturated ? ' — queue full, dropping oldest' : ''}`);
     if (this.deadLetterCount > 0) parts.push(`${this.deadLetterCount} dead-lettered after ${MAX_RETRY_ATTEMPTS} attempts`);
-    return { healthy: this.deadLetterCount === 0 && !saturated, message: parts.join('; ') || undefined };
+    // Listed last but the most serious: these never reached the queue at all, so `pending` cannot show them.
+    if (this.lostCount > 0) parts.push(`${this.lostCount} LOST (could not be queued — check the plugin storage quota)`);
+    return {
+      healthy: this.deadLetterCount === 0 && this.lostCount === 0 && !saturated,
+      message: parts.join('; ') || undefined,
+    };
   }
 }

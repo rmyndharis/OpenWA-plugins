@@ -38,6 +38,13 @@ function readOptionalString(
   const v = cfg[key];
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
+// The host clamps a net.fetch timeout of <= 0 up to 1 ms, so a config of 0 — which the schema's `min`
+// only discourages, never enforces — made every translate abort instantly, and the coordinator swallowed
+// the error with nothing logged. Clamp where it is actually enforceable: in code.
+function readTimeoutMs(cfg: Record<string, unknown>): number {
+  return Math.min(30_000, Math.max(500, readNumber(cfg, "timeoutMs", 4000)));
+}
+
 function readNumber(
   cfg: Record<string, unknown>,
   key: string,
@@ -94,7 +101,7 @@ export class TranslationPlugin implements IPlugin {
     return JSON.stringify([
       readString(cfg, "libretranslateUrl", "http://localhost:7001"),
       readOptionalString(cfg, "libretranslateApiKey") ?? "",
-      readNumber(cfg, "timeoutMs", 4000),
+      readTimeoutMs(cfg),
       readString(cfg, "commandPrefix", "/tr"),
       readNumber(cfg, "minLength", 2),
       readNumber(cfg, "maxLength", 2000),
@@ -112,7 +119,7 @@ export class TranslationPlugin implements IPlugin {
     const translator = new LibreTranslateClient({
       url: readString(cfg, "libretranslateUrl", "http://localhost:7001"),
       apiKey: readOptionalString(cfg, "libretranslateApiKey"),
-      timeoutMs: readNumber(cfg, "timeoutMs", 4000),
+      timeoutMs: readTimeoutMs(cfg),
       net: context.net,
       logger,
     });

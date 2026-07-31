@@ -95,7 +95,7 @@ function detailsBlock(e) {
     `| **Author** | ${authorName(e.author)} |`,
     `| **License** | ${e.license} |`,
     `| **Type** | \`${e.type}\` |`,
-    `| **Requires OpenWA** | ≥ ${e.minOpenWAVersion} (tested ${e.testedOpenWAVersion}) |`,
+    `| **Requires OpenWA** | ≥ ${e.minOpenWAVersion} ${e.testedOpenWAVersion ? `(tested ${e.testedOpenWAVersion})` : '(not yet smoke-tested)'} |`,
     `| **Keywords** | ${e.keywords.join(', ')} |`,
     `| **Repository** | [OpenWA-plugins/${e.id}](${e.homepage}) |`,
     '<!-- END DETAILS -->',

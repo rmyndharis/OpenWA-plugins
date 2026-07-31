@@ -6,6 +6,63 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-07-30
+
+First release verified against a live server: a self-hosted Typebot v3.17.2 driven over real WhatsApp
+through OpenWA 0.12.1, rather than against unit tests alone. That run is what found the first item.
+
+### Fixed
+
+- **`{{waNumber}}` reached every flow empty.** It read `msg.senderPhone`, which the host assigns *after*
+  the `message:received` chain has run, and then only for `@lid` senders — so a hook handler never
+  observes it set. Measured on the live server: the same published flow rendered `num=[628999000]` when
+  its Chat API was called directly, and `num=[]` on the identical message routed through this plugin. Any
+  flow branching on the contact's number therefore took the empty branch for every contact, silently. The
+  value now falls back to the digits of the sender JID — the participant's JID in a group, where
+  `from`/`chatId` is the group rather than a person. A `@lid` sender still yields an empty string on
+  purpose: a privacy id's numeric part is not a phone number, and feeding it to a CRM lookup as one would
+  be worse than feeding it nothing.
+- **Only a real user JID becomes a phone number.** The JID→digits helper first shipped in this
+  release denylisted `@lid`, which is not enough: a group, channel or broadcast JID has a numeric
+  local part too, so those were emitted as if they were phone numbers — worse than the empty value
+  they replaced. It now allowlists `@c.us` / `@s.whatsapp.net` and strips the `:device` suffix
+  Baileys can append. Caught in self-review before release.
+- **One failed part silenced the rest of the turn.** The send loop had no per-part isolation, so a single
+  failure — an unreachable `mediaHost`, a host media path that refuses the envelope — aborted every part
+  after it. Because state is persisted *before* sending (deliberately: the Typebot server has already
+  advanced), the contact was left with a half-delivered turn while the plugin believed the prompt was
+  out, and their next message was matched against an input they never saw. Each part is now isolated and
+  a failure is logged.
+- **Rows from sessions that stop sending entirely are reclaimed too.** The abandoned-session sweep is
+  scoped to the session whose message triggered it, because its threshold comes from that session's
+  config — but that leaves a disabled or deleted tenant's rows with nothing to list them, and every
+  stored key is stat-ed on every write, so they tax every other session's turns forever. A second,
+  unscoped pass removes rows idle past a week, a threshold no per-session timeout plausibly exceeds.
+- **A group message with no author is skipped instead of merged.** Group flows are keyed per sender, and
+  an authorless message fell back to a shared `unknown` key — so every such participant drove the SAME
+  Typebot session and one contact's answer advanced another contact's flow. There is no safe way to
+  attribute it, so the turn is skipped.
+- **The abandoned-session sweep is scoped to one WhatsApp session.** Its threshold comes from the
+  config resolved for the session whose message triggered it, and `sessionTimeoutMinutes` is
+  overridable per session — so an unscoped sweep applied one session's (possibly 5-minute) timeout
+  to every other session's rows and deleted flows still live under their own, longer, timeout: a
+  contact halfway through a long form would have silently restarted at question one. The sweep and
+  its throttle are now both per session. Caught in self-review before release.
+- **Sessions abandoned mid-flow were never cleaned up.** A completed flow clears its own row, but a
+  contact who simply stops replying leaves one behind forever. Beyond disk, that has a running cost:
+  OpenWA re-measures a plugin's storage quota on every write by stat-ing every key it owns, so abandoned
+  rows make each later turn slower, permanently. Rows idle past `sessionTimeoutMinutes` are now swept at
+  most hourly, driven by traffic rather than a timer so a disabled plugin leaves nothing running.
+
+### Documentation
+
+- A text input's **placeholder is sent to the contact as the prompt** — WhatsApp has no input field to
+  show it in. This is intended, but it means a placeholder written for a web form ("Type here…") reads as
+  a nonsense chat message. Write placeholders as prompts.
+- `apiHost` **must be https**, which the plugin already enforces at enable. A self-hosted Typebot reached
+  over plain http cannot be used: the host admits an operator-configured host only when it is https, and
+  the token this plugin sends would otherwise travel in clear text. Front a self-hosted instance with TLS.
+
 ## [0.1.0] — 2026-07-03
 
 Initial release — a WhatsApp ↔ Typebot bridge that runs a Typebot flow as the WhatsApp bot.

@@ -57,7 +57,11 @@ export default class FaqBot implements IPlugin {
   private warnSkipped(ctx: PluginContext): void {
     const { skipped } = parseConfig(ctx.config);
     if (skipped.length) {
-      ctx.logger.warn(`faq-bot: skipped ${skipped.length} rule(s) with an invalid regex: ${skipped.join(', ')}`);
+      // Truncate each pattern before joining. The host caps a log line at 8 KiB and drops the overflow,
+      // so one pathological rule could push the list past the cap and take every other skipped pattern
+      // with it — losing exactly the diagnostic this line exists to give.
+      const preview = skipped.map(p => (p.length > 80 ? `${p.slice(0, 80)}…` : p)).join(', ');
+      ctx.logger.warn(`faq-bot: skipped ${skipped.length} rule(s) with an invalid regex: ${preview}`);
     }
   }
 

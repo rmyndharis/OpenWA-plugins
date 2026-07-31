@@ -67,3 +67,37 @@ test('onMessage re-reads ctx.config per event (per-session config is not cached 
     data: { id: 'm1', chatId: 'c@x', body: 'hi', fromMe: false, isGroup: false } });
   assert.ok(warnings.some(w => /config invalid/.test(w)), 'corrupted post-enable config was re-read and warned');
 });
+
+// Drives the PLUGIN. Every non-text message carries body: '', so guarding only on the TYPE let a
+// sticker or voice note start the flow (with the documented empty trigger) or draw an "Invalid option".
+test('a body-less message never reaches the flow engine', async () => {
+  const ChatFlow = (await import('./index.ts')).default;
+  const sent: string[] = [];
+  let handler: ((h: unknown) => Promise<{ continue: boolean }>) | undefined;
+  const store = new Map<string, unknown>();
+  const ctx = {
+    config: { greeting: 'halo', trigger: '', options: [{ key: '1', text: 'satu' }] },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    messages: { sendText: async (_s: string, _c: string, t: string) => { sent.push(t); return { messageId: 'x', timestamp: 0 }; },
+                reply: async (_s: string, _c: string, _q: string, t: string) => { sent.push(t); return { messageId: 'x', timestamp: 0 }; } },
+    storage: {
+      get: async (k: string) => store.get(k) ?? null,
+      set: async (k: string, v: unknown) => void store.set(k, v),
+      delete: async (k: string) => void store.delete(k),
+      list: async () => [...store.keys()],
+    },
+    registerHook: (_e: string, h: (x: unknown) => Promise<{ continue: boolean }>) => { handler = h; },
+  } as never;
+
+  const plugin = new ChatFlow();
+  await plugin.onEnable(ctx);
+  const fire = (body: string, id: string) =>
+    handler!({ source: 'Engine', sessionId: 's1', data: { id, chatId: 'c@wa', body, fromMe: false, isGroup: false } });
+
+  await fire('', 'm1');      // sticker / voice note / caption-less image
+  await fire('   ', 'm2');
+  assert.deepEqual(sent, [], 'a body-less message must not start the flow');
+  await fire('apa saja', 'm3'); // real text: the empty trigger means anything starts it
+  assert.ok(sent.length > 0, 'a real message still starts the flow');
+  await plugin.onDisable();
+});

@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chat-flow` |
-| **Version** | 1.0.7 |
-| **Released** | 2026-07-22 |
+| **Version** | 1.0.8 |
+| **Released** | 2026-07-30 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -99,7 +99,7 @@ plugin's **Flow editor**.
 | --- | -------- | ------- | ----------- |
 | `greeting` | yes | — | The greeting + menu sent when the flow starts |
 | `options` | yes | — | The menu tree: array of `{ key, text, options? }` nodes (nests arbitrarily) |
-| `trigger` | no | `""` | Word that starts the flow (case-insensitive); empty = any message starts it |
+| `trigger` | no | `""` | Word that starts the flow (case-insensitive); empty = any message **with text** starts it — a sticker, voice note or caption-less image never does |
 | `respondInGroups` | no | `false` | Whether to run in group chats (each participant walks their own flow) |
 
 ## Compatibility

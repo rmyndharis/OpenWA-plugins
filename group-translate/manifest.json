@@ -1,7 +1,7 @@
 {
   "id": "group-translate",
   "name": "Group Auto-Translation",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled.",
@@ -60,6 +60,7 @@
         "type": "number",
         "title": "Translate timeout (ms)",
         "default": 4000,
+        "min": 500,
         "description": "Per-call timeout. Keep at or below the host hook budget (5000ms) so a slow backend doesn't make the host proceed un-translated."
       },
       "commandPrefix": {

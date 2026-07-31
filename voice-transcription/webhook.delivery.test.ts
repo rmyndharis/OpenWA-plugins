@@ -11,9 +11,6 @@ function res(partial: { ok?: boolean; status?: number }): PluginNetResponse {
     statusText: '',
     headers: {},
     body: '',
-    text: async () => '',
-    json: (async () => ({})) as PluginNetResponse['json'],
-    arrayBuffer: async () => new ArrayBuffer(0),
   };
 }
 

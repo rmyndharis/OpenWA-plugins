@@ -38,6 +38,13 @@ function readOptionalString(
   const v = cfg[key];
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
+// The host never validates configSchema bounds, so the manifest `max` is advisory only. Clamp where
+// it is enforceable: a stored value above the host's 30s per-capability ceiling would make the cap
+// timer and the fetch abort race, reporting an STT timeout as a capability timeout.
+function readTimeoutMs(cfg: Record<string, unknown>): number {
+  return Math.min(25000, Math.max(1000, readNumber(cfg, "timeoutMs", 20000)));
+}
+
 function readNumber(
   cfg: Record<string, unknown>,
   key: string,
@@ -89,6 +96,16 @@ export class VoiceTranscriptionPlugin implements IPlugin {
         { action: "transcription_no_delivery" },
       );
     }
+    // The host never enforces a configSchema `required` field, so the plugin enables cleanly with no STT
+    // backend and then fails every transcription with a net-allow error that reads like a misconfigured
+    // allowlist rather than a missing setting. Warn instead of throwing: this runs off the message path,
+    // is fail-open by design, and onEnable now also runs unattended at host boot.
+    if (!readOptionalString(context.config, "sttBaseUrl")) {
+      context.logger.warn(
+        "voice-transcription: sttBaseUrl is not set — every transcription will fail until it is configured",
+        { action: "transcription_no_backend" },
+      );
+    }
     context.logger.log("Voice transcription plugin enabled", {
       action: "transcription_enabled",
     });
@@ -115,7 +132,7 @@ export class VoiceTranscriptionPlugin implements IPlugin {
       readOptionalString(cfg, "sttApiKey") ?? "",
       readString(cfg, "model", "small"),
       readOptionalString(cfg, "language") ?? "",
-      readNumber(cfg, "timeoutMs", 20000),
+      readTimeoutMs(cfg),
       readString(cfg, "deliveryWebhookUrl", ""),
       readOptionalString(cfg, "deliverySecret") ?? "",
       readNumber(cfg, "deliveryTimeoutMs", 5000),
@@ -142,7 +159,7 @@ export class VoiceTranscriptionPlugin implements IPlugin {
       apiKey: readOptionalString(cfg, "sttApiKey"),
       model: readString(cfg, "model", "small"),
       language: readOptionalString(cfg, "language"),
-      timeoutMs: readNumber(cfg, "timeoutMs", 20000),
+      timeoutMs: readTimeoutMs(cfg),
       net: context.net,
     });
     const deliveryUrl = readString(cfg, "deliveryWebhookUrl", "");
@@ -157,6 +174,8 @@ export class VoiceTranscriptionPlugin implements IPlugin {
     const store: KvStore = {
       get: (key) => context.storage.get(key),
       set: (key, value) => context.storage.set(key, value),
+      delete: (key) => context.storage.delete(key),
+      list: (prefix) => context.storage.list(prefix),
     };
     return new TranscriptionCoordinator({
       provider,

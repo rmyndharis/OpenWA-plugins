@@ -13,6 +13,7 @@ function deps(over: { client?: Record<string, unknown>; store?: Record<string, u
   let contacts = 0;
   let convs = 0;
   const posted: Array<{ id: number; c: string }> = [];
+  const lost: string[] = [];
   const store = new Map<string, unknown>();
   const client = {
     searchContact: async () => null,
@@ -36,8 +37,9 @@ function deps(over: { client?: Record<string, unknown>; store?: Record<string, u
   const d = {
     lock: new KeyedAsyncLock(), client, store: mapping, engine, instanceId: 'inst',
     relayGroups: true, relayMedia: true, log: () => {},
+    onInboundLost: (msgId: string) => void lost.push(msgId),
   } as unknown as InboundDeps;
-  return { deps: d, counts: () => ({ contacts, convs }), posted };
+  return { deps: d, counts: () => ({ contacts, convs }), posted, lost };
 }
 
 test('a migrated contact (@lid inbound, @c.us-keyed conversation) reuses the EXISTING conversation via dual-lookup, no split', async () => {
@@ -283,4 +285,45 @@ test('a group inbound creates the group contact without a phone, regardless of s
   assert.equal(calls.length, 1);
   assert.equal(calls[0].phone, undefined); // groups never get a phone
   assert.equal(calls[0].name, 'Group 120363@g.us');
+});
+
+// ── Storage failure: the message must never disappear without saying so ─────────────────────────────
+// The host rejects EVERY storage.set once a plugin is at its 50 MiB quota. Before 0.6.0 that rejection
+// was swallowed: enqueueRetry's .catch logged and returned null, so the "queue full" branch never fired,
+// the drop-oldest policy never ran, and healthCheck kept reporting green while messages vanished.
+
+test('a relay failure that also fails to enqueue is reported as LOST, not swallowed', async () => {
+  const { deps: d, lost } = deps({
+    client: { postText: async () => { throw new Error('chatwoot down'); } },
+    store: { enqueueRetry: async () => { throw new Error('storage quota exceeded'); } },
+  });
+  await handleInbound(d, 'sess', 'Engine', msg);
+  assert.deepEqual(lost, ['m1']);
+});
+
+test('a relay failure that DOES enqueue is not reported as lost', async () => {
+  const queued: unknown[] = [];
+  const { deps: d, lost } = deps({
+    client: { postText: async () => { throw new Error('chatwoot down'); } },
+    store: { enqueueRetry: async (e: unknown) => { queued.push(e); return null; } },
+  });
+  await handleInbound(d, 'sess', 'Engine', msg);
+  assert.equal(queued.length, 1);
+  assert.deepEqual(lost, []);
+});
+
+// markSeen sits inside the try since 0.6.0. Left outside, a rejected marker write threw straight out of
+// the hook with the message neither relayed nor queued — and nothing counted it.
+test('a markSeen failure takes the retry path instead of escaping the handler', async () => {
+  const queued: unknown[] = [];
+  const { deps: d, lost, posted } = deps({
+    store: {
+      markSeen: async () => { throw new Error('storage quota exceeded'); },
+      enqueueRetry: async (e: unknown) => { queued.push(e); return null; },
+    },
+  });
+  await handleInbound(d, 'sess', 'Engine', msg); // must not reject
+  assert.equal(queued.length, 1, 'the message is queued for retry');
+  assert.deepEqual(lost, []);
+  assert.deepEqual(posted, [], 'nothing was relayed');
 });

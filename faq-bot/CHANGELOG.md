@@ -8,6 +8,17 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.1.8] — 2026-07-30
+
+### Fixed
+
+- **One pathological rule could hide every other skipped rule.** The startup warning joined all skipped
+  regex patterns into a single line, and the host caps a log line at 8 KiB and drops the overflow — so a
+  single very long pattern took the rest of the diagnostic with it. Each pattern is now truncated to 80
+  characters before joining, so no single rule can crowd out the rest. With enough skipped rules the line
+  can still reach the cap — the count at the front stays accurate either way, and is the signal to look
+  at the config.
+
 ## [0.1.7] — 2026-07-18
 
 ### Fixed

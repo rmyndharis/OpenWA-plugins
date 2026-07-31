@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this plugin adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The version here always matches `manifest.json`'s `version`.
 
+## [0.3.1] — 2026-07-30
+
+### Fixed
+
+- **Every non-text send failure was logged as a text message with an empty body.** `message:failed` used
+  to fire only from `sendText`, so hardcoding the `type` column to `text` and reading the body from
+  `input.text` was accurate. OpenWA 0.12 routes every sender through one shared failure path that carries
+  the real `type` — image, video, voice, audio, document, location, contact, poll, sticker, reply, forward
+  and bulk (not edit, which has no failure path of its own) — and a media send holds its caption in `caption`, not `text`. An audit sheet is only worth
+  what its worst row is worth: a failed invoice photo appeared as a `text` message with nothing in it.
+  The row now logs the reported type and falls back through `text` → `caption` → `body` for the content.
+  A payload with no `type` (an older host) still logs as `text`.
+  Bulk sends are a related case worth stating rather than a change: their payload is the shared
+  content, with the recipient on the enclosing item, so there is genuinely no `chatId` to log. Those
+  columns stay blank — the row is still attributable by session, error and timestamp.
+
 ## [0.3.0] — 2026-07-23
 
 ### Changed

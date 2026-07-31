@@ -51,3 +51,16 @@ test('getGroupAdmins returns [] when there is no group info', async () => {
   const gw = new PluginChatGateway(messages as never, engine as never);
   assert.deepEqual(await gw.getGroupAdmins('s', 'c@g.us'), []);
 });
+
+// The host rejects an empty positional capability argument outright, so an empty translation stopped
+// being a blank WhatsApp bubble and became a thrown capability error instead.
+test('an empty or whitespace-only translation is dropped, not sent', async () => {
+  const messages = makeMessages();
+  const engine = { getGroupInfo: async () => null };
+  const gw = new PluginChatGateway(messages as never, engine as never);
+  await gw.sendText('s', 'c@g.us', '');
+  await gw.sendText('s', 'c@g.us', '   ');
+  await gw.sendCombinedReply('s', 'c@g.us', 'q', '');
+  assert.equal(messages.calls.sendText.length, 0);
+  assert.equal(messages.calls.reply.length, 0);
+});

@@ -89,43 +89,19 @@ test('prefers req.sessionId over fallbackSessionId', async () => {
   assert.equal(sent[0].chatId, '15559876543@c.us');
 });
 
-// ── canonical chat id (LID migration) ────────────────────────────────────────
+// ── chat id derivation ───────────────────────────────────────────────────────
+// There is no canonicalChatId round-trip any more. It could never change anything: phoneToChatId always
+// produces `<digits>@c.us`, and the host's resolver returns a user-kind jid unchanged — the old tests
+// only "passed" because their fake returned a `@lid` id the real host would never return for that input.
 
-test('uses canonicalChatId when provided (sends to the resolved id, not the phone JID)', async () => {
+test('the OTP is addressed to the phone-derived JID, with no engine round-trip', async () => {
   const { sent, deps } = makeDeps();
-  const calls: Array<[string, string]> = [];
-  const canonicalChatId = async (sessionId: string, chatId: string) => {
-    calls.push([sessionId, chatId]);
-    return '99999@lid';
-  };
   await handleSendSms(
-    { ...deps, canonicalChatId },
-    makeReq({ user: { phone: '+15551234567' }, sms: { otp: '123456' } }, { sessionId: 'sess-1' }),
-  );
-  assert.deepEqual(calls, [['sess-1', '15551234567@c.us']]);
-  assert.equal(sent[0].chatId, '99999@lid');
-});
-
-test('falls back to the phone-derived JID when canonicalChatId throws', async () => {
-  const { sent, deps } = makeDeps();
-  const canonicalChatId = async () => { throw new Error('engine unavailable'); };
-  await handleSendSms(
-    { ...deps, canonicalChatId },
+    deps,
     makeReq({ user: { phone: '+15551234567' }, sms: { otp: '123456' } }, { sessionId: 'sess-1' }),
   );
   assert.equal(sent[0].chatId, '15551234567@c.us');
-});
-
-test('falls back to the phone-derived JID when canonicalChatId hangs (>2 s bridge timeout)', async () => {
-  const { sent, deps } = makeDeps();
-  const canonicalChatId = () => new Promise<string>(() => {}); // never settles
-  const start = Date.now();
-  await handleSendSms(
-    { ...deps, canonicalChatId },
-    makeReq({ user: { phone: '+15551234567' }, sms: { otp: '123456' } }, { sessionId: 'sess-1' }),
-  );
-  assert.equal(sent[0].chatId, '15551234567@c.us');
-  assert.ok(Date.now() - start < 2900, 'must fall back after the 2 s timeout, not stall the ingress job');
+  assert.equal(sent[0].sessionId, 'sess-1');
 });
 
 // ── validation / no-send paths (return → no retry) ───────────────────────────

@@ -58,6 +58,7 @@ function makeDeps(
     backfillLimit: over.backfillLimit ?? 20,
     backfillAllOnce: false,
     log: () => {},
+      onInboundLost: () => {},   // required on InboundDeps; the cast would hide its absence
   } as unknown as InboundDeps;
   return { deps, posts, creates, seen };
 }

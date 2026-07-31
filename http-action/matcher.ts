@@ -27,7 +27,10 @@ export function matchAction(actions: HttpAction[], body: string): MatchResult | 
     const hay = caseSensitive ? body : body.toLowerCase();
     const needle = caseSensitive ? value : value.toLowerCase();
     if (type === 'exact') {
-      if (hay === needle) return { action, args: [] };
+      // Trimmed: mobile keyboards routinely append a space after an autocorrected word, so an untrimmed
+      // comparison made `ping ` miss a `ping` trigger with nothing to show for it. Only the exact arm
+      // trims — the prefix arm still slices the ORIGINAL body so argument positions are unaffected.
+      if (hay.trim() === needle.trim()) return { action, args: [] };
     } else if (hay.startsWith(needle)) {
       return { action, args: parseArgs(body.slice(value.length)) };
     }

@@ -27,12 +27,23 @@ interface Marker {
 
 const dedupKey = (sessionId: string, msgId: string): string => `${KEY_PREFIX}${sessionId}:${msgId}`;
 
-/** Read-only presence check. True if `msgId` is already marked (or on storage error → fail-closed drop). */
-export async function hasSeen(storage: StorageLike, sessionId: string, msgId: string): Promise<boolean> {
+/**
+ * Read-only presence check. True if `msgId` is already marked (or on storage error → fail-closed drop).
+ * `onError` is how the caller learns a drop was caused by storage rather than by a genuine duplicate:
+ * without it, a failed read silently swallowed the command — no reply, no error template, no log line,
+ * and the operator saw a command simply vanish.
+ */
+export async function hasSeen(
+  storage: StorageLike,
+  sessionId: string,
+  msgId: string,
+  onError?: (e: unknown) => void,
+): Promise<boolean> {
   try {
     const v = await storage.get<Marker>(dedupKey(sessionId, msgId));
     return v !== null && v !== undefined;
-  } catch {
+  } catch (e) {
+    onError?.(e);
     return true; // fail-closed: can't read → drop rather than risk a double-fire
   }
 }

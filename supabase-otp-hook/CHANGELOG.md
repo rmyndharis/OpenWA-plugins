@@ -5,6 +5,35 @@ All notable changes to this plugin are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-07-30
+
+### Removed
+
+- **The `engine:read` permission, and the `canonicalChatId` round-trip that needed it.** The call looked
+  like it protected an OTP addressed to a contact keyed by a `@lid` privacy id, but it could never change
+  anything: the chat id is always derived as `<digits>@c.us`, and the host's resolver returns a user-kind
+  jid unchanged. It cost a 2-second race, a live-engine dependency on the OTP critical path, and a
+  permission this plugin did not need — for a guaranteed round-trip to the same string. The README
+  already claimed the plugin asked for no `engine:read`; now that is true.
+
+### Fixed
+
+- **The documented setup order could not succeed.** The guide said to install and enable the plugin
+  first, but enabling validates the plugin's *base* config and refuses to start without `appName`, while
+  the instance minted in step 1 carries a *per-instance* config. Following the README as written left
+  enable failing. A base-config step now comes before enable.
+
+### Documentation
+
+- Delivery is **at-least-once**, and returning from the handler completes the job but does not guarantee
+  it runs once: if an outcome is never recorded, the host's reconciler re-dispatches the row. The replay
+  carries the same payload, so the contact receives the *same* code again — noise, not a security
+  problem. Recorded explicitly, along with why there is deliberately no per-delivery dedup store: it
+  would put an unbounded key-per-delivery on the OTP critical path to suppress a duplicate of an
+  identical message.
+- Per-user ordering and the retry/DLQ path require `QUEUE_ENABLED=true`; with the queue off, ingress
+  runs inline, takes no ordering lock, and makes one attempt.
+
 ## [0.2.0] — 2026-07-23
 
 ### Added

@@ -17,6 +17,10 @@ export interface InboundDeps {
   backfillLimit: number;
   backfillAllOnce: boolean;
   log: (m: string, e?: unknown) => void;
+  // Called when an inbound message could not be relayed AND could not be queued for retry — i.e. it is
+  // lost. The only way this failure reaches an operator: the retry queue can't count an entry it never
+  // managed to store, so healthCheck would otherwise report green while dropping messages.
+  onInboundLost: (msgId: string, err: unknown) => void;
 }
 
 function senderLabel(msg: IncomingMessage): string {
@@ -40,7 +44,7 @@ function locationText(msg: IncomingMessage): string {
 
 // A short stand-in for a bodyless message we couldn't relay as media (e.g. a voice note or sticker whose
 // blob was omitted for size), so Chatwoot shows a meaningful line instead of an empty bubble.
-function placeholderFor(msg: IncomingMessage): string {
+export function placeholderFor(msg: IncomingMessage): string {
   // Type-based markers first: a media message relayed via `message:sent` (own outbound send) carries NO
   // media object at all — wwjs' message_create path is not enriched — so `msg.media` is absent and only
   // `msg.type` distinguishes it. Without a per-type marker a caption-less photo/video/etc would post an
@@ -53,9 +57,13 @@ function placeholderFor(msg: IncomingMessage): string {
   if (msg.type === 'video') return '🎥 Video';
   if (msg.type === 'audio') return '🎵 Audio';
   if (msg.type === 'contact') return '👤 Contact';
+  if (msg.type === 'poll') return '📊 Poll';
   if (msg.type === 'document') return `📎 ${msg.media?.filename ?? 'Document'}`;
   if (msg.media) return `📎 ${msg.media.filename ?? 'Attachment'}`;
-  return msg.body;
+  // Never return an empty string: this is only reached for a message with no relayable body, and Chatwoot
+  // rejects empty content with a 422 — which, since the message is already marked seen, dropped it for good.
+  // `call`, `revoked`, `masked` and `unknown` all arrive bodyless, and so does any future host type.
+  return msg.body?.trim() || `💬 ${msg.type || 'Message'}`;
 }
 
 // Render one WhatsApp message into Chatwoot (text / media / location / sticker / voice, with quote

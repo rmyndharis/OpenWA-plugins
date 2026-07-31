@@ -35,7 +35,19 @@ export function readConfig(raw: Record<string, unknown>): TypebotConfig {
   };
 }
 
+// How often the abandoned-session sweep may run. In-memory and best-effort: a worker restart just means
+// the first turn after it sweeps again, which is harmless.
+const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+
+// Threshold for the unscoped orphan pass. Far above any plausible `sessionTimeoutMinutes`, so a row it
+// removes is dead under ANY session's configuration — which is what makes an unscoped sweep safe.
+const ORPHAN_IDLE_MS = 7 * 24 * 60 * 60 * 1000;
+
 export default class TypebotConnector implements IPlugin {
+  // Per WhatsApp session: the sweep itself is scoped to one session's rows, so a single global
+  // throttle would let the first session to fire starve every other session's cleanup for an hour.
+  private readonly lastSweepAt = new Map<string, number>();
+
   async onEnable(ctx: PluginContext): Promise<void> {
     readConfig(ctx.config); // fail fast at enable time
     const lock = new KeyedAsyncLock();
@@ -48,6 +60,25 @@ export default class TypebotConnector implements IPlugin {
         // Re-read config per event so a live edit is picked up; build the client with the resolved config.
         const cfg = readConfig(ctx.config);
         const client = new TypebotClient(ctx.net.fetch.bind(ctx.net), cfg);
+        // Sweep rows left by contacts who walked away mid-flow. A finished flow clears its own row, so
+        // these are the only ones that would otherwise accumulate for the life of the install — and the
+        // host stats every stored key on every write, so they tax each later turn. Floated: cleanup must
+        // never delay a reply, and it is deliberately driven by traffic rather than a timer so a disabled
+        // plugin leaves nothing running.
+        const now = Date.now();
+        if (now - (this.lastSweepAt.get(sessionId) ?? 0) > SWEEP_INTERVAL_MS) {
+          this.lastSweepAt.set(sessionId, now);
+          void store
+            .pruneIdle(now, cfg.sessionTimeoutMinutes * 60_000, sessionId)
+            .then(n => n && ctx.logger.log(`typebot-connector: pruned ${n} abandoned session(s)`))
+            .catch(e => ctx.logger.error('typebot-connector: session prune failed', e));
+          // Also reclaim rows belonging to sessions that have gone silent entirely — they are never
+          // listed by the scoped pass above, and every stored key is stat-ed on every write.
+          void store
+            .pruneOrphans(now, ORPHAN_IDLE_MS)
+            .then(n => n && ctx.logger.log(`typebot-connector: pruned ${n} orphaned session row(s)`))
+            .catch(e => ctx.logger.error('typebot-connector: orphan prune failed', e));
+        }
         // Off-dispatch: return {continue:true} immediately; a slow/failing Typebot call never blocks WA.
         void handleTurn(
           { cfg, client, store, lock, conversations: ctx.conversations, now: () => Date.now(), log: (m, e) => ctx.logger.error(m, e) },

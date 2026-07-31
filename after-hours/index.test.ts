@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseConfig } from './index.ts';
 import { allowCooldown as allowReply } from './cooldown.ts';
@@ -83,4 +83,96 @@ test('onMessage re-reads ctx.config per event (per-session config is not cached 
   await handler({ source: 'Engine', sessionId: 's1', timestamp: new Date(),
     data: { id: 'm1', chatId: 'c@x', body: 'hi', fromMe: false, isGroup: false } });
   assert.ok(warnings.some(w => /config invalid/.test(w)), 'corrupted post-enable config was re-read and warned');
+});
+
+// Drives the PLUGIN, not a re-implementation. A failed reply must not silence the chat for the whole
+// cooldown, and must not remove the throttle either: clearing it outright turned a permanently-blocked
+// send (a compliance plugin vetoing message:sending) into one send attempt per inbound message.
+test('a failed away reply is throttled, not retried on every message', async () => {
+  const AfterHours = (await import('./index.ts')).default;
+  const attempts: string[] = [];
+  let handler: ((h: unknown) => Promise<unknown>) | undefined;
+  const ctx = {
+    // Open for one minute starting two minutes from now (UTC), every day — so "now" is deterministically
+    // outside business hours whatever time the suite runs at, without needing to inject a clock.
+    // The clock is mocked to a fixed instant below (a Thursday, 00:16 UTC), so this window is
+    // deterministically closed — no dependence on when the suite happens to run.
+    config: { schedule: JSON.stringify({ thu: '09:00-17:00' }), timezone: 'UTC',
+              awayMessage: 'tutup', cooldownSec: 3600 },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    messages: {
+      sendText: async () => ({ messageId: 'x', timestamp: 0 }),
+      reply: async () => { attempts.push('try'); throw new Error('blocked by plugin'); },
+    },
+    registerHook: (_e: string, h: (x: unknown) => Promise<unknown>) => { handler = h; },
+  } as never;
+
+  const plugin = new AfterHours();
+  await plugin.onEnable(ctx);
+  const fire = (id: string) =>
+    handler!({ source: 'Engine', sessionId: 's1', data: { id, chatId: 'c@wa', body: 'halo', fromMe: false } });
+
+  // Fake the clock so the backoff window is observable. cooldownSec is 3600, so anything that retries
+  // within the hour can only be the failure backoff — not the normal cooldown expiring.
+  mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  try {
+    await fire('m1');
+    assert.equal(attempts.length, 1, 'first message attempts a reply');
+
+    await fire('m2');
+    await fire('m3');
+    assert.equal(attempts.length, 1, 'a failing send must not be retried on every inbound message');
+
+    mock.timers.tick(30_000);
+    await fire('m4');
+    assert.equal(attempts.length, 1, 'still inside the backoff window');
+
+    mock.timers.tick(31_000); // now past 60 s since the failure
+    await fire('m5');
+    assert.equal(attempts.length, 2, 'after the backoff the reply is attempted again, well inside cooldownSec');
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+// Regression: the backoff must not be expressible in terms of the CURRENT cooldown. Encoding it as a
+// rewound cooldown timestamp meant an operator lowering cooldownSec in the dashboard — config is re-read
+// per message — turned the stored value into "long past" and handed back the un-throttled retry storm.
+test('lowering cooldownSec mid-backoff does not release the retry storm', async () => {
+  const attempts: string[] = [];
+  let handler: ((h: unknown) => Promise<unknown>) | undefined;
+  const cfg: Record<string, unknown> = {
+    schedule: JSON.stringify({ thu: '09:00-17:00' }), timezone: 'UTC',
+    awayMessage: 'tutup', cooldownSec: 3600,
+  };
+  const ctx = {
+    get config() { return cfg; },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    messages: {
+      sendText: async () => ({ messageId: 'x', timestamp: 0 }),
+      reply: async () => { attempts.push('try'); throw new Error('vetoed'); },
+    },
+    registerHook: (_e: string, h: (x: unknown) => Promise<unknown>) => { handler = h; },
+  } as never;
+
+  const AfterHours = (await import('./index.ts')).default;
+  const plugin = new AfterHours();
+  await plugin.onEnable(ctx);
+  const fire = (id: string) =>
+    handler!({ source: 'Engine', sessionId: 's1', data: { id, chatId: 'c@wa', body: 'halo', fromMe: false } });
+
+  mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  try {
+    await fire('m1');
+    assert.equal(attempts.length, 1);
+    cfg.cooldownSec = 1;              // operator lowers it while the backoff is still running
+    mock.timers.tick(5_000);
+    await fire('m2');
+    assert.equal(attempts.length, 1, 'the failure backoff must survive a live cooldown change');
+    mock.timers.tick(56_000);         // now past 60 s since the failure
+    await fire('m3');
+    assert.equal(attempts.length, 2, 'and it must still expire on time');
+  } finally {
+    mock.timers.reset();
+  }
 });
