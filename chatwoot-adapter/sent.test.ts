@@ -47,7 +47,9 @@ function deps(
     lock: new KeyedAsyncLock(), client, store, engine, instanceId: 'inst',
     relayGroups: over.relayGroups ?? true, relayMedia: over.relayMedia ?? true, backfillLimit: 0, backfillAllOnce: false,
     log: () => {},
-      onInboundLost: () => {},   // required on InboundDeps; the cast would hide its absence
+    // Both callbacks are required on InboundDeps; the cast would hide an omitted one.
+    onInboundLost: () => {},
+    onBackfillExhausted: () => {},
   } as unknown as InboundDeps;
   return { deps: d, counts: () => ({ contacts, convs }), posted, seen };
 }

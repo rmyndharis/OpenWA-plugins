@@ -19,6 +19,16 @@ export interface ChatLink {
   // Last name synced to the Chatwoot contact. Lets inbound skip a redundant rename and detect when a real
   // pushName has arrived for a contact first seeded with a bare JID. Absent on pre-0.2.0 rows.
   name?: string;
+  // History-import state. Kept on this document rather than in its own key: the host re-measures the
+  // 50 MiB quota by stat-ing every key on every write, so key COUNT is a per-message cost. `done` and
+  // `attempts` stay separate on purpose — a retry budget that ran out must never be recorded as a
+  // completed import, which is precisely how the previous `created`-derived trigger lost history.
+  //
+  // Three states, not two. `false` is written at creation and means "eligible for import"; `true` means
+  // imported; ABSENT means the mapping predates the marker (pre-0.7.0) and must never be imported — that
+  // chat was already handled by the old scheme, and re-importing it duplicates its whole window.
+  backfillDone?: boolean;
+  backfillAttempts?: number;
 }
 
 // Single-document-per-chat mapping over ctx.storage, mirrored into the core ctx.mappings row so the

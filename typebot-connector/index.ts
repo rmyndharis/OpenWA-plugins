@@ -4,6 +4,11 @@ import { KeyedAsyncLock } from './chat-lock.ts';
 import { SessionStore } from './session-store.ts';
 import { TypebotClient } from './typebot-client.ts';
 import { handleTurn } from './turn.ts';
+import { inScope } from './filters.ts';
+
+// Responder band, late: this plugin auto-starts a flow for every chat it is in scope for, so it is a
+// catch-all brain and should not pre-empt a command or an in-flow menu.
+const HOOK_PRIORITY = 85;
 
 // Read + validate config. Fail-fast on a bad apiHost so a misconfigured plugin never silently no-ops (the
 // host net allowlist only admits an https, credential-free host).
@@ -79,16 +84,20 @@ export default class TypebotConnector implements IPlugin {
             .then(n => n && ctx.logger.log(`typebot-connector: pruned ${n} orphaned session row(s)`))
             .catch(e => ctx.logger.error('typebot-connector: orphan prune failed', e));
         }
-        // Off-dispatch: return {continue:true} immediately; a slow/failing Typebot call never blocks WA.
+        // Off-dispatch: return immediately; a slow or failing Typebot call never blocks WA.
         void handleTurn(
           { cfg, client, store, lock, conversations: ctx.conversations, now: () => Date.now(), log: (m, e) => ctx.logger.error(m, e) },
           sessionId,
           h.source,
           msg,
         ).catch(e => ctx.logger.error('typebot turn failed', e));
+        // Claim every chat this bot is in scope for. handleTurn re-checks the same predicate before doing
+        // anything, so the two can never disagree. A Typebot outage therefore produces silence rather
+        // than an unrelated plugin answering on this bot's behalf.
+        return { continue: !inScope(msg, h.source, cfg.respondInGroups) };
       }
       return { continue: true };
-    });
+    }, HOOK_PRIORITY);
 
     ctx.logger.log('typebot-connector enabled');
   }

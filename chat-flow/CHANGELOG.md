@@ -8,6 +8,17 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-07-31
+
+### Fixed
+
+- **Which bot answered a message inside an open flow depended on plugin enable order.** This plugin ran
+  at the default hook priority, the same one other auto-reply plugins use by default, so whether this
+  plugin's in-flow menu or a co-installed bot's reply won for a given message could change across a
+  restart or re-enable — even though this plugin already correctly claimed only the messages it answered.
+  It now registers at an explicit responder priority: after a command prefix, before a keyword bot, so the
+  order is the same on every restart no matter which plugins are also installed.
+
 ## [1.0.8] — 2026-07-30
 
 ### Fixed

@@ -6,6 +6,20 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-07-31
+
+### Fixed
+
+- **A chat in scope for this bot could also draw a reply from another auto-reply plugin.** This plugin
+  returns before the flow turn finishes running, so it never claimed the message — meaning any
+  co-installed bot behind it in the hook chain would also answer. It now claims a chat as soon as it
+  determines the chat is in scope (the same check `handleTurn` re-applies before acting), so an outage on
+  the Typebot side produces silence for that message rather than a different plugin answering on this
+  bot's behalf.
+- **This plugin now registers at an explicit responder priority**, after a command prefix and any
+  keyword-based bot, since it auto-starts a flow for every in-scope chat and should not pre-empt a more
+  specific trigger.
+
 ## [0.1.1] — 2026-07-30
 
 First release verified against a live server: a self-hosted Typebot v3.17.2 driven over real WhatsApp

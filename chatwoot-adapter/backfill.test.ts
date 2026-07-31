@@ -58,7 +58,9 @@ function makeDeps(
     backfillLimit: over.backfillLimit ?? 20,
     backfillAllOnce: false,
     log: () => {},
-      onInboundLost: () => {},   // required on InboundDeps; the cast would hide its absence
+    // Both callbacks are required on InboundDeps; the cast would hide an omitted one.
+    onInboundLost: () => {},
+    onBackfillExhausted: () => {},
   } as unknown as InboundDeps;
   return { deps, posts, creates, seen };
 }
@@ -91,7 +93,7 @@ test('backfillHistory skips messages already seen (dedup with the live path)', a
   assert.deepEqual(posts.map(p => p.body), ['new']);
 });
 
-test('backfillHistory swallows a getChatHistory failure (best-effort)', async () => {
+test('backfillHistory returns false on a getChatHistory failure, without posting anything', async () => {
   const { deps, posts } = makeDeps({
     engine: {
       getChatHistory: async () => {
@@ -195,4 +197,118 @@ test('bulk sweep populates `phone_number` on the new Chatwoot contact when the c
   assert.equal(byId['1234567890@c.us'], '+1234567890'); // resolved from the neutral @c.us id
   assert.equal(byId['120363@g.us'], undefined);             // groups never carry a phone
   assert.equal(byId['118367890123478@lid'], undefined);     // cold lid — pre-fix behavior preserved
+});
+
+test('media is requested only for a window small enough to fit the 30s capability budget', async () => {
+  const seenArgs: Array<{ limit: number; includeMedia: boolean }> = [];
+  const engine = {
+    getChatHistory: async (_s: string, _c: string, limit: number, includeMedia: boolean) => {
+      seenArgs.push({ limit, includeMedia });
+      return [];
+    },
+  };
+  const small = makeDeps({ engine, backfillLimit: 25 });
+  await backfillHistory(small.deps, 'sess', 'c@c.us', 55);
+  const large = makeDeps({ engine, backfillLimit: 26 });
+  await backfillHistory(large.deps, 'sess', 'c@c.us', 55);
+
+  assert.deepEqual(seenArgs, [
+    { limit: 25, includeMedia: true },
+    { limit: 26, includeMedia: false },
+  ]);
+});
+
+test('backfillHistory distinguishes a failed fetch from a genuinely empty history', async () => {
+  const emptyChat = makeDeps({ engine: { getChatHistory: async () => [] } });
+  assert.equal(await backfillHistory(emptyChat.deps, 'sess', 'c@c.us', 55), true);
+
+  const failing = makeDeps({
+    engine: {
+      getChatHistory: async () => {
+        throw new Error("capability 'engine.getChatHistory' timed out after 30000ms");
+      },
+    },
+  });
+  assert.equal(await backfillHistory(failing.deps, 'sess', 'c@c.us', 55), false);
+});
+
+test('bulk sweep isolates a failed chat: the rest of the sweep still creates and replays (#609)', async () => {
+  const chats = [
+    { id: 'fail@c.us', name: 'F', isGroup: false },
+    { id: 'ok@c.us', name: 'OK', isGroup: false },
+  ];
+  const createCalls: string[] = [];
+  const logs: string[] = [];
+  const { deps, posts } = makeDeps({
+    engine: {
+      getChats: async () => chats,
+      getChatHistory: async (_s: string, chatId: string) => {
+        if (chatId === 'fail@c.us') throw new Error('timed out');
+        return [{ ...hist('ok1', 10, false, 'hello from ok'), chatId }];
+      },
+    },
+    client: {
+      createContact: async (identifier: string) => {
+        createCalls.push(identifier);
+        return { id: 9, sourceId: 'src' };
+      },
+    },
+  });
+  deps.log = (m: string) => void logs.push(m);
+  await backfillAllChats(deps, 'sessIsolate');
+
+  assert.deepEqual(createCalls, ['ok@c.us']); // only the surviving chat gets a conversation
+  assert.deepEqual(posts.map(p => p.body), ['hello from ok']); // and its history is replayed, unaffected
+  // fetchHistory's own catch is the ONLY thing that should log for the failed chat. A guard that regressed
+  // to `ordered.length` (no optional chaining) would throw on the `null`, get caught by the surrounding
+  // per-chat catch, and log a SECOND time -- misreporting an already-explained failed fetch as a crashed
+  // bulk-backfill step.
+  assert.deepEqual(logs, ['history fetch failed for fail@c.us']);
+});
+
+test('the bulk sweep records each imported chat so the lazy path does not refetch it', async () => {
+  const patches: Array<{ chatId: string; patch: Record<string, unknown> }> = [];
+  const { deps } = makeDeps({
+    engine: {
+      getChats: async () => [{ id: 'c@c.us', name: 'C', isGroup: false }],
+      getChatHistory: async () => [hist('m1', 10, false, 'earlier')],
+    },
+    store: {
+      patch: async (_s: string, chatId: string, patch: Record<string, unknown>) =>
+        void patches.push({ chatId, patch }),
+    },
+  });
+  await backfillAllChats(deps, 'sess');
+  assert.deepEqual(patches, [{ chatId: 'c@c.us', patch: { backfillDone: true } }]);
+});
+
+// ── A successful fetch followed by a failed replay must not be recorded as a completed import ─────────
+// backfillHistory previously returned true whenever the FETCH succeeded, even if every post then failed
+// (Chatwoot down at the moment this chat's first message arrived). The caller durably wrote backfillDone
+// on that `true`, so the chat's history was permanently skipped: no retry, no onBackfillExhausted, no
+// visibility — the exact silent loss this feature exists to remove, now recorded to disk as "done".
+
+test('backfillHistory returns false when the fetch succeeds but every post fails — a partial replay is not a completed import', async () => {
+  const history = [hist('m1', 10, false, 'boom-one'), hist('m2', 20, false, 'boom-two')];
+  const { deps, posts } = makeDeps({ engine: { getChatHistory: async () => history }, failOn: 'boom' });
+  const result = await backfillHistory(deps, 'sess', 'c@c.us', 55);
+  assert.equal(result, false, 'a fetch that succeeded but replayed nothing is not a completed import');
+  assert.equal(posts.length, 0);
+});
+
+test('bulk sweep does not record backfillDone when every post in the replay fails', async () => {
+  const patches: Array<{ chatId: string; patch: Record<string, unknown> }> = [];
+  const { deps } = makeDeps({
+    engine: {
+      getChats: async () => [{ id: 'c@c.us', name: 'C', isGroup: false }],
+      getChatHistory: async () => [hist('m1', 10, false, 'boom')],
+    },
+    store: {
+      patch: async (_s: string, chatId: string, patch: Record<string, unknown>) =>
+        void patches.push({ chatId, patch }),
+    },
+    failOn: 'boom',
+  });
+  await backfillAllChats(deps, 'sess');
+  assert.deepEqual(patches, [], 'a chat the sweep could not actually post into must not be marked imported');
 });

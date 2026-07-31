@@ -23,6 +23,11 @@ import { LibreTranslateClient } from "./libretranslate.client";
 import { PluginChatGateway } from "./plugin-chat.gateway";
 import { PluginConfigStore } from "./plugin-config.store";
 
+// Transformer band. This plugin claims only its own /tr admin commands — a control message addressed to
+// the plugin, not conversational content. A translated message is never claimed and still reaches any
+// responder registered after it.
+const HOOK_PRIORITY = 50;
+
 function readString(
   cfg: Record<string, unknown>,
   key: string,
@@ -74,8 +79,10 @@ export class TranslationPlugin implements IPlugin {
   onEnable(context: PluginContext): Promise<void> {
     this.coordinator = this.buildCoordinator(context);
     this.coordinatorSignature = this.configSignature(context.config);
-    context.registerHook("message:received", (ctx) =>
-      this.onMessage(context, ctx as HookContext<IncomingMessage>),
+    context.registerHook(
+      "message:received",
+      (ctx) => this.onMessage(context, ctx as HookContext<IncomingMessage>),
+      HOOK_PRIORITY,
     );
     context.logger.log("Translation plugin enabled", {
       action: "translation_enabled",

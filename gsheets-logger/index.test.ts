@@ -120,3 +120,21 @@ test('onConfigChange drains the buffer to the old client before swapping', async
   assert.deepEqual(sentToOld, [['old-row']]); // buffered row went to the OLD client
   assert.equal(harness.buffer.length, 0);     // buffer drained before the swap
 });
+
+// Observer band (PLUGIN-STANDARD.md "Co-installation"): must run before any responder, or a claiming
+// responder (chat-flow, group-translate) silently ends the chain before the logger ever sees the message.
+test('logs at observer priority so a responder claim can never starve it', async () => {
+  const registered: Array<{ event: string; priority?: number }> = [];
+  const fakeCtx = {
+    config: { spreadsheetId: 'sid', serviceAccountJson: validSa },
+    net: { fetch: async () => ({ ok: true, status: 200, body: '{}' }) },
+    storage: { get: async () => null, set: async () => {} },
+    logger: { log: () => {}, warn: () => {}, error: () => {} },
+    registerHook: (event: string, _h: unknown, priority?: number) => void registered.push({ event, priority }),
+  };
+  const logger = new GSheetsLogger();
+  await logger.onEnable(fakeCtx as unknown as never);
+  await logger.onUnload(); // stop the flush interval started by onEnable
+  assert.equal(registered.length, 4);
+  assert.ok(registered.every(r => r.priority === 10), 'every logged event registers at 10');
+});

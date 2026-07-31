@@ -9,8 +9,8 @@ import type {
 } from "../types/openwa";
 import { TranslationPlugin } from "./index.ts";
 
-function makeStorage() {
-  const m = new Map<string, unknown>();
+function makeStorage(seed: Record<string, unknown> = {}) {
+  const m = new Map<string, unknown>(Object.entries(seed));
   return {
     get: async (k: string) => (m.has(k) ? m.get(k) : null),
     set: async (k: string, v: unknown) => void m.set(k, v),
@@ -19,11 +19,20 @@ function makeStorage() {
   };
 }
 
-function fakeContext(config: Record<string, unknown>) {
+function fakeContext(
+  config: Record<string, unknown>,
+  over: {
+    net?: { fetch: (url: string, init?: unknown) => Promise<PluginNetResponse> };
+    messages?: Record<string, unknown>;
+    engine?: Record<string, unknown>;
+    seed?: Record<string, unknown>;
+  } = {},
+) {
   let hook:
     | ((ctx: HookContext<IncomingMessage>) => Promise<HookResult>)
     | undefined;
-  const net = {
+  let priority: number | undefined;
+  const net = over.net ?? {
     fetch: async () =>
       ({
         ok: true,
@@ -38,19 +47,21 @@ function fakeContext(config: Record<string, unknown>) {
     manifest: { id: "group-translate" },
     config,
     logger: { log() {}, debug() {}, warn() {}, error() {} },
-    storage: makeStorage(),
+    storage: makeStorage(over.seed),
     registerHook: (
       _event: string,
       handler: (c: HookContext<IncomingMessage>) => Promise<HookResult>,
+      p?: number,
     ) => {
       hook = handler;
+      priority = p;
     },
-    messages: {},
-    engine: {},
+    messages: over.messages ?? {},
+    engine: over.engine ?? {},
     net,
     hookManager: {},
   } as unknown as PluginContext;
-  return { ctx, getHook: () => hook };
+  return { ctx, getHook: () => hook, getPriority: () => priority };
 }
 
 const engineCtx = (
@@ -73,6 +84,98 @@ const engineCtx = (
     author: "x@s.whatsapp.net",
     ...data,
   } as IncomingMessage,
+});
+
+// Transformer band (PLUGIN-STANDARD.md "Co-installation"): must run ahead of every responder, or a
+// responder answers the untranslated original before this plugin's translation replaces it.
+test("registers in the transformer band, ahead of every responder", async () => {
+  const { ctx, getPriority } = fakeContext({});
+  const plugin = new TranslationPlugin();
+  await plugin.onEnable(ctx);
+  assert.equal(getPriority(), 50);
+});
+
+// ── Claim wiring: the coordinator's `swallow` must reach the host as `continue` ──────────────────────
+// The coordinator suites pin `{swallow: true/false}`, but nothing pinned that this plugin forwards it.
+// The README, the CHANGELOG and PLUGIN-STANDARD.md all publish the resulting behavior — "claims only its
+// own /tr admin commands, never a translated conversational message" — so a hook that hardcoded
+// `continue: true` (or `false`) would make three public documents false with every test still green.
+
+const GROUP_KEY = "group:s1:group@g.us";
+const AUTHOR = "x@s.whatsapp.net";
+
+test("claims a /tr admin command, so no responder answers a message addressed to this plugin", async () => {
+  const sent: string[] = [];
+  const { ctx, getHook } = fakeContext(
+    {},
+    {
+      seed: {
+        [GROUP_KEY]: {
+          sessionId: "s1",
+          chatId: "group@g.us",
+          active: false,
+          participants: {},
+          delegatedControllers: [],
+          announced: true, // already greeted, so the only send here is the command's own confirmation
+        },
+      },
+      messages: { sendText: async (_s: string, _c: string, t: string) => void sent.push(t) },
+      engine: {
+        getGroupInfo: async () => ({ participants: [{ id: AUTHOR, isAdmin: true }] }),
+      },
+    },
+  );
+  const plugin = new TranslationPlugin();
+  await plugin.onEnable(ctx);
+
+  const result = await getHook()!(engineCtx({ body: "/tr on" }));
+  assert.equal(sent.length, 1, "the command was handled (its confirmation was sent)");
+  assert.equal(result.continue, false, "a control message addressed to this plugin is claimed");
+});
+
+test("does NOT claim a translated conversational message — a co-installed responder still sees it", async () => {
+  const replies: string[] = [];
+  const { ctx, getHook } = fakeContext(
+    {},
+    {
+      seed: {
+        [GROUP_KEY]: {
+          sessionId: "s1",
+          chatId: "group@g.us",
+          active: true,
+          participants: {
+            [AUTHOR]: { lang: "en", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+            "z@s.whatsapp.net": { lang: "id", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+          },
+          delegatedControllers: [],
+          announced: true,
+        },
+      },
+      net: {
+        fetch: async (url: string) =>
+          ({
+            ok: true,
+            status: 200,
+            statusText: "",
+            headers: {},
+            body: url.endsWith("/detect")
+              ? '[{"language":"en","confidence":0.99}]'
+              : '{"translatedText":"halo dunia"}',
+          }) as PluginNetResponse,
+      },
+      messages: {
+        sendText: async () => {},
+        reply: async (_s: string, _c: string, _q: string, t: string) => void replies.push(t),
+      },
+    },
+  );
+  const plugin = new TranslationPlugin();
+  await plugin.onEnable(ctx);
+
+  const result = await getHook()!(engineCtx({ body: "hello world" }));
+  assert.equal(replies.length, 1, "the message really was translated (not skipped into a trivial pass)");
+  assert.match(replies[0], /halo dunia/);
+  assert.equal(result.continue, true, "conversational content is passed on, translated or not");
 });
 
 // Regression: the message hook must rebuild the coordinator when a coordinator-affecting config field

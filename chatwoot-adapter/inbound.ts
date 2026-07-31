@@ -6,6 +6,11 @@ import { MAX_PENDING_RETRIES, slimForRetry } from './retry.ts';
 
 export type { InboundDeps };
 
+// A chat's history import gets a bounded number of tries. Backfill runs inside the per-chat lock and
+// BEFORE the live relay, so an unbounded retry would add a full 30 s capability timeout to every inbound
+// message on a chat that can never be imported.
+export const MAX_BACKFILL_ATTEMPTS = 3;
+
 // The resolve + backfill + relay core, lock-free, that THROWS on failure. Shared by the live inbound
 // handler and the retry drain (retry.ts) so a retried message follows the exact same path.
 export async function relayInbound(deps: InboundDeps, sessionId: string, msg: IncomingMessage): Promise<void> {
@@ -18,12 +23,29 @@ export async function relayInbound(deps: InboundDeps, sessionId: string, msg: In
   } catch {
     /* session down / unresolvable — fall back to the raw id; dedup is best-effort */
   }
-  const { conversationId, created } = await resolveConversation(deps, sessionId, msg, canonical);
-  // Lazy backfill: the first time this chat maps, replay its recent history (older messages, both
-  // directions, deduped) BEFORE posting this one — so the thread reads chronologically and this message's
-  // quote resolves against a just-posted source_id. This message is already markSeen, so backfill skips it.
-  if (created && deps.backfillLimit > 0) {
-    await backfillHistory(deps, sessionId, msg.chatId, conversationId);
+  const { conversationId, key, backfill } = await resolveConversation(deps, sessionId, msg, canonical);
+  // Lazy backfill: replay this chat's recent history (older messages, both directions, deduped) BEFORE
+  // posting this one, so the thread reads chronologically and this message's quote resolves against a
+  // just-posted source_id. This message is already markSeen, so backfill skips it.
+  //
+  // The trigger is the stored marker, NOT "the conversation was just created". The old derivation could
+  // only ever fire once: a failed fetch left the conversation in place, so every later message saw
+  // created=false and the chat never got its history.
+  //
+  // `=== false` and not `!backfill.done`: the marker must be POSITIVELY present. ensureConversation
+  // stamps `backfillDone: false` on every mapping this version creates, so absent means the mapping
+  // predates the marker — a chat an earlier release already handled, which must be left alone. The
+  // tradeoff is deliberate: a chat whose import failed before the upgrade is never retried, which is
+  // exactly what those installs do today; every chat from here on gets the durable retry.
+  const attempts = backfill.attempts ?? 0;
+  if (deps.backfillLimit > 0 && backfill.done === false && attempts < MAX_BACKFILL_ATTEMPTS) {
+    if (await backfillHistory(deps, sessionId, msg.chatId, conversationId)) {
+      await recordBackfill(deps, sessionId, key, { backfillDone: true });
+    } else {
+      const next = attempts + 1;
+      await recordBackfill(deps, sessionId, key, { backfillAttempts: next });
+      if (next >= MAX_BACKFILL_ATTEMPTS) deps.onBackfillExhausted(key);
+    }
   }
   await relayMessage(deps, sessionId, conversationId, msg, 'incoming');
 }
@@ -75,12 +97,31 @@ export async function handleInbound(
   });
 }
 
+// The import marker is bookkeeping; the message is the product. A rejected write — the host rejects
+// EVERY `set` once the plugin is at its 50 MiB quota — must cost at most one redundant import on the
+// next message. Unguarded it threw past relayMessage, so a perfectly relayable message became a
+// retry-queue entry whose drain re-ran the whole 30 s import behind it. Mirrors refreshContactName.
+async function recordBackfill(
+  deps: InboundDeps,
+  sessionId: string,
+  key: string,
+  patch: { backfillDone?: boolean; backfillAttempts?: number },
+): Promise<void> {
+  try {
+    await deps.store.patch(sessionId, key, patch);
+  } catch (err) {
+    deps.log('backfill marker write failed', err);
+  }
+}
+
+// Resolves the Chatwoot conversation for this chat and reports where its mapping document lives, so the
+// caller patches the SAME document refreshContactName does, plus that document's backfill state.
 async function resolveConversation(
   deps: InboundDeps,
   sessionId: string,
   msg: IncomingMessage,
   canonicalChatId: string,
-): Promise<{ conversationId: number; created: boolean }> {
+): Promise<{ conversationId: number; key: string; backfill: { done?: boolean; attempts?: number } }> {
   // Dual lookup (re-read inside the lock): the raw chatId finds a mapping keyed by @lid, the canonical
   // chatId finds one keyed by @c.us (a contact that has since migrated to @lid, when the lid resolves) —
   // so a migrated contact's inbound lands in its EXISTING conversation instead of splitting a duplicate.
@@ -93,16 +134,22 @@ async function resolveConversation(
   }
   if (existing) {
     await refreshContactName(deps, sessionId, msg, existing, foundKey);
-    return { conversationId: existing.conversationId, created: false };
+    return {
+      conversationId: existing.conversationId,
+      key: foundKey,
+      backfill: { done: existing.backfillDone, attempts: existing.backfillAttempts },
+    };
   }
   const name = msg.isGroup
     ? `Group ${msg.chatId}`
     : msg.contact?.pushName || msg.contact?.name || msg.senderPhone || msg.chatId;
   const conversationId = await ensureConversation(deps, sessionId, msg.chatId, {
-    name,
     // Phone from the host-resolved sender (RESOLVE_LID_TO_PHONE), or the canonical chat id (warm lid→pn
     // cache / every plain @c.us chat); undefined when genuinely unknown so the contact still creates.
+    name,
     phone: resolvePhone(msg, canonicalChatId),
   });
-  return { conversationId, created: true };
+  // ensureConversation wrote the mapping under msg.chatId, stamped `backfillDone: false`. Mirroring that
+  // value here rather than reading the document back saves a storage round trip on every new chat.
+  return { conversationId, key: msg.chatId, backfill: { done: false } };
 }

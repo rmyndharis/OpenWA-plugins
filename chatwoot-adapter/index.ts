@@ -2,11 +2,15 @@ import type { IPlugin, PluginContext, IncomingMessage, HookContext, HookResult, 
 import { ChatwootClient } from './chatwoot-client.ts';
 import { MappingStore, SEEN_TTL_MS, SEEN_PRUNE_INTERVAL_MS } from './mapping-store.ts';
 import { KeyedAsyncLock } from './chat-lock.ts';
-import { handleInbound, relayInbound } from './inbound.ts';
+import { handleInbound, relayInbound, MAX_BACKFILL_ATTEMPTS } from './inbound.ts';
 import { handleSent } from './sent.ts';
 import { backfillAllChats } from './backfill.ts';
 import { handleOutbound } from './outbound.ts';
 import { drainRetries, RETRY_INTERVAL_MS, MAX_RETRY_ATTEMPTS, MAX_PENDING_RETRIES } from './retry.ts';
+
+// Observer band. Must run before any responder: a responder returning {continue:false} ends the chain,
+// and at the default priority of 100 this plugin would simply stop seeing claimed messages.
+const HOOK_PRIORITY = 20;
 
 interface ChatwootFullConfig {
   baseUrl: string;
@@ -66,9 +70,16 @@ export default class ChatwootAdapter implements IPlugin {
   // rejecting a write because the plugin is at its storage quota. Counted separately from dead-lettering:
   // a dead letter was at least retried MAX_RETRY_ATTEMPTS times, this one never got a single attempt.
   private lostCount = 0;
+  // Chats whose history import burned MAX_BACKFILL_ATTEMPTS. In-memory like the other health counters:
+  // the durable state that actually stops the retries lives on each chat's mapping document.
+  private backfillExhausted = new Set<string>();
   private draining = false;
   private lastSeenPruneAt = 0;
   private seenPruning = false;
+
+  private onBackfillExhausted = (chatId: string): void => {
+    this.backfillExhausted.add(chatId);
+  };
 
   async onEnable(ctx: PluginContext): Promise<void> {
     this.clearRetryTimer(); // idempotent re-enable: never leak a timer from a prior enable
@@ -96,43 +107,52 @@ export default class ChatwootAdapter implements IPlugin {
         this.lostCount++;
         ctx.logger.error(`inbound message ${msgId} LOST: could not be relayed and could not be queued`, e);
       },
+      onBackfillExhausted: this.onBackfillExhausted,
     });
 
-    ctx.registerHook('message:received', async (h: HookContext): Promise<HookResult> => {
-      const sessionId = h.sessionId;
-      const msg = h.data as IncomingMessage;
-      if (sessionId && msg) {
-        const cfg = readConfig(ctx.config);
-        const deps = buildDeps(cfg, sessionId);
-        // Fire-and-forget off the hook so a slow/failing Chatwoot API never blocks the WA pipeline. The
-        // mapping mirror is keyed on sessionId (a session-scoped instance is 1:1 with its session).
-        void handleInbound(deps, sessionId, h.source, msg).catch(e => ctx.logger.error('inbound hook failed', e));
-        // Opt-in one-time bulk history sweep. Fired off the hook (outside handleInbound's per-chat lock),
-        // guarded internally so it runs once per session; a no-op after the first sweep completes.
-        if (cfg.backfillAllOnce && cfg.backfillLimit > 0) {
-          void backfillAllChats(deps, sessionId).catch(e => ctx.logger.error('bulk backfill failed', e));
+    ctx.registerHook(
+      'message:received',
+      async (h: HookContext): Promise<HookResult> => {
+        const sessionId = h.sessionId;
+        const msg = h.data as IncomingMessage;
+        if (sessionId && msg) {
+          const cfg = readConfig(ctx.config);
+          const deps = buildDeps(cfg, sessionId);
+          // Fire-and-forget off the hook so a slow/failing Chatwoot API never blocks the WA pipeline. The
+          // mapping mirror is keyed on sessionId (a session-scoped instance is 1:1 with its session).
+          void handleInbound(deps, sessionId, h.source, msg).catch(e => ctx.logger.error('inbound hook failed', e));
+          // Opt-in one-time bulk history sweep. Fired off the hook (outside handleInbound's per-chat lock),
+          // guarded internally so it runs once per session; a no-op after the first sweep completes.
+          if (cfg.backfillAllOnce && cfg.backfillLimit > 0) {
+            void backfillAllChats(deps, sessionId).catch(e => ctx.logger.error('bulk backfill failed', e));
+          }
         }
-      }
-      return { continue: true };
-    });
+        return { continue: true }; // observer: never claims, see PLUGIN-STANDARD.md
+      },
+      HOOK_PRIORITY,
+    );
 
     // The account's OWN outbound sends (linked phone / WhatsApp app / OpenWA REST API) arrive on
     // message:sent, not message:received. Relay them as 'outgoing' so the Chatwoot thread mirrors the full
     // WhatsApp conversation (#615). The adapter's own Chatwoot-agent replies also surface here but are
     // echo-suppressed inside handleSent. Gated per-event so a live relayOwnMessages flip applies at once.
-    ctx.registerHook('message:sent', async (h: HookContext): Promise<HookResult> => {
-      const sessionId = h.sessionId;
-      const msg = h.data as IncomingMessage;
-      if (sessionId && msg) {
-        const cfg = readConfig(ctx.config);
-        if (cfg.relayOwnMessages) {
-          void handleSent(buildDeps(cfg, sessionId), sessionId, h.source, msg).catch(e =>
-            ctx.logger.error('sent hook failed', e),
-          );
+    ctx.registerHook(
+      'message:sent',
+      async (h: HookContext): Promise<HookResult> => {
+        const sessionId = h.sessionId;
+        const msg = h.data as IncomingMessage;
+        if (sessionId && msg) {
+          const cfg = readConfig(ctx.config);
+          if (cfg.relayOwnMessages) {
+            void handleSent(buildDeps(cfg, sessionId), sessionId, h.source, msg).catch(e =>
+              ctx.logger.error('sent hook failed', e),
+            );
+          }
         }
-      }
-      return { continue: true };
-    });
+        return { continue: true }; // observer: never claims, see PLUGIN-STANDARD.md
+      },
+      HOOK_PRIORITY,
+    );
 
     ctx.registerWebhook('chatwoot', async (req: WebhookRequest) =>
       handleOutbound(
@@ -232,6 +252,12 @@ export default class ChatwootAdapter implements IPlugin {
     if (this.deadLetterCount > 0) parts.push(`${this.deadLetterCount} dead-lettered after ${MAX_RETRY_ATTEMPTS} attempts`);
     // Listed last but the most serious: these never reached the queue at all, so `pending` cannot show them.
     if (this.lostCount > 0) parts.push(`${this.lostCount} LOST (could not be queued — check the plugin storage quota)`);
+    // Not unhealthy on its own: the live relay is unaffected and the operator may simply have chats the
+    // engine cannot serve history for. It still has to be visible — the alternative is what this whole
+    // change exists to remove, a permanent gap nobody is told about.
+    if (this.backfillExhausted.size > 0) {
+      parts.push(`${this.backfillExhausted.size} chat(s) gave up on history import after ${MAX_BACKFILL_ATTEMPTS} attempts`);
+    }
     return {
       healthy: this.deadLetterCount === 0 && this.lostCount === 0 && !saturated,
       message: parts.join('; ') || undefined,

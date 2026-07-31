@@ -13,6 +13,10 @@ const REPLY_MAX = 4000;
 const DEFAULT_NOT_FOUND = 'Not found.';
 const DEFAULT_ERROR = 'Service is temporarily unavailable. Please try again later.';
 
+// Responder band, first: a command prefix is the most specific trigger any of these plugins has, so a
+// message addressed to it should never also be answered by a keyword bot or a flow.
+const HOOK_PRIORITY = 70;
+
 /** Dependencies handleMessage needs, injected so the per-message logic tests without OpenWA. */
 export interface HandleDeps {
   cfg: HttpActionConfig;
@@ -173,8 +177,15 @@ export default class HttpActionPlugin implements IPlugin {
       }
       if (msg.isGroup && !liveCfg.respondInGroups) return { continue: true };
 
-      // Off-dispatch (§1.2 #2): return {continue:true} synchronously and float handleMessage, so a slow
-      // or blocked upstream never stalls the WA hook (the ~5s host hook budget is sync-return only).
+      // Decide ownership SYNCHRONOUSLY, before floating the request. The work runs off-dispatch to stay
+      // inside the ~5 s hook budget, so the outcome is not knowable here — but whether the message is
+      // addressed to this plugin is, and that is what a claim means (see PLUGIN-STANDARD.md).
+      // handleMessage resolves the trigger with this same call (:75), so the claim and the reply can
+      // never disagree about which messages belong to this plugin.
+      const mine = matchAction(liveCfg.actions, msg.body) !== null;
+
+      // Off-dispatch (§1.2 #2): return synchronously and float handleMessage, so a slow or blocked
+      // upstream never stalls the WA hook.
       void handleMessage(
         {
           cfg: liveCfg,
@@ -188,8 +199,8 @@ export default class HttpActionPlugin implements IPlugin {
         sessionId,
         msg,
       ).catch((e) => ctx.logger.error(`${PLUGIN}: handler failed`, e));
-      return { continue: true };
-    });
+      return { continue: !mine };
+    }, HOOK_PRIORITY);
 
     ctx.logger.log(`${PLUGIN} enabled (${cfg.actions.length} action(s), ${cfg.baseUrl})`);
   }

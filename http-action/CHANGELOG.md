@@ -3,6 +3,18 @@
 All notable changes to HTTP Action Bot are listed here. Versions follow [Semantic Versioning](https://semver.org/),
 and the top entry's version must match `manifest.json`.
 
+## [0.2.0] — 2026-07-31
+
+### Fixed
+
+- **A command could draw a reply from another auto-reply plugin too.** This plugin returns before its
+  action finishes running, so it never claimed the message — meaning any co-installed bot behind it in
+  the hook chain would also answer the same command. It now claims a message as soon as it matches one of
+  the configured commands, so a command addressed to this plugin only ever gets this plugin's answer.
+- **This plugin now registers first among responders.** A command prefix is the most specific trigger a
+  responder can have, so it now runs ahead of keyword bots and flows, at an explicit priority instead of
+  the registration-order default.
+
 ## [0.1.2] — 2026-07-30
 
 ### Fixed

@@ -44,13 +44,19 @@ export function parseConfig(raw: Record<string, unknown>): ChatFlowConfig {
 /** How often to sweep abandoned flow states from storage (state TTL is 15 min). */
 const SWEEP_INTERVAL_MS = 30 * 60 * 1000;
 
+// Responder band: an in-flow state machine is more specific than keyword rules but less specific than a
+// command prefix. Already claims correctly via `continue: !handled`.
+const HOOK_PRIORITY = 75;
+
 export default class ChatFlow implements IPlugin {
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
 
   async onEnable(ctx: PluginContext): Promise<void> {
     parseConfig(ctx.config); // fail-fast: surface invalid config at enable, not per-message
-    ctx.registerHook('message:received', hook =>
-      this.onMessage(ctx, hook as HookContext<IncomingMessage>),
+    ctx.registerHook(
+      'message:received',
+      hook => this.onMessage(ctx, hook as HookContext<IncomingMessage>),
+      HOOK_PRIORITY,
     );
     // Reclaim states abandoned before this enable, then keep sweeping — lazy per-key expiry only fires
     // when a conversation messages again, so an abandoned flow would otherwise linger in storage forever.

@@ -2,6 +2,32 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseConfig, toFlowNodes } from './index.ts';
 
+// Minimal ctx builder for the priority test below — the file's other tests build their own inline ctx
+// per-case (different storage/message needs), so this one only needs registerHook + a config that
+// passes onEnable's fail-fast parseConfig.
+function makeCtx(overrides: {
+  config?: Record<string, unknown>;
+  registerHook?: (event: string, handler: unknown, priority?: number) => void;
+} = {}) {
+  return {
+    config: overrides.config ?? { greeting: 'menu', options: [{ key: '1', text: 'A' }] },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    registerHook: overrides.registerHook ?? (() => {}),
+    storage: { get: async () => null, set: async () => {}, delete: async () => {}, list: async () => [] },
+    messages: { reply: async () => ({ messageId: 'x', timestamp: 0 }), sendText: async () => ({ messageId: 'x', timestamp: 0 }) },
+  };
+}
+
+// Responder band (PLUGIN-STANDARD.md "Co-installation"): an in-flow state machine is more specific than
+// keyword rules but less specific than a command prefix. Already claims correctly via `continue: !handled`.
+test('registers at the chat-flow responder priority', async () => {
+  let priority: number | undefined;
+  const ctx = makeCtx({ registerHook: (_e, _h, p) => { priority = p; } });
+  const { default: ChatFlow } = await import('./index.ts');
+  await new ChatFlow().onEnable(ctx as never);
+  assert.equal(priority, 75);
+});
+
 test('parseConfig requires greeting and at least one option', () => {
   assert.throws(() => parseConfig({ options: [{ key: '1', text: 'a' }] }), /greeting is required/);
   assert.throws(() => parseConfig({ greeting: 'hi' }), /at least one menu option/);

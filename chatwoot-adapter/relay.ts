@@ -21,6 +21,9 @@ export interface InboundDeps {
   // lost. The only way this failure reaches an operator: the retry queue can't count an entry it never
   // managed to store, so healthCheck would otherwise report green while dropping messages.
   onInboundLost: (msgId: string, err: unknown) => void;
+  // Called once when a chat's history import has burned MAX_BACKFILL_ATTEMPTS. Mirrors onInboundLost:
+  // the durable per-chat counter stops the retries, this makes the give-up visible on healthCheck.
+  onBackfillExhausted: (chatId: string) => void;
 }
 
 function senderLabel(msg: IncomingMessage): string {
@@ -169,6 +172,11 @@ export async function ensureConversation(
     contactId: contact.id,
     sourceId: contact.sourceId,
     name: meta.name,
+    // "Not yet imported" is written down, never inferred from a missing field. Every mapping an earlier
+    // release wrote carries no backfill fields at all, so a trigger of `!backfillDone` would read them
+    // as unimported and replay each chat's whole window into a conversation that was already imported —
+    // duplicates ahead of the live message, in every open chat, on the first message after an upgrade.
+    backfillDone: false,
   });
   return conversationId;
 }

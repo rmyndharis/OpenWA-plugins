@@ -153,6 +153,69 @@ session"). See the per-plugin README convention below.
 **Package limits** (enforced by OpenWA at install): ≤ 5 MB compressed, ≤ 200 files, ≤ 20 MB uncompressed.
 **Ship compiled JS** — the loader `require()`s `main`; build with `node package.mjs <id>`.
 
+## Co-installation: ordering and claiming
+
+Several plugins can subscribe to the same event. Two rules keep a multi-plugin install predictable.
+
+### Ordering
+
+`ctx.registerHook(event, handler, priority?)` sorts **ascending** — a lower number runs earlier. The
+default is `100`. Without an explicit priority, the chain order is registration order: the loader's
+directory scan at boot, and click order after an operator enables a plugin by hand. That means a
+different plugin can win after a restart than after a manual enable.
+
+Pick a priority from the band that matches what your plugin does:
+
+| Band | Range | What belongs here |
+|---|---|---|
+| Observer | 10-29 | Logs, mirrors, or exports the message. Must never claim. |
+| Transformer | 40-59 | Acts on the message before any responder sees it. |
+| Responder | 70-99 | Answers the contact as "the bot". |
+
+The official plugins occupy: `gsheets-logger` 10, `chatwoot-adapter` 20, `voice-transcription` 40,
+`group-translate` 50, `http-action` 70, `chat-flow` 75, `faq-bot` 80, `typebot-connector` 85,
+`after-hours` 95.
+
+Responders are ordered from the most specific trigger to the most sweeping: a command prefix, then an
+in-flow state machine, then keyword rules, then a bot that auto-starts every chat, then a time window.
+
+### Claiming
+
+Returning `{continue: false}` from a `message:received` handler stops the remaining handler chain. On a
+notification event that is a claim against sibling plugins only — the host still persists the message,
+still dispatches it to webhooks, and still pushes it over the websocket. Never use it to hide an event.
+
+**An observer must never return `{continue: false}`.** This is a correctness requirement, not style.
+Observers run first precisely so a responder's claim cannot cost them the message; a claiming observer
+would take the message away from everything after it.
+
+**A claim means "this message is mine", decided synchronously.** Evaluate a pure predicate — does the
+command prefix match, is this chat in scope, did a rule match — and claim on that. A plugin that does its
+work off-dispatch (returning immediately and floating the request, to stay inside the ~5 s hook budget)
+may still claim: it knows whether the message is addressed to it even before it knows whether the reply
+will succeed. A claim followed by a failure should produce your own fallback message or silence, never a
+different bot answering something unrelated.
+
+### Known interactions
+
+Both of these follow from the priority table above; neither is a bug in the plugins involved.
+
+**`faq-bot` (80) partially starves `after-hours` (95).** With `fallbackReply` set, `faq-bot` answers and
+claims any message no rule matched — but only the first one in each `fallbackCooldownSec` window
+(default `600`). Later messages in that window are not claimed and reach `after-hours`, which sends the
+away message subject to its own `cooldownSec`. A contact messaging out of hours therefore gets the
+faq-bot fallback first and the after-hours notice afterwards: two different answers to one conversation.
+Leave `fallbackReply` empty when both are enabled, so `after-hours` is the only voice outside business
+hours. (At `fallbackCooldownSec: 0` the fallback claims every message and `after-hours` never sends.)
+
+**`typebot-connector` (85) fully starves `after-hours` (95).** It claims every message in its scope, and
+its scope is every engine-sourced, non-`fromMe` message with a chat id: one-to-one chats always, group
+chats too when `respondInGroups` is on. There is no cooldown and no setting that narrows the one-to-one
+case, so while `typebot-connector` is enabled `after-hours` never fires for a direct chat. This is
+intended: a Typebot bot owns every chat it is in scope for, and handing one of its chats to a second
+responder mid-flow is worse than the starvation. Put out-of-hours messaging inside the Typebot flow
+itself — a business-hours condition at the top of the flow — rather than in `after-hours`.
+
 ## Runtime contract (observed)
 
 These behaviors are **observed from the host, not a written host contract** — they are load-bearing for

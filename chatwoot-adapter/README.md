@@ -15,8 +15,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chatwoot-adapter` |
-| **Version** | 0.6.0 |
-| **Released** | 2026-07-30 |
+| **Version** | 0.7.0 |
+| **Released** | 2026-07-31 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -113,7 +113,7 @@ curl -X POST "$OPENWA/api/plugins/chatwoot-adapter/enable" \
 | `inboxId` | number | yes | The API-channel inbox id this adapter posts into and relays replies from. |
 | `relayGroups` | boolean | no (default `true`) | Relay group chats (one synthetic contact per group, sender-prefixed). |
 | `relayMedia` | boolean | no (default `true`) | Upload inbound media to Chatwoot as attachments. |
-| `backfillLimit` | number | no (default `0`) | When a chat first opens in Chatwoot, import this many recent messages (both directions, with media) so agents see prior context. `0` disables it; clamped to 100 host-side. Needs OpenWA 0.8.6+ and the whatsapp-web.js engine (Baileys has no history support). |
+| `backfillLimit` | number | no (default `0`) | When a chat first opens in Chatwoot, import this many recent messages (both directions) so agents see prior context. Attachments are imported only at 25 or below — above that the import would exceed the host's 30-second budget and fail, so older media arrives as a placeholder line instead. `0` disables it; clamped to 100 host-side. Needs OpenWA 0.8.6+ and the whatsapp-web.js engine (Baileys has no history support). |
 | `backfillAllOnce` | boolean | no (default `false`) | Also run a one-time sweep importing every existing chat's history on setup. Needs `backfillLimit` > 0. Runs once per session. |
 
 The Chatwoot webhook **secret** and the instance's **session scope** are set when you mint the instance (they
