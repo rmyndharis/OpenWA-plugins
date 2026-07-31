@@ -30,6 +30,11 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
   number of sessions rather than to how long the plugin has been running. Keys written by earlier
   versions are swept away a few at a time as transcriptions run, so an upgraded install recovers without
   a long delete loop at enable — which matters now that enabling happens unattended at host boot.
+- **The hourly spend cap is serialized too.** Collapsing the per-hour counter keys into one key per
+  session turned its check-and-increment into a read-modify-write the old scheme did not have: two notes
+  straddling an hour boundary wrote different keys before, but now the pre-boundary write can land last
+  and restore the previous bucket, restarting the new hour at zero and doubling a cap whose stated job is
+  bounding paid-API spend.
 - **The dedup claim is serialized per session.** Collapsing the per-note keys into one list per session
   made the check-and-write a read-modify-write, and `handle()` runs deliberately off the message hook —
   so a burst (the engine materializes several voice notes at once) interleaved and the last writer
@@ -41,7 +46,9 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
   hour, also never deleted — to keep taxing every write on an upgraded install. And because the host's
   `list()` swallows its own errors and resolves empty, a single transient failure looked like a clean
   session and permanently retired the sweep, stranding exactly the keys it exists to remove. Both
-  families are swept now, and retirement needs two consecutive clean passes.
+  families are swept now, and there is no retirement at all: an empty listing and a failed one are
+  indistinguishable, so any "this session is clean, stop looking" rule can strand the very keys the sweep
+  exists to remove. What it saved was a readdir of a directory this release already made small.
 - **`timeoutMs` is clamped in code, not just in the manifest.** A `configSchema` `max` is a form hint
   the host never enforces, so a stored value above the ceiling still reached the STT client and made
   the capability timer race the fetch abort — reporting an STT timeout as a capability timeout.

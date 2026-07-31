@@ -33,6 +33,11 @@ through OpenWA 0.12.1, rather than against unit tests alone. That run is what fo
   advanced), the contact was left with a half-delivered turn while the plugin believed the prompt was
   out, and their next message was matched against an input they never saw. Each part is now isolated and
   a failure is logged.
+- **Rows from sessions that stop sending entirely are reclaimed too.** The abandoned-session sweep is
+  scoped to the session whose message triggered it, because its threshold comes from that session's
+  config — but that leaves a disabled or deleted tenant's rows with nothing to list them, and every
+  stored key is stat-ed on every write, so they tax every other session's turns forever. A second,
+  unscoped pass removes rows idle past a week, a threshold no per-session timeout plausibly exceeds.
 - **A group message with no author is skipped instead of merged.** Group flows are keyed per sender, and
   an authorless message fell back to a shared `unknown` key — so every such participant drove the SAME
   Typebot session and one contact's answer advanced another contact's flow. There is no safe way to

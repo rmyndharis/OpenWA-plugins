@@ -19,6 +19,10 @@ The version here always matches `manifest.json`'s `version`.
   permanently blocked send turned every inbound message into another attempt. The next try lands a fixed
   backoff from the failure,
   when the reply fails, so the contact's next message tries again.
+- **The failure backoff is an absolute deadline, not a rewound cooldown timestamp.** Expressing it as a
+  rewind only makes sense against the cooldown value it was computed from, and config is re-read per
+  message — so an operator lowering `cooldownSec` in the dashboard turned the stored value into "long
+  past" and handed back the un-throttled retry the backoff exists to prevent.
 - **`minOpenWAVersion` corrected from 0.6.2 to 0.7.0.** Per-session config — which the 0.1.3 fix and the
   README's "Per-session config: Supported" both depend on — landed in 0.7.0. On a 0.6.x host the plugin
   installed happily and then ignored every per-session override, replying with the base away message on

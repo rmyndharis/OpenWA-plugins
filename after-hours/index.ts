@@ -45,6 +45,12 @@ const RETRY_BACKOFF_MS = 60_000;
 
 export default class AfterHours implements IPlugin {
   private readonly repliedAt = new Map<string, number>();
+  // Absolute "do not retry before" deadline per chat, set when a reply FAILS. Kept separately instead of
+  // rewinding the cooldown timestamp: a rewind is only meaningful against the cooldown value it was
+  // computed from, and config is re-read per message — so an operator lowering cooldownSec in the
+  // dashboard would turn the stored value into "long past" and hand back the un-throttled retry storm
+  // this exists to prevent.
+  private readonly retryNotBefore = new Map<string, number>();
 
   async onEnable(ctx: PluginContext): Promise<void> {
     parseConfig(ctx.config); // fail-fast: surface invalid config at enable, not per-message
@@ -79,24 +85,26 @@ export default class AfterHours implements IPlugin {
     const sessionId = hook.sessionId;
     const key = `${sessionId}:${m.chatId}`;
     const cooldownMs = Math.max(0, cfg.config.cooldownSec) * 1000;
+    const notBefore = this.retryNotBefore.get(key);
+    if (notBefore !== undefined && Date.now() < notBefore) return; // still inside a failure backoff
     if (!allowCooldown(this.repliedAt, key, Date.now(), cooldownMs)) return;
 
     try {
       await ctx.messages.reply(sessionId, m.chatId, m.id, cfg.config.awayMessage);
+      this.retryNotBefore.delete(key); // delivered — the backoff no longer applies
     } catch (err) {
       // The cooldown slot is burned BEFORE the send (allowCooldown records on the allow path), so a
       // failed reply would otherwise silence this chat for the whole window with nothing delivered —
       // reachable more often now that another plugin vetoing `message:sending` surfaces here as a
       // thrown error, indistinguishable from a transport failure.
       //
-      // Shorten the slot rather than clearing it. Clearing removes the ONLY throttle: against a
-      // permanently-failing send (a compliance plugin vetoing this chat) every inbound message would
-      // retry immediately — 60 messages, 60 send attempts, 60 full `message:sending` fan-outs across
-      // every plugin, no backoff. Rewinding the stored timestamp by (backoff - cooldown) makes the next
-      // attempt land exactly RETRY_BACKOFF_MS from now, whether that is shorter OR longer than the
-      // configured cooldown, so a transient failure recovers in a minute and a persistent one still
-      // cannot storm.
-      this.repliedAt.set(key, Date.now() + RETRY_BACKOFF_MS - cooldownMs);
+      // Free the cooldown slot (nothing was delivered, so it should not silence the chat for the whole
+      // window) but install an absolute backoff deadline instead. Clearing the slot ALONE removes the only
+      // throttle: against a permanently-failing send — a compliance plugin vetoing this chat — every
+      // inbound message would retry immediately, 60 messages meaning 60 send attempts and 60 full
+      // `message:sending` fan-outs across every installed plugin.
+      this.repliedAt.delete(key);
+      this.retryNotBefore.set(key, Date.now() + RETRY_BACKOFF_MS);
       ctx.logger.error('after-hours: reply failed', err);
     }
   }

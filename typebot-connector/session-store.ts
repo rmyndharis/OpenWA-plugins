@@ -19,11 +19,37 @@ export class SessionStore {
   }
 
   /**
-   * Drop rows for conversations that were abandoned mid-flow. A completed flow clears its own row
-   * (turn.ts), so only an abandoned one lingers — and it lingers forever, because nothing else ever
-   * revisits that key. That matters beyond disk: the host re-measures its per-plugin storage quota on
-   * EVERY write by stat-ing every key the plugin owns, so abandoned rows make each later turn slower,
-   * permanently. Best-effort: a failure here must never affect a turn.
+   * Sweep rows for sessions that no longer send anything at all — disabled, deleted, or simply quiet for
+   * a season. `pruneIdle` is deliberately scoped to the session whose message triggered it, because its
+   * threshold comes from that session's config; the cost of that scoping is that a silent session's rows
+   * are never revisited, and the host stats every stored key on every write, so they tax every OTHER
+   * session's turns forever. This pass is unscoped but uses a threshold no per-session
+   * `sessionTimeoutMinutes` can plausibly exceed, so it can only ever remove genuinely dead rows.
+   */
+  async pruneOrphans(nowMs: number, idleMs: number): Promise<number> {
+    let pruned = 0;
+    const prefix = this.k('');
+    const keys = (await this.storage.list(prefix)).filter(k => k.startsWith(prefix));
+    for (const key of keys) {
+      try {
+        const state = await this.storage.get<SessionState>(key);
+        if (state && nowMs - state.lastActivity > idleMs) {
+          await this.storage.delete(key);
+          pruned++;
+        }
+      } catch {
+        /* skip this row; the next sweep tries again */
+      }
+    }
+    return pruned;
+  }
+
+  /**
+   * Drop rows for conversations abandoned mid-flow in THIS session. A completed flow clears its own row
+   * (turn.ts), so only an abandoned one lingers — and it lingers forever, because nothing else revisits
+   * that key. That matters beyond disk: the host re-measures its per-plugin storage quota on EVERY write
+   * by stat-ing every key the plugin owns, so abandoned rows make each later turn slower, permanently.
+   * Best-effort: a failure here must never affect a turn.
    */
   async pruneIdle(nowMs: number, idleMs: number, sessionId: string): Promise<number> {
     let pruned = 0;

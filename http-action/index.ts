@@ -21,7 +21,9 @@ export interface HandleDeps {
   storage: StorageLike;
   cooldown: Map<string, number>;
   now: () => number;
-  logger: { log(m: string): void; warn(m: string, e?: unknown): void; error(m: string, e?: unknown): void };
+  // `warn` mirrors the host's PluginLogger: the second argument is structured META, not an Error —
+  // passing an Error there renders as `{}`. Errors go to `error`, which does accept one.
+  logger: { log(m: string): void; warn(m: string, meta?: Record<string, unknown>): void; error(m: string, e?: unknown): void };
 }
 
 /** Strip C0 control chars (except \n, \t) so an attacker-influenced upstream value can't smuggle them into the reply. */
@@ -75,7 +77,8 @@ export async function handleMessage(deps: HandleDeps, sessionId: string, msg: In
 
   // Dedup CHECK (read-only, fail-closed): drop a redelivery of an already-processed message id.
   const dedupFailed = (e: unknown) =>
-    deps.logger.warn(`${PLUGIN}: dedup read failed, dropping message ${msg.id} unanswered`, e);
+    deps.logger.warn(`${PLUGIN}: dedup read failed, dropping message ${msg.id} unanswered`,
+      { error: e instanceof Error ? e.message : String(e) });
   if (await hasSeen(deps.storage, sessionId, msg.id, dedupFailed)) return;
   // Best-effort prune of expired markers (throttled hourly); never blocks the reply.
   void prune(deps.storage, deps.now(), DEDUP_TTL_MS, PRUNE_INTERVAL_MS).catch((e) =>
@@ -107,7 +110,8 @@ export async function handleMessage(deps: HandleDeps, sessionId: string, msg: In
     try {
       text = renderText(action.errorTemplate ?? DEFAULT_ERROR, ctxWith());
     } catch (tplErr) {
-      deps.logger.warn(`${PLUGIN}: action '${action.id}' errorTemplate failed to render`, tplErr);
+      deps.logger.warn(`${PLUGIN}: action '${action.id}' errorTemplate failed to render`,
+        { error: tplErr instanceof Error ? tplErr.message : String(tplErr) });
       text = DEFAULT_ERROR;
     }
   }
@@ -124,7 +128,8 @@ export async function handleMessage(deps: HandleDeps, sessionId: string, msg: In
     try {
       reply = truncate(sanitize(renderText(action.errorTemplate ?? DEFAULT_ERROR, ctxWith()))).trim() || DEFAULT_ERROR;
     } catch (e) {
-      deps.logger.warn(`${PLUGIN}: action '${action.id}' errorTemplate failed to render`, e);
+      deps.logger.warn(`${PLUGIN}: action '${action.id}' errorTemplate failed to render`,
+        { error: e instanceof Error ? e.message : String(e) });
       reply = DEFAULT_ERROR;
     }
   }

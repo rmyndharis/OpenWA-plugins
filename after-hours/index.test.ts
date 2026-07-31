@@ -134,3 +134,45 @@ test('a failed away reply is throttled, not retried on every message', async () 
     mock.timers.reset();
   }
 });
+
+// Regression: the backoff must not be expressible in terms of the CURRENT cooldown. Encoding it as a
+// rewound cooldown timestamp meant an operator lowering cooldownSec in the dashboard — config is re-read
+// per message — turned the stored value into "long past" and handed back the un-throttled retry storm.
+test('lowering cooldownSec mid-backoff does not release the retry storm', async () => {
+  const attempts: string[] = [];
+  let handler: ((h: unknown) => Promise<unknown>) | undefined;
+  const cfg: Record<string, unknown> = {
+    schedule: JSON.stringify({ thu: '09:00-17:00' }), timezone: 'UTC',
+    awayMessage: 'tutup', cooldownSec: 3600,
+  };
+  const ctx = {
+    get config() { return cfg; },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    messages: {
+      sendText: async () => ({ messageId: 'x', timestamp: 0 }),
+      reply: async () => { attempts.push('try'); throw new Error('vetoed'); },
+    },
+    registerHook: (_e: string, h: (x: unknown) => Promise<unknown>) => { handler = h; },
+  } as never;
+
+  const AfterHours = (await import('./index.ts')).default;
+  const plugin = new AfterHours();
+  await plugin.onEnable(ctx);
+  const fire = (id: string) =>
+    handler!({ source: 'Engine', sessionId: 's1', data: { id, chatId: 'c@wa', body: 'halo', fromMe: false } });
+
+  mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  try {
+    await fire('m1');
+    assert.equal(attempts.length, 1);
+    cfg.cooldownSec = 1;              // operator lowers it while the backoff is still running
+    mock.timers.tick(5_000);
+    await fire('m2');
+    assert.equal(attempts.length, 1, 'the failure backoff must survive a live cooldown change');
+    mock.timers.tick(56_000);         // now past 60 s since the failure
+    await fire('m3');
+    assert.equal(attempts.length, 2, 'and it must still expire on time');
+  } finally {
+    mock.timers.reset();
+  }
+});

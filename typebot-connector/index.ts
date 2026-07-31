@@ -39,6 +39,10 @@ export function readConfig(raw: Record<string, unknown>): TypebotConfig {
 // the first turn after it sweeps again, which is harmless.
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
+// Threshold for the unscoped orphan pass. Far above any plausible `sessionTimeoutMinutes`, so a row it
+// removes is dead under ANY session's configuration — which is what makes an unscoped sweep safe.
+const ORPHAN_IDLE_MS = 7 * 24 * 60 * 60 * 1000;
+
 export default class TypebotConnector implements IPlugin {
   // Per WhatsApp session: the sweep itself is scoped to one session's rows, so a single global
   // throttle would let the first session to fire starve every other session's cleanup for an hour.
@@ -68,6 +72,12 @@ export default class TypebotConnector implements IPlugin {
             .pruneIdle(now, cfg.sessionTimeoutMinutes * 60_000, sessionId)
             .then(n => n && ctx.logger.log(`typebot-connector: pruned ${n} abandoned session(s)`))
             .catch(e => ctx.logger.error('typebot-connector: session prune failed', e));
+          // Also reclaim rows belonging to sessions that have gone silent entirely — they are never
+          // listed by the scoped pass above, and every stored key is stat-ed on every write.
+          void store
+            .pruneOrphans(now, ORPHAN_IDLE_MS)
+            .then(n => n && ctx.logger.log(`typebot-connector: pruned ${n} orphaned session row(s)`))
+            .catch(e => ctx.logger.error('typebot-connector: orphan prune failed', e));
         }
         // Off-dispatch: return {continue:true} immediately; a slow/failing Typebot call never blocks WA.
         void handleTurn(

@@ -14,7 +14,10 @@ export interface KvStore {
 // plugin's storage keys on EVERY write, so the pre-1.1.0 scheme — one key per transcribed voice note,
 // never deleted — made each write more expensive than the last, forever. One bounded list per session
 // costs the same single read + write it always did, and the key count is now O(sessions).
-// 500 ids covers eight hours at the default 60/hour cap, far longer than any redelivery window.
+// Every note that reaches the claim consumes a slot, including ones later SKIPPED (rate-limited, too
+// large, unreadable media) — the claim is deliberately first so each outcome fires at most once. So 500
+// ids is 500 inbound notes, not 500 transcriptions: it is roughly eight hours at the default 60/hour cap
+// only when traffic stays near that cap, and proportionally less on a busy line.
 const SEEN_HISTORY = 500;
 
 // Legacy `seen:<sessionId>:<messageId>` keys are swept a few at a time (see sweepLegacySeen) rather than
@@ -150,15 +153,25 @@ export class TranscriptionCoordinator {
 
       // One key per session holding {bucket, count}, not one key per session per HOUR — the hourly keys
       // were never deleted, so they accumulated for the life of the install.
-      const rateKey = `rate:${sessionId}`;
-      const bucket = Math.floor(this.now() / 3_600_000);
-      const rate = await store.get<{ bucket: number; count: number }>(rateKey);
-      const count = rate?.bucket === bucket ? rate.count : 0;
-      if (count >= config.maxPerHour) {
+      //
+      // Serialized on the same per-session tail as the claim, because collapsing the hours into ONE key
+      // turned this into a read-modify-write that the old scheme did not have: two notes straddling an
+      // hour boundary wrote different keys before, but now the pre-boundary write can land last and
+      // restore the previous bucket, restarting the new hour's count at zero and doubling a cap whose
+      // stated job is bounding paid-API spend.
+      const withinCap = await this.serialize(sessionId, async () => {
+        const rateKey = `rate:${sessionId}`;
+        const bucket = Math.floor(this.now() / 3_600_000);
+        const rate = await store.get<{ bucket: number; count: number }>(rateKey);
+        const count = rate?.bucket === bucket ? rate.count : 0;
+        if (count >= config.maxPerHour) return false;
+        await store.set(rateKey, { bucket, count: count + 1 });
+        return true;
+      });
+      if (!withinCap) {
         await this.emit(sessionId, msg, { status: 'skipped', reason: 'rate_limited' });
         return;
       }
-      await store.set(rateKey, { bucket, count: count + 1 });
 
       let result: SttResult;
       try {
