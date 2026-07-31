@@ -279,3 +279,34 @@ test('the bulk sweep records each imported chat so the lazy path does not refetc
   await backfillAllChats(deps, 'sess');
   assert.deepEqual(patches, [{ chatId: 'c@c.us', patch: { backfillDone: true } }]);
 });
+
+// ── A successful fetch followed by a failed replay must not be recorded as a completed import ─────────
+// backfillHistory previously returned true whenever the FETCH succeeded, even if every post then failed
+// (Chatwoot down at the moment this chat's first message arrived). The caller durably wrote backfillDone
+// on that `true`, so the chat's history was permanently skipped: no retry, no onBackfillExhausted, no
+// visibility — the exact silent loss this feature exists to remove, now recorded to disk as "done".
+
+test('backfillHistory returns false when the fetch succeeds but every post fails — a partial replay is not a completed import', async () => {
+  const history = [hist('m1', 10, false, 'boom-one'), hist('m2', 20, false, 'boom-two')];
+  const { deps, posts } = makeDeps({ engine: { getChatHistory: async () => history }, failOn: 'boom' });
+  const result = await backfillHistory(deps, 'sess', 'c@c.us', 55);
+  assert.equal(result, false, 'a fetch that succeeded but replayed nothing is not a completed import');
+  assert.equal(posts.length, 0);
+});
+
+test('bulk sweep does not record backfillDone when every post in the replay fails', async () => {
+  const patches: Array<{ chatId: string; patch: Record<string, unknown> }> = [];
+  const { deps } = makeDeps({
+    engine: {
+      getChats: async () => [{ id: 'c@c.us', name: 'C', isGroup: false }],
+      getChatHistory: async () => [hist('m1', 10, false, 'boom')],
+    },
+    store: {
+      patch: async (_s: string, chatId: string, patch: Record<string, unknown>) =>
+        void patches.push({ chatId, patch }),
+    },
+    failOn: 'boom',
+  });
+  await backfillAllChats(deps, 'sess');
+  assert.deepEqual(patches, [], 'a chat the sweep could not actually post into must not be marked imported');
+});

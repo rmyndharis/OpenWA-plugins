@@ -38,7 +38,7 @@ export async function relayInbound(deps: InboundDeps, sessionId: string, msg: In
     } else {
       const next = attempts + 1;
       await deps.store.patch(sessionId, key, { backfillAttempts: next });
-      if (next >= MAX_BACKFILL_ATTEMPTS) deps.onBackfillExhausted(msg.chatId);
+      if (next >= MAX_BACKFILL_ATTEMPTS) deps.onBackfillExhausted(key);
     }
   }
   await relayMessage(deps, sessionId, conversationId, msg, 'incoming');

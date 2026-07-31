@@ -31,13 +31,16 @@ async function fetchHistory(deps: InboundDeps, sessionId: string, chatId: string
 // Replay ordered history into a Chatwoot conversation. Deduped against the same markSeen store the live
 // path uses. Per-message isolation: one failed post is logged and skipped, never aborting the rest; the
 // message is marked seen only AFTER a successful post so a transient error stays retryable rather than a
-// silent drop. The caller holds the per-chat lock.
+// silent drop. Returns whether every attempted message actually posted — a caller that ignores this and
+// records a completed import anyway would durably lose the messages a down Chatwoot rejected, which is
+// the exact silent-loss bug this whole marker exists to remove. The caller holds the per-chat lock.
 async function replayHistory(
   deps: InboundDeps,
   sessionId: string,
   conversationId: number,
   ordered: IncomingMessage[],
-): Promise<void> {
+): Promise<boolean> {
+  let allPosted = true;
   for (const msg of ordered) {
     if (await deps.store.hasSeen('wa', msg.id, sessionId)) continue;
     try {
@@ -45,13 +48,16 @@ async function replayHistory(
       await deps.store.markSeen('wa', msg.id, sessionId);
     } catch (err) {
       deps.log(`history message ${msg.id} failed`, err);
+      allPosted = false;
     }
   }
+  return allPosted;
 }
 
 // Lazy per-conversation backfill: fetch + replay this chat's history into its (already-created)
-// conversation. Returns false ONLY when the fetch failed, so the caller can retry later instead of
-// recording a completed import. A genuinely empty history is a successful no-op.
+// conversation. Returns false when the fetch failed OR when any message failed to post — either way the
+// caller must retry later, never record a completed import. A genuinely empty history (nothing to post)
+// is a successful no-op. markSeen dedup makes a retry cheap: only the messages that failed post again.
 export async function backfillHistory(
   deps: InboundDeps,
   sessionId: string,
@@ -60,8 +66,7 @@ export async function backfillHistory(
 ): Promise<boolean> {
   const ordered = await fetchHistory(deps, sessionId, chatId);
   if (ordered === null) return false;
-  await replayHistory(deps, sessionId, conversationId, ordered);
-  return true;
+  return replayHistory(deps, sessionId, conversationId, ordered);
 }
 
 // In-memory guard so rapid successive inbounds can't launch the one-time sweep twice for a session.
@@ -95,10 +100,11 @@ export async function backfillAllChats(deps: InboundDeps, sessionId: string): Pr
             name: chat.name || chat.id,
             phone: resolvePhone(chat, chat.id),
           });
-          await replayHistory(deps, sessionId, conversationId, ordered);
-          // Share the lazy path's marker: this chat is imported, so its next inbound message must not
-          // spend another getChatHistory call rediscovering that.
-          await deps.store.patch(sessionId, chat.id, { backfillDone: true });
+          const allPosted = await replayHistory(deps, sessionId, conversationId, ordered);
+          // Share the lazy path's marker — but only when every message actually posted. A sweep that hit a
+          // down Chatwoot partway through must not record a completed import, or the unposted messages are
+          // lost for good instead of being picked up (and counted) by the lazy path's own retry budget.
+          if (allPosted) await deps.store.patch(sessionId, chat.id, { backfillDone: true });
         } catch (err) {
           deps.log(`bulk backfill failed for ${chat.id}`, err);
         }

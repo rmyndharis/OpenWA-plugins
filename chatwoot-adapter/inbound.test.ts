@@ -388,6 +388,11 @@ test('a failed history fetch is retried on the next inbound instead of being los
   assert.equal(historyCalls, 2);
   assert.equal(links.get('c@c.us')?.backfillDone, true);
   assert.ok(posts.some(p => p.body === 'earlier'), 'history landed on the retry');
+
+  // The `!backfill.done` guard is the entire point of storing the marker: without it, a chat that already
+  // imported cleanly would still pay a getChatHistory call (and a full replay) on every later message.
+  await handleInbound(deps, 'sess', 'Engine', msgWith({ id: 'm3', body: 'third' }));
+  assert.equal(historyCalls, 2, 'an already-imported chat is never refetched');
 });
 
 test('backfill stops after MAX_BACKFILL_ATTEMPTS and reports the chat as exhausted', async () => {
@@ -418,4 +423,35 @@ test('backfill stops after MAX_BACKFILL_ATTEMPTS and reports the chat as exhaust
   assert.equal(historyCalls, 3, 'stops attempting after the cap');
   assert.deepEqual(exhausted, ['c@c.us']);
   assert.equal(links.get('c@c.us')?.backfillDone, undefined, 'exhaustion must never be recorded as done');
+});
+
+test('reports the mapping document key to onBackfillExhausted, not the raw chatId, when the dual-lookup diverges', async () => {
+  // Mapping already lives under the canonical @c.us key (a prior @lid contact that migrated), but this
+  // inbound still arrives with the raw @lid chatId — the dual-lookup case resolveConversation exists for.
+  const links = new Map<string, Record<string, unknown>>([
+    ['c@c.us', { conversationId: 55, contactId: 9, sourceId: 'src' }],
+  ]);
+  const exhausted: string[] = [];
+  const { deps } = makeDeps({
+    engine: {
+      canonicalChatId: async (_s: string, c: string) => (c === 'c@lid' ? 'c@c.us' : c),
+      getChatHistory: async () => {
+        throw new Error('timed out');
+      },
+    },
+    store: {
+      getByChat: async (_s: string, c: string) => links.get(c) ?? null,
+      patch: async (_s: string, c: string, p: Record<string, unknown>) =>
+        void links.set(c, { ...(links.get(c) ?? {}), ...p }),
+    },
+    onBackfillExhausted: (chatId: string) => void exhausted.push(chatId),
+    backfillLimit: 20,
+  });
+
+  for (let i = 1; i <= 3; i++) {
+    await handleInbound(deps, 'sess', 'Engine', { ...msgWith({ id: `m${i}` }), chatId: 'c@lid' });
+  }
+  // The marker lives under 'c@c.us' (links.get above). An operator shown 'c@lid' would be pointed at a
+  // chat id that matches no stored state at all.
+  assert.deepEqual(exhausted, ['c@c.us'], 'reported id matches the document the marker is actually patched under');
 });
