@@ -6,6 +6,37 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-08-01
+
+### Added
+
+- **The adapter now recovers when a Chatwoot conversation is deleted out of band.** Previously, once an
+  operator deleted a conversation directly in Chatwoot, the adapter's cached mapping kept pointing at the
+  dead conversation: every following WhatsApp message from that chat was posted to it, rejected, and
+  retried against the same dead id until the plugin gave up — the chat silently stopped reaching Chatwoot,
+  and your own outbound sends to it were dropped outright. The adapter now detects the rejection, drops
+  the stale mapping, rebuilds the conversation through its normal path — reusing the existing Chatwoot
+  contact, so no duplicate contact is created — and re-posts the message into the fresh conversation. If
+  the rebuild itself fails, the message falls back to the existing retry queue rather than looping
+  forever. Where "History backfill" is enabled, a rebuilt conversation imports the chat's recent history
+  like any newly created one, so the agent doesn't open an empty thread.
+
+  This recovery is intentionally not attempted while draining the retry queue: a queued message is already
+  a re-attempt of a previous failure, and rebuilding there too would mint a new conversation on every
+  retry instead of converging. Those messages spend their retry budget as before, and the next live
+  message from that chat heals the mapping.
+
+### Verified
+
+- **Confirmed against a live OpenWA 0.12.1 host**, with a connected WhatsApp session and a real Chatwoot
+  instance. A conversation the adapter had mapped was deleted in Chatwoot, and posting to it was confirmed
+  rejected. The next WhatsApp message from that chat caused the adapter to drop the stale mapping and mint
+  a fresh conversation, keeping the same Chatwoot contact. The message was delivered into the new
+  conversation: nothing entered the retry queue and the plugin reported healthy.
+- **Not covered live:** the recovery path for your own outbound sends, and the retry-drain path
+  deliberately not recovering — both are covered by automated tests but were not exercised against a live
+  host.
+
 ## [0.7.1] — 2026-07-31
 
 No behaviour change. 0.7.0 has now been smoke-tested against a newer host, so the tested-version field
