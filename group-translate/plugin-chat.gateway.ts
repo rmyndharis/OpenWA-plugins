@@ -44,4 +44,24 @@ export class PluginChatGateway implements ChatGateway {
     if (typeof info.owner === 'string' && info.owner) admins.push(info.owner);
     return [...new Set(admins)];
   }
+
+  /**
+   * `getContactById` is the bridge across the @lid/@c.us split: handed a `@lid`, the engine looks the
+   * contact up in its own store and returns the SAME contact keyed by its canonical `<phone>@c.us` id.
+   * (Its `number` field is not that — for a lid contact it is the lid's user part, which is exactly the
+   * value that cannot be compared with a participant list.) Read-only and permission-gated by
+   * `engine:read`, which this plugin already declares for the admin lookup above.
+   *
+   * Best-effort by contract: an unknown contact, a slow engine or a torn-down session all resolve to
+   * null, and the caller falls back to the direct comparison rather than failing the command.
+   */
+  async resolveCanonicalWid(sessionId: string, wid: string): Promise<string | null> {
+    try {
+      const contact = (await this.engine.getContactById(sessionId, wid)) as { id?: unknown } | null | undefined;
+      const id = contact?.id;
+      return typeof id === 'string' && id.length > 0 ? id : null;
+    } catch {
+      return null;
+    }
+  }
 }

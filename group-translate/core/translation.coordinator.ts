@@ -31,6 +31,10 @@ const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 const NOOP_LOGGER: TranslationLogger = { debug: () => {}, info: () => {}, warn: () => {} };
 
+/** Cap on the memoized author -> canonical-wid table. One entry per distinct author whose command
+ *  needed resolving, so this only fills up in a deployment with many groups and many commanders. */
+const MAX_CANONICAL_WIDS = 500;
+
 /**
  * Compare two WhatsApp IDs tolerantly: exact match, or same user part ignoring
  * an `@domain` and any `:device` suffix (e.g. `123@c.us` === `123:7@c.us`).
@@ -46,6 +50,8 @@ function widEquals(a: string, b: string): boolean {
 export class TranslationCoordinator {
   /** Per (session,chat) promise chain serializing the load→mutate→save cycle. Self-evicts when drained. */
   private readonly locks = new Map<string, Promise<unknown>>();
+  /** `${sessionId}:${wid}` -> canonical `@c.us` wid, or null when the host could not resolve it. */
+  private readonly canonicalWids = new Map<string, string | null>();
 
   constructor(
     private readonly translator: Translator,
@@ -293,8 +299,7 @@ export class TranslationCoordinator {
     const isSelfServe = (cmd.name === 'setlang' || cmd.name === 'auto') && targetsSelf;
     if (!isSelfServe) {
       const admins = await this.gateway.getGroupAdmins(sessionId, msg.chatId);
-      const isAdmin = admins.some(a => widEquals(a, msg.author));
-      const isController = isAdmin || state.delegatedControllers.some(c => widEquals(c, msg.author));
+      const { isAdmin, isController } = await this.authorize(sessionId, msg, state, admins);
       const adminOnly = cmd.name === 'grant' || cmd.name === 'revoke';
       if ((adminOnly && !isAdmin) || (!adminOnly && !isController)) {
         // Reply on denial only when the operator opted in (denyReply). Default is silent, so an
@@ -406,5 +411,71 @@ export class TranslationCoordinator {
 
   private targetHelp(): string {
     return "⚠️ Couldn't identify that user. Target them by @mention, by phone number, or use 'me' for yourself.";
+  }
+
+  /**
+   * Decide whether the author may run a state-changing command.
+   *
+   * WhatsApp hands the author of a group message a `@lid` privacy id, while the group participant list
+   * comes back keyed `@c.us`. Those are different user numbers, so no amount of string normalization
+   * relates them (see widEquals): a promoted admin simply failed every comparison, and only the group
+   * `owner` — which WhatsApp reports in the author's own dialect — was ever recognized. A group created
+   * by the bot's own number therefore had NO usable administrator at all, because the owner's messages
+   * are fromMe and never reach this code.
+   *
+   * So when the direct comparison finds nothing, ask the host to resolve the author to its canonical
+   * `@c.us` identity and compare again. That second identity is what matches the participant list, and
+   * it is equally what a `/tr grant` stored for a delegated controller who was named by phone number.
+   *
+   * The resolution costs one engine round-trip, so it is spent only on a decision that is otherwise a
+   * denial, and the result is memoized: a lid↔phone binding does not change.
+   */
+  private async authorize(
+    sessionId: string,
+    msg: InboundMessage,
+    state: GroupState,
+    admins: string[],
+  ): Promise<{ isAdmin: boolean; isController: boolean }> {
+    const decide = (identities: string[]) => {
+      const isAdmin = admins.some(a => identities.some(id => widEquals(a, id)));
+      return {
+        isAdmin,
+        isController: isAdmin || state.delegatedControllers.some(c => identities.some(id => widEquals(c, id))),
+      };
+    };
+
+    const direct = decide([msg.author]);
+    if (direct.isController) return direct;
+
+    const canonical = await this.canonicalWid(sessionId, msg.author);
+    if (!canonical || widEquals(canonical, msg.author)) return direct;
+
+    const resolved = decide([msg.author, canonical]);
+    if (resolved.isController) {
+      this.logger.debug('author authorized via its canonical identity', {
+        action: 'translation_author_canonicalized',
+        author: msg.author,
+        canonical,
+      });
+    }
+    return resolved;
+  }
+
+  /** Memoized {@link ChatGateway.resolveCanonicalWid}. A null (unresolvable) answer is cached too —
+   *  retrying it on every command would spend a round-trip per denial on a wid the host cannot map. */
+  private async canonicalWid(sessionId: string, wid: string): Promise<string | null> {
+    const key = `${sessionId}:${wid}`;
+    const hit = this.canonicalWids.get(key);
+    if (hit !== undefined) return hit;
+
+    const resolved = await this.gateway.resolveCanonicalWid(sessionId, wid);
+    // Bounded: one entry per distinct author the plugin has had to resolve. Evict oldest-first (Map
+    // preserves insertion order) rather than growing without limit in a busy multi-group deployment.
+    if (this.canonicalWids.size >= MAX_CANONICAL_WIDS) {
+      const oldest = this.canonicalWids.keys().next().value;
+      if (oldest !== undefined) this.canonicalWids.delete(oldest);
+    }
+    this.canonicalWids.set(key, resolved);
+    return resolved;
   }
 }
