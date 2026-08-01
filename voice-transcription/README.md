@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `voice-transcription` |
-| **Version** | 1.2.0 |
-| **Released** | 2026-07-31 |
+| **Version** | 1.2.1 |
+| **Released** | 2026-08-01 |
 | **Status** | beta |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.8.1) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.12.1) |
 | **Keywords** | transcription, speech-to-text, stt, whisper, voice, audio, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/voice-transcription](https://github.com/rmyndharis/OpenWA-plugins/tree/main/voice-transcription) |
 <!-- END DETAILS -->
@@ -88,9 +88,11 @@ out of order — do not assume ordering).
    whatever you configure without you having to edit and re-package the plugin. The manifest also ships
    a static `net.allow` for `localhost`, `127.0.0.1`, `api.groq.com:443` and `api.openai.com:443`,
    which is what covers a plain-`http` local backend (config-derived hosts are https-only).
-3. **For a localhost STT/delivery target**, also set `SSRF_ALLOWED_HOSTS` on the OpenWA host (the SSRF guard
-   blocks loopback by default), e.g. `SSRF_ALLOWED_HOSTS=127.0.0.1,localhost`. Prefer a literal
-   `http://127.0.0.1:PORT` target (nothing to DNS-rebind).
+3. **For a localhost STT/delivery target** — any self-hosted Speaches/faster-whisper deployment; a hosted
+   Groq/OpenAI endpoint needs nothing here — also set the environment variable `SSRF_ALLOWED_HOSTS` on the
+   OpenWA host itself (not in this plugin's config; the SSRF guard blocks loopback by default), e.g.
+   `SSRF_ALLOWED_HOSTS=127.0.0.1,localhost`. Prefer a literal `http://127.0.0.1:PORT` target (nothing to
+   DNS-rebind).
 4. **Stand up your delivery endpoint** (an n8n webhook, a Worker, your bot) and put its URL in
    **Delivery webhook URL**.
 

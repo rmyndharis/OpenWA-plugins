@@ -6,6 +6,24 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-08-01
+
+No behaviour change. 1.2.0 has now been smoke-tested against a newer host, so the tested-version field
+is updated to match.
+
+### Verified
+
+- **Confirmed against a live OpenWA 0.12.1 host**, with a connected WhatsApp session, against a real
+  self-hosted faster-whisper server (`Systran/faster-whisper-small.en`) speaking the OpenAI-compatible
+  `/v1/audio/transcriptions` API at `http://localhost:9010`, with `chatDelivery: reply`. A genuine
+  Ogg/Opus WhatsApp voice note was sent from a second connected number; the plugin downloaded the media
+  through the host, uploaded it as multipart through `ctx.net.fetch`, and the ASR server logged
+  `POST /v1/audio/transcriptions 200`. The spoken sentence came back into the chat as text, matching what
+  was said.
+- **The transformer-band fix from 1.2.0 holds**: the hook registered at priority 40, the Transformer
+  band assigned in `PLUGIN-STANDARD.md`.
+- **Not covered:** load, concurrency, or long audio.
+
 ## [1.2.0] — 2026-07-31
 
 ### Fixed
