@@ -187,7 +187,8 @@ export default class ChatwootAdapter implements IPlugin {
       this.draining = true;
       return drainRetries(
         { store, lock, log: (m, e) => ctx.logger.error(m, e) },
-        (sessionId, _chatId, msg) => relayInbound(buildDeps(readConfig(ctx.config), sessionId), sessionId, msg),
+        (sessionId, _chatId, msg) =>
+          relayInbound(buildDeps(readConfig(ctx.config), sessionId), sessionId, msg, { recoverOn404: false }),
         MAX_RETRY_ATTEMPTS,
       )
         .then(
