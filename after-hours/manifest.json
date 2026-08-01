@@ -1,7 +1,7 @@
 {
   "id": "after-hours",
   "name": "After-Hours Auto-Reply",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Auto-replies with a configurable away/closing message to messages received outside business hours.",
@@ -19,7 +19,7 @@
   ],
   "status": "stable",
   "minOpenWAVersion": "0.7.0",
-  "testedOpenWAVersion": "0.8.1",
+  "testedOpenWAVersion": "0.12.1",
   "provides": [
     "auto-reply"
   ],

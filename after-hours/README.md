@@ -13,13 +13,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `after-hours` |
-| **Version** | 0.2.0 |
-| **Released** | 2026-07-31 |
+| **Version** | 0.2.1 |
+| **Released** | 2026-08-01 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.8.1) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.12.1) |
 | **Keywords** | after-hours, business-hours, away, auto-reply, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/after-hours](https://github.com/rmyndharis/OpenWA-plugins/tree/main/after-hours) |
 <!-- END DETAILS -->

@@ -8,6 +8,21 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-08-01
+
+No behaviour change. 1.1.0 has now been smoke-tested against a newer host, so the tested-version field
+is updated to match.
+
+### Verified
+
+- **Confirmed against a live OpenWA 0.12.1 host**, with a connected WhatsApp session, this plugin
+  enabled alongside four other responder plugins (including faq-bot and after-hours) and driven by real
+  messages from a second connected WhatsApp number. A message matching the configured trigger word
+  started the menu flow, answered by this plugin and by nothing else — and once the contact was inside
+  the menu, this plugin continued to own their replies until the flow was cleared, confirming the 1.1.0
+  responder-priority fix holds with a full set of co-installed responders.
+- **Not covered:** group chats, media messages, and behaviour under load.
+
 ## [1.1.0] — 2026-07-31
 
 ### Fixed

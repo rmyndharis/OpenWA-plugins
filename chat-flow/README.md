@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chat-flow` |
-| **Version** | 1.1.0 |
-| **Released** | 2026-07-31 |
+| **Version** | 1.1.1 |
+| **Released** | 2026-08-01 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.8.1) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.12.1) |
 | **Keywords** | menu, flow, interactive, auto-reply, chatbot, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/chat-flow](https://github.com/rmyndharis/OpenWA-plugins/tree/main/chat-flow) |
 <!-- END DETAILS -->
