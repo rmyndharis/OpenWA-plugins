@@ -3,7 +3,14 @@ import assert from 'node:assert/strict';
 import { TranslationCoordinator, CoordinatorOptions } from './translation.coordinator';
 import { ChatGateway, ConfigStore, GroupState, InboundMessage, Translator, TranslationLogger } from './ports';
 
-const OPTS: CoordinatorOptions = { prefix: '/tr', minLength: 2, maxLength: 2000, denyReply: false };
+// The shipped defaults, so every test below runs against what an operator actually gets.
+const OPTS: CoordinatorOptions = {
+  prefix: '/tr',
+  minLength: 2,
+  maxLength: 2000,
+  denyReply: false,
+  announceInGroups: false,
+};
 
 function freshState(over: Partial<GroupState> = {}): GroupState {
   return {
@@ -150,12 +157,35 @@ describe('TranslationCoordinator', () => {
     assert.equal(mocks.sendText.calls.length, 0);
   });
 
-  test('announces once on first contact then stays dormant', async () => {
+  // Regression: enabling this plugin used to post an unsolicited introduction into a group the first
+  // time it saw any message there. Per group, so a single enable announced the bot into every group
+  // the account belonged to — on a personal WhatsApp that is every group the person is in. The
+  // introduction is now opt-in, and this asserts the DEFAULT, which is the value that shipped harm.
+  test('says nothing in a group it has never seen before (announcement off by default)', async () => {
     const { store, gateway, translator, mocks } = makeDeps(freshState());
     const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+    const res = await c.handleMessage('s', msg());
+    assert.deepEqual(res, { swallow: false }, 'an ordinary group message is not claimed');
+    assert.equal(mocks.sendText.calls.length, 0, 'the plugin must not speak until it is addressed');
+  });
+
+  test('announces once per group when the operator opts in', async () => {
+    const state = freshState();
+    const { store, gateway, translator, saved, mocks } = makeDeps(state);
+    const c = new TranslationCoordinator(translator, store, gateway, { ...OPTS, announceInGroups: true });
     await c.handleMessage('s', msg());
     assert.equal(mocks.sendText.calls.length, 1);
-    assert.ok(mocks.save.calls.length > 0);
+    assert.equal(saved.at(-1)?.announced, true, 'the group is marked so the intro is not repeated');
+  });
+
+  // The intro is still reachable on demand — which is why suppressing it costs nothing.
+  test('replies with the help text when asked, whatever the announcement setting', async () => {
+    const { store, gateway, translator, mocks } = makeDeps(freshState());
+    const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+    const res = await c.handleMessage('s', msg({ body: '/tr help' }));
+    assert.deepEqual(res, { swallow: true });
+    assert.equal(mocks.sendText.calls.length, 1);
+    assert.match(String(mocks.sendText.calls[0][2]), /Translation bot/);
   });
 
   test('activates only for an admin', async () => {
@@ -502,7 +532,9 @@ describe('TranslationCoordinator', () => {
       detect: async () => ({ lang: 'en', confidence: 1 }), translate: async () => '',
       languages: async () => ['en'], isHealthy: () => true,
     };
-    const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+    // Opted in deliberately: the announcement is this test's observable for the per-chat lock, and
+    // it is the one send that a load/save race could duplicate.
+    const c = new TranslationCoordinator(translator, store, gateway, { ...OPTS, announceInGroups: true });
     await Promise.all([
       c.handleMessage('s', msg({ id: 'm1', body: 'hello there' })),
       c.handleMessage('s', msg({ id: 'm2', body: 'hello again' })),

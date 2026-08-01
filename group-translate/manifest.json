@@ -1,7 +1,7 @@
 {
   "id": "group-translate",
   "name": "Group Auto-Translation",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled.",
@@ -83,6 +83,12 @@
         "title": "Reply on denied commands",
         "default": false,
         "description": "If true, reply 'admins only' when a non-admin runs a restricted command."
+      },
+      "announceInGroups": {
+        "type": "boolean",
+        "title": "Announce this bot in new groups",
+        "default": false,
+        "description": "If true, the first time this plugin sees a message in a group it posts an introduction there, once per group. Off by default: the account running this plugin is normally a real person's WhatsApp, so turning this on announces the bot into every group that account belongs to. Anyone can get the same text on demand with the /tr help command."
       }
     }
   },
@@ -111,6 +117,9 @@
         },
         "denyReply": {
           "title": "Responder a comandos denegados"
+        },
+        "announceInGroups": {
+          "title": "Anunciar este bot en grupos nuevos"
         }
       }
     },
@@ -138,6 +147,9 @@
         },
         "denyReply": {
           "title": "Répondre aux commandes refusées"
+        },
+        "announceInGroups": {
+          "title": "Annoncer ce bot dans les nouveaux groupes"
         }
       }
     },
@@ -165,6 +177,9 @@
         },
         "denyReply": {
           "title": "Rispondi ai comandi negati"
+        },
+        "announceInGroups": {
+          "title": "Annunciare questo bot nei nuovi gruppi"
         }
       }
     },
@@ -192,6 +207,9 @@
         },
         "denyReply": {
           "title": "الرد على الأوامر المرفوضة"
+        },
+        "announceInGroups": {
+          "title": "الإعلان عن هذا البوت في المجموعات الجديدة"
         }
       }
     },
@@ -219,6 +237,9 @@
         },
         "denyReply": {
           "title": "השב על פקודות שנדחו"
+        },
+        "announceInGroups": {
+          "title": "להכריז על הבוט בקבוצות חדשות"
         }
       }
     },
@@ -246,6 +267,9 @@
         },
         "denyReply": {
           "title": "తిరస్కరించిన కమాండ్‌లకు జవాబివ్వు"
+        },
+        "announceInGroups": {
+          "title": "కొత్త గ్రూపుల్లో ఈ బాట్‌ను పరిచయం చేయి"
         }
       }
     },
@@ -273,6 +297,9 @@
         },
         "denyReply": {
           "title": "拒绝命令时回复"
+        },
+        "announceInGroups": {
+          "title": "在新群组中介绍此机器人"
         }
       }
     },
@@ -300,6 +327,9 @@
         },
         "denyReply": {
           "title": "拒絕指令時回覆"
+        },
+        "announceInGroups": {
+          "title": "喺新群組介紹呢個機械人"
         }
       }
     }

@@ -18,6 +18,10 @@ export interface CoordinatorOptions {
   minLength: number;
   maxLength: number;
   denyReply: boolean;
+  /** Post the unsolicited introduction into a group the first time this plugin sees a message there.
+   *  Off unless the operator turns it on: the account running this plugin is usually a person's own
+   *  WhatsApp, and enabling the plugin would otherwise announce it into every group that account is in. */
+  announceInGroups: boolean;
 }
 
 const URL_OR_EMOJI_ONLY = /^(?:\s|\p{Emoji}|https?:\/\/\S+)+$/u;
@@ -71,7 +75,10 @@ export class TranslationCoordinator {
   private async handleMessageLocked(sessionId: string, msg: InboundMessage): Promise<{ swallow: boolean }> {
     const state = await this.store.load(sessionId, msg.chatId);
 
-    if (!state.announced) {
+    // Opt-in, and off by default. This is the only place the plugin speaks without being addressed,
+    // and it fires per GROUP, so simply enabling the plugin used to post an introduction into every
+    // group the account was in. `/tr help` gives anyone the same text on request.
+    if (this.opts.announceInGroups && !state.announced) {
       await this.gateway.sendText(sessionId, msg.chatId, buildHelpText(this.opts.prefix));
       state.announced = true;
       await this.store.save(state);
