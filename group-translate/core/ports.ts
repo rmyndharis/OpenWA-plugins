@@ -81,6 +81,12 @@ export interface ChatGateway {
   sendText(sessionId: string, chatId: string, text: string): Promise<void>;
   sendCombinedReply(sessionId: string, chatId: string, quotedMessageId: string, text: string): Promise<void>;
   getGroupAdmins(sessionId: string, chatId: string): Promise<string[]>;
+  /**
+   * The `<phone>@c.us` form of a wid the host delivered in another dialect — in practice a `@lid`
+   * message author, which carries a different user number than the `@c.us` ids the group participant
+   * list uses, so the two can never be compared directly. Returns null when the host cannot resolve it.
+   */
+  resolveCanonicalWid(sessionId: string, wid: string): Promise<string | null>;
 }
 
 /**

@@ -54,6 +54,13 @@ function makeDeps(state: GroupState) {
     getGroupAdminsCalls.push([_sessionId, _chatId]);
     return getGroupAdminsResult;
   };
+  const resolveCanonicalWidCalls: unknown[][] = [];
+  // Default: the host resolves nothing, which is the pre-existing behaviour every older test asserts.
+  let resolveCanonicalWidResult: string | null = null;
+  const resolveCanonicalWid = async (_sessionId: string, _wid: string): Promise<string | null> => {
+    resolveCanonicalWidCalls.push([_sessionId, _wid]);
+    return resolveCanonicalWidResult;
+  };
 
   // translator spies
   const detectCalls: unknown[][] = [];
@@ -90,7 +97,7 @@ function makeDeps(state: GroupState) {
   const warn = (message: string, meta?: Record<string, unknown>) => { warnCalls.push([message, meta]); };
 
   const store: ConfigStore = { load, save };
-  const gateway: ChatGateway = { sendText, sendCombinedReply, getGroupAdmins };
+  const gateway: ChatGateway = { sendText, sendCombinedReply, getGroupAdmins, resolveCanonicalWid };
   const translator: Translator = { detect, translate, languages, isHealthy };
   const logger: TranslationLogger = { debug, info, warn };
 
@@ -102,6 +109,10 @@ function makeDeps(state: GroupState) {
     getGroupAdmins: {
       calls: getGroupAdminsCalls,
       mockResolvedValue: (v: string[]) => { getGroupAdminsResult = v; },
+    },
+    resolveCanonicalWid: {
+      calls: resolveCanonicalWidCalls,
+      mockResolvedValue: (v: string | null) => { resolveCanonicalWidResult = v; },
     },
     detect: {
       calls: detectCalls,
@@ -216,6 +227,83 @@ describe('TranslationCoordinator', () => {
     const res = await c.handleMessage('s', msg({ author: '628111@c.us', body: '/tr on' }));
     assert.deepEqual(res, { swallow: true });
     assert.equal(saved.at(-1)?.active ?? false, false);
+  });
+
+  // Regression, reproduced live on an OpenWA 0.12.1 host: WhatsApp delivered the author as
+  // `148004841455867@lid` while getGroupInfo listed that same person as `6281770008896@c.us`. The two
+  // user numbers are unrelated, so a promoted admin was refused `/tr on` and the group had no working
+  // administrator at all — its owner was the bot's own number, whose messages never reach this code.
+  test('activates for an admin whose author id arrives in the @lid dialect', async () => {
+    const state = freshState({ announced: true });
+    const { store, gateway, translator, saved, mocks } = makeDeps(state);
+    mocks.getGroupAdmins.mockResolvedValue(['6281770008896@c.us']); // participant list, @c.us
+    mocks.resolveCanonicalWid.mockResolvedValue('6281770008896@c.us'); // what the host resolves it to
+    const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+
+    const res = await c.handleMessage('s', msg({ author: '148004841455867@lid', body: '/tr on' }));
+
+    assert.deepEqual(res, { swallow: true });
+    assert.equal(saved.at(-1)?.active, true, 'the admin must be recognized across the lid/phone split');
+  });
+
+  test('a delegated controller named by phone number is recognized behind a @lid author', async () => {
+    const state = freshState({ announced: true, delegatedControllers: ['6281770008896@c.us'] });
+    const { store, gateway, translator, saved, mocks } = makeDeps(state);
+    mocks.getGroupAdmins.mockResolvedValue(['999@c.us']); // not an admin — delegation is the only route
+    mocks.resolveCanonicalWid.mockResolvedValue('6281770008896@c.us');
+    const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+
+    await c.handleMessage('s', msg({ author: '148004841455867@lid', body: '/tr on' }));
+
+    assert.equal(saved.at(-1)?.active, true, '/tr grant stores @c.us, so it needs the same bridge');
+  });
+
+  test('still refuses a genuine non-admin after resolving their canonical id', async () => {
+    const state = freshState({ announced: true });
+    const { store, gateway, translator, saved, mocks } = makeDeps(state);
+    mocks.getGroupAdmins.mockResolvedValue(['6289999999999@c.us']);
+    mocks.resolveCanonicalWid.mockResolvedValue('6281770008896@c.us'); // resolvable, but not an admin
+    const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+
+    await c.handleMessage('s', msg({ author: '148004841455867@lid', body: '/tr on' }));
+
+    assert.equal(saved.at(-1)?.active ?? false, false, 'resolution must not become a bypass');
+  });
+
+  test('does not spend a resolution round-trip when the direct comparison already authorizes', async () => {
+    const state = freshState({ announced: true });
+    const { store, gateway, translator, mocks } = makeDeps(state);
+    mocks.getGroupAdmins.mockResolvedValue(['111@c.us']); // matches the default author directly
+    const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+
+    await c.handleMessage('s', msg({ body: '/tr on' }));
+
+    assert.equal(mocks.resolveCanonicalWid.calls.length, 0, 'the extra engine call is for denials only');
+  });
+
+  test('memoizes the canonical id across commands from the same author', async () => {
+    const state = freshState({ announced: true });
+    const { store, gateway, translator, mocks } = makeDeps(state);
+    mocks.getGroupAdmins.mockResolvedValue(['6281770008896@c.us']);
+    mocks.resolveCanonicalWid.mockResolvedValue('6281770008896@c.us');
+    const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+
+    await c.handleMessage('s', msg({ author: '148004841455867@lid', body: '/tr on' }));
+    await c.handleMessage('s', msg({ author: '148004841455867@lid', body: '/tr off' }));
+
+    assert.equal(mocks.resolveCanonicalWid.calls.length, 1, 'a lid<->phone binding does not change');
+  });
+
+  test('falls back to the direct comparison when the host cannot resolve the author', async () => {
+    const state = freshState({ announced: true });
+    const { store, gateway, translator, saved, mocks } = makeDeps(state);
+    mocks.getGroupAdmins.mockResolvedValue(['6281770008896@c.us']);
+    mocks.resolveCanonicalWid.mockResolvedValue(null); // unknown contact, slow engine, dead session
+    const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+
+    await c.handleMessage('s', msg({ author: '148004841455867@lid', body: '/tr on' }));
+
+    assert.equal(saved.at(-1)?.active ?? false, false, 'unresolvable must deny, never fail open');
   });
 
   test('rejects activation from a non-admin silently by default (denyReply false)', async () => {
@@ -527,6 +615,7 @@ describe('TranslationCoordinator', () => {
       sendText: async (_s: string, _c: string, text: string) => { await Promise.resolve(); sends.push(text); },
       sendCombinedReply: async () => {},
       getGroupAdmins: async () => [],
+      resolveCanonicalWid: async () => null,
     };
     const translator: Translator = {
       detect: async () => ({ lang: 'en', confidence: 1 }), translate: async () => '',

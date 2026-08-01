@@ -8,6 +8,33 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-08-01
+
+### Fixed
+
+- **Group admins were refused their own commands.** WhatsApp delivers the author of a group message
+  under a privacy id (`…@lid`) while the group's participant list comes back under phone ids
+  (`…@c.us`). Those two carry unrelated numbers, so an admin failed every comparison and `/tr on`,
+  `/tr setlang`, `/tr grant` and the rest were silently denied. Only the group's creator was ever
+  recognized, because WhatsApp reports the owner in the author's own dialect — and in a group created
+  by the bot's own number, even that did not help, since the bot's own messages are never processed.
+  The result was a group with no working administrator at all.
+
+  When the direct comparison finds nothing, the plugin now asks the host to resolve the author to its
+  phone identity and compares again. The same bridge fixes `/tr grant`: a controller delegated by
+  phone number is now recognized when they speak. The lookup costs one call, is spent only on what
+  would otherwise be a denial, and is remembered afterwards.
+
+### Changed
+
+- **The LibreTranslate backend is configurable without repackaging the plugin.** `libretranslateUrl`
+  was checked against a fixed `localhost:7001` entry, so pointing the plugin at any other instance
+  meant editing the manifest and rebuilding the `.zip` — and every other value silently failed. Any
+  loopback address on any port is now accepted as shipped, and any other host is accepted over https
+  through the manifest's `allowConfigHosts`. A loopback or private address still needs
+  `SSRF_ALLOWED_HOSTS` on the OpenWA host; a plain-http backend on a non-loopback host still needs the
+  manifest edit, because the host admits a config-supplied host only over https.
+
 ## [1.2.0] — 2026-08-01
 
 ### Changed

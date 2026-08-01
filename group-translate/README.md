@@ -14,7 +14,7 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `group-translate` |
-| **Version** | 1.2.0 |
+| **Version** | 1.3.0 |
 | **Released** | 2026-08-01 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
@@ -30,8 +30,9 @@
 - **Per-participant languages** — learns each member's language from what they type (or pin it with
   `/tr setlang`), then posts a combined reply translating a message into the other languages in the group.
 - **In-chat control** — manage everything with `/tr` commands; no dashboard round-trip for day-to-day use.
-- **Admin-gated** — state-changing commands require a group admin (resolved via `ctx.engine.getGroupInfo`);
-  the group owner is always recognized. Disabled until an admin runs `/tr on`.
+- **Admin-gated** — state-changing commands require a group admin (resolved via `ctx.engine.getGroupInfo`).
+  Authors that arrive under WhatsApp's `@lid` privacy id are resolved to their phone identity, so an
+  admin is recognized whichever dialect the host delivers. Disabled until an admin runs `/tr on`.
 - **Resilient backend** — a per-call timeout plus a circuit breaker back off a slow or flaky LibreTranslate
   instance instead of stalling the chat.
 - **Guarded outbound HTTP** — all calls go through the host's SSRF-guarded `ctx.net.fetch`; the backend host
@@ -54,14 +55,21 @@ Default prefix `/tr` (configurable). Read-only commands are open; the rest are a
 ## Setup
 
 1. **Run a LibreTranslate instance.** The plugin calls its `/translate` endpoint over `ctx.net.fetch`.
-   Add the instance's `host:port` to the manifest `net.allow` before packaging, and — if it's on
-   `localhost`/a private host — also set `SSRF_ALLOWED_HOSTS` on the OpenWA host (see [Security](#security)).
-   The default `libretranslateUrl` (`http://localhost:7001`) *is* a loopback address, so out of the box
-   this plugin cannot reach its backend at all until this is done: set the environment variable
-   **`SSRF_ALLOWED_HOSTS`** on the OpenWA host itself — not in this plugin's config — e.g.
-   `SSRF_ALLOWED_HOSTS=localhost,127.0.0.1`.
-2. Have OpenWA **≥ 0.7.0** running with a logged-in WhatsApp session for the group(s) you want to translate.
-3. Install and enable the plugin (see [Install](#install)), then have a group admin run `/tr on`.
+   Set `libretranslateUrl` to it — no repackaging needed for either supported shape:
+   - **loopback, any port** (`http://localhost:7001`, `http://127.0.0.1:5000`) — allowed as shipped
+   - **any other host, over https** (`https://translate.example.com`) — allowed via the manifest's
+     `allowConfigHosts`, which admits an operator-configured host only over https
+
+   A plain-http backend on a non-loopback host (e.g. `http://libretranslate:5000` inside a Docker
+   network) is the one case still outside that: add its `host:port` to the manifest `net.allow` and
+   repackage, or put it behind https.
+2. **Allow the address on the OpenWA host if it is loopback or private.** The gateway's SSRF guard
+   blocks those by default, so set the environment variable **`SSRF_ALLOWED_HOSTS`** on the OpenWA host
+   itself — not in this plugin's config — e.g. `SSRF_ALLOWED_HOSTS=localhost,127.0.0.1`. The default
+   `libretranslateUrl` *is* a loopback address, so out of the box the plugin cannot reach its backend
+   until this is done (see [Security](#security)).
+3. Have OpenWA **≥ 0.7.0** running with a logged-in WhatsApp session for the group(s) you want to translate.
+4. Install and enable the plugin (see [Install](#install)), then have a group admin run `/tr on`.
    Enabling the plugin is silent: it says nothing in any group until someone addresses it with a
    `/tr` command. It never translates until an admin has run `/tr on` in that specific group, and it
    never introduces itself unless you turn on `announceInGroups` — which posts into *every* group the
@@ -70,7 +78,7 @@ Default prefix `/tr` (configurable). Read-only commands are open; the rest are a
 ## Install
 
 ```bash
-# 1. Set the manifest's net.allow to YOUR LibreTranslate host:port (see Security), then package:
+# Build from source (released .zip files are on the Releases page):
 node package.mjs group-translate    # produces group-translate.zip at the repo root
 
 curl -X POST "https://your-openwa-host/plugins/install" \
@@ -91,7 +99,7 @@ Then, in the group, an admin runs `/tr on`. Or install the packaged `.zip` from
 
 | Key | Required | Default | Description |
 | --- | -------- | ------- | ----------- |
-| `libretranslateUrl` | yes | `http://localhost:7001` | Base URL of your LibreTranslate instance — its host:port **must** be in the manifest `net.allow`; a `localhost`/private host **also** requires `SSRF_ALLOWED_HOSTS` on the gateway (see [Security](#security)) |
+| `libretranslateUrl` | yes | `http://localhost:7001` | Base URL of your LibreTranslate instance. Loopback on any port works as shipped; any other host is admitted over **https** only. A loopback/private address **also** requires `SSRF_ALLOWED_HOSTS` on the gateway (see [Security](#security)) |
 | `libretranslateApiKey` | no | — | Secret API key, if your instance requires one (redacted on read) |
 | `timeoutMs` | no | `4000` | Per-call timeout; keep ≤ the host hook budget (5000 ms) |
 | `commandPrefix` | no | `/tr` | The in-chat command prefix |
@@ -125,8 +133,11 @@ to a single WhatsApp session via the dashboard's session scope).
 Outbound translate calls go **exclusively** through the host's SSRF-guarded `ctx.net.fetch`; there is no
 raw socket in the plugin. Two independent controls apply and **both** must pass:
 
-1. **Manifest allowlist (`net.allow`, deny by default).** Before packaging you **must** set `net.allow`
-   to the `host:port` of your `libretranslateUrl` — e.g. `"net": { "allow": ["libretranslate:7001"] }`.
+1. **Manifest allowlist (deny by default).** The plugin ships allowing `localhost` and `127.0.0.1` on
+   any port, plus — via `net.allowConfigHosts` — the host of whatever `libretranslateUrl` you configure,
+   **provided that URL is https**. The host deliberately ignores a non-https config value here, so a
+   plain-http backend on a non-loopback host is the one shape that still needs `net.allow` edited and the
+   plugin repackaged — e.g. `"net": { "allow": ["libretranslate:7001"] }`.
 2. **Host SSRF guard.** The host additionally blocks private / loopback addresses (`127.0.0.0/8`, `::1`,
    RFC-1918, link-local) at connect time, **regardless of `net.allow`**, with no plugin opt-out.
 
@@ -135,11 +146,14 @@ host** — including this plugin's default `http://localhost:7001` — is blocke
 that hostname to the gateway environment variable **`SSRF_ALLOWED_HOSTS`** (e.g.
 `SSRF_ALLOWED_HOSTS=localhost,127.0.0.1`, or the Docker service name). Without it, translate calls fail at
 connect: the plugin fails open (messages pass through **untranslated**) and the circuit opens after a few
-failures. A **public** LibreTranslate host needs only `net.allow`, not `SSRF_ALLOWED_HOSTS`.
+failures. A **public** LibreTranslate host passes (2) unconditionally and needs no `SSRF_ALLOWED_HOSTS`.
 
 The API key travels only in the request body to the allow-listed host and is stored as a redacted secret.
-Commands that change group state are admin-gated via `ctx.engine.getGroupInfo`; the per-call timeout (≤ the
-host hook budget) and circuit breaker keep a slow backend from stalling the host.
+Commands that change group state are admin-gated via `ctx.engine.getGroupInfo`. When WhatsApp delivers the
+author under its `@lid` privacy id, the plugin resolves that to the author's phone identity through
+`ctx.engine.getContactById` before comparing — resolution widens *recognition*, never permission: an
+author who resolves to someone outside the admin and delegated-controller lists is still refused. The
+per-call timeout (≤ the host hook budget) and circuit breaker keep a slow backend from stalling the host.
 
 ## Changelog
 
