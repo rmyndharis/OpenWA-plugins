@@ -113,6 +113,7 @@ export class TranslationPlugin implements IPlugin {
       readNumber(cfg, "minLength", 2),
       readNumber(cfg, "maxLength", 2000),
       readBool(cfg, "denyReply", false),
+      readBool(cfg, "announceInGroups", false),
     ]);
   }
 
@@ -137,6 +138,9 @@ export class TranslationPlugin implements IPlugin {
       minLength: readNumber(cfg, "minLength", 2),
       maxLength: readNumber(cfg, "maxLength", 2000),
       denyReply: readBool(cfg, "denyReply", false),
+      // Default false in the code as well as the manifest: an install that predates this field has no
+      // stored value, and the safe reading of a missing opt-in is "not opted in".
+      announceInGroups: readBool(cfg, "announceInGroups", false),
     };
     return new TranslationCoordinator(translator, store, gateway, opts, logger);
   }

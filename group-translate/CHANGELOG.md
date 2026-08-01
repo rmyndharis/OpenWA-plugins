@@ -8,6 +8,21 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-08-01
+
+### Changed
+
+- **This plugin no longer introduces itself in your groups unless you ask it to.** Until now, enabling
+  it made it post a "👋 Translation bot…" message into a group the first time it saw any message there.
+  That fired **per group**, so a single enable announced the bot into every group the WhatsApp account
+  belonged to — and the account running a plugin is usually somebody's own WhatsApp, not a dedicated
+  bot number. The introduction is now controlled by a new **Announce this bot in new groups** setting,
+  which is **off by default**, including for installs upgrading from an earlier version.
+
+  Nothing else about the plugin was reachable without addressing it first: translation still requires
+  an admin to run `/tr on`, and the same introduction text is still available to anyone on demand with
+  `/tr help`. If you want the old behaviour, turn the new setting on.
+
 ## [1.1.1] — 2026-08-01
 
 No behaviour change. 1.1.0 has now been smoke-tested against a newer host, so the tested-version field

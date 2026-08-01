@@ -14,7 +14,7 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `group-translate` |
-| **Version** | 1.1.1 |
+| **Version** | 1.2.0 |
 | **Released** | 2026-08-01 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
@@ -62,6 +62,10 @@ Default prefix `/tr` (configurable). Read-only commands are open; the rest are a
    `SSRF_ALLOWED_HOSTS=localhost,127.0.0.1`.
 2. Have OpenWA **≥ 0.7.0** running with a logged-in WhatsApp session for the group(s) you want to translate.
 3. Install and enable the plugin (see [Install](#install)), then have a group admin run `/tr on`.
+   Enabling the plugin is silent: it says nothing in any group until someone addresses it with a
+   `/tr` command. It never translates until an admin has run `/tr on` in that specific group, and it
+   never introduces itself unless you turn on `announceInGroups` — which posts into *every* group the
+   account is in, so leave it off unless the account is a dedicated bot number.
 
 ## Install
 
@@ -94,6 +98,7 @@ Then, in the group, an admin runs `/tr on`. Or install the packaged `.zip` from
 | `minLength` | no | `2` | Minimum message length to translate |
 | `maxLength` | no | `2000` | Maximum message length to translate |
 | `denyReply` | no | `false` | Reply "admins only" when a non-admin runs a restricted command |
+| `announceInGroups` | no | `false` | Post an introduction into a group the first time the plugin sees a message there, once per group. **Off by default** — it fires per group, so turning it on announces the bot into every group the WhatsApp account belongs to. `/tr help` gives anyone the same text on request |
 
 ## Compatibility
 
@@ -104,7 +109,8 @@ Targets OpenWA **≥ 0.7.0** — outbound HTTP uses the v0.7 `ctx.net.fetch` cap
 
 **Supported, with a caveat.** Every config field may be overridden per WhatsApp session via the
 dashboard; an override that changes a coordinator-affecting field (e.g. `libretranslateUrl`,
-`libretranslateApiKey`, `timeoutMs`, `commandPrefix`, `minLength`, `maxLength`, `denyReply`) takes
+`libretranslateApiKey`, `timeoutMs`, `commandPrefix`, `minLength`, `maxLength`, `denyReply`,
+`announceInGroups`) takes
 effect on the next inbound message. The plugin uses config-signature caching: the coordinator (and the
 LibreTranslate client's circuit breaker) is reused across messages with the same resolved config, and
 rebuilt only when the signature changes.
