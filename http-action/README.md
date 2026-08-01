@@ -14,9 +14,9 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `http-action` |
-| **Version** | 0.2.0 |
-| **Released** | 2026-07-31 |
-| **Status** | beta |
+| **Version** | 0.2.1 |
+| **Released** | 2026-08-01 |
+| **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
@@ -106,11 +106,9 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 
 ## Compatibility
 
-Status is **beta**. It targets OpenWA **≥ 0.8.0**, the release that introduced both capabilities it
-relies on (`net.allowConfigHosts` and `conversation:send`). `testedOpenWAVersion` is deliberately unset:
-the plugin has not been install- and runtime-tested on a real OpenWA instance, and that field is only
-worth anything if it is honest. Live config edits apply on the next inbound message (config is re-read
-per event).
+Targets OpenWA **≥ 0.8.0**, the release that introduced both capabilities it relies on
+(`net.allowConfigHosts` and `conversation:send`). Live config edits apply on the next inbound message
+(config is re-read per event).
 
 ### Per-session config
 

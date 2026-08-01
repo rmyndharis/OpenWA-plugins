@@ -3,6 +3,21 @@
 All notable changes to HTTP Action Bot are listed here. Versions follow [Semantic Versioning](https://semver.org/),
 and the top entry's version must match `manifest.json`.
 
+## [0.2.1] — 2026-08-01
+
+### Changed
+
+- **Status promoted from `beta` to `stable`.** No behaviour changed in this release. A manual install
+  smoke on a real OpenWA 0.12.1 host — the one check that cannot be automated — has now been run in
+  full and passed: install from package, configure, and enable; a POST command with path and JSON-body
+  templating (reply carried the templated body, the sender's phone number resolved correctly, the
+  configured bearer credential reached the upstream); a command against an upstream 404 (the configured
+  not-found template was used); a command against an upstream 500 (the configured error template was
+  used); disable/re-enable (configuration survived, a command worked afterwards); and a host restart
+  (the plugin came back enabled and a command was confirmed working afterwards). With another
+  responder plugin installed alongside, commands were answered by this plugin and non-command messages
+  went to the other plugin, confirming the co-installation ordering behaves as documented.
+
 ## [0.2.0] — 2026-07-31
 
 ### Fixed
