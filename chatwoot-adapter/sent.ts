@@ -1,6 +1,6 @@
 import type { IncomingMessage } from '../types/openwa';
 import { shouldRelayOwn } from './filters.ts';
-import { relayMessage, type InboundDeps } from './relay.ts';
+import { relayMessage, ensureConversation, type InboundDeps } from './relay.ts';
 
 // WhatsApp → Chatwoot for the account's OWN outbound sends — messages composed on a linked phone / the
 // WhatsApp mobile app / the OpenWA REST API — so the Chatwoot thread mirrors the full WhatsApp
@@ -42,11 +42,43 @@ export async function handleSent(
       // the helpdesk is visible and harmless; a missing customer message is neither.
       const identifiable = Boolean(msg.id);
       if (identifiable && (await deps.store.hasSeen('wa', msg.id, sessionId))) return;
-      const conversationId = await findMappedConversation(deps, sessionId, msg, key);
-      if (conversationId === null) return; // unmapped chat — drop, never create (no split)
+      let conversationId = await findMappedConversation(deps, sessionId, msg, key);
+      if (conversationId === null) return; // unmapped chat — drop, never create outside a 404 recovery (no split)
       if (identifiable) await deps.store.markSeen('wa', msg.id, sessionId);
       else deps.log('own send has no engine message id; relaying it without de-duplication');
-      await relayMessage(deps, sessionId, conversationId, msg, 'outgoing');
+      try {
+        await relayMessage(deps, sessionId, conversationId, msg, 'outgoing');
+      } catch (err) {
+        // Mirror of inbound.ts's 404 recovery: an operator-deleted Chatwoot conversation leaves the
+        // conv->WA mapping dangling. The mirror path uses findMappedConversation (never creates on a
+        // miss, see "relay-into-existing-only" above), so on a 404 we DROP the stale forward + reverse
+        // keys and call ensureConversation directly — find-or-create the contact, find-or-mint the
+        // conversation, link, then re-post. A failure inside the recovery is logged with its own
+        // context (so the log shows WHICH step failed) and the ORIGINAL 404 surfaces through the outer
+        // catch. sent.ts is at-most-once — unlike inbound, this path does NOT enqueue for retry
+        // (mirrors the existing posture).
+        if ((err as { status?: number } | null)?.status !== 404) throw err;
+        const originalErr = err;
+        try {
+          // Unlink by the RAW chatId (msg.chatId), not the canonical key. findMappedConversation checks
+          // msg.chatId first, so a stale row under the raw key would shadow the fresh one we're about
+          // to create. ensureConversation also links under msg.chatId, matching the original key.
+          await deps.store.unlinkByChatId(sessionId, msg.chatId);
+          await deps.store.unlinkByConversationId(sessionId, conversationId);
+          conversationId = await ensureConversation(deps, sessionId, msg.chatId, {
+            name:
+              msg.contact?.pushName ||
+              msg.contact?.name ||
+              msg.senderPhone ||
+              (msg.isGroup ? `Group ${msg.chatId}` : msg.chatId),
+            phone: msg.isGroup ? undefined : msg.senderPhone ?? undefined,
+          });
+          await relayMessage(deps, sessionId, conversationId, msg, 'outgoing');
+        } catch (rebuildErr) {
+          deps.log('own-send 404-recovery failed', rebuildErr);
+          throw originalErr;
+        }
+      }
     } catch (err) {
       deps.log('own-send relay failed', err);
     }

@@ -151,7 +151,14 @@ export class ChatwootClient {
       headers: this.headers({ 'Content-Type': `multipart/form-data; boundary=${boundary}` }),
       body,
     });
-    if (!res.ok) throw new Error(`Chatwoot postMedia -> ${res.status}`);
+    if (!res.ok) {
+      // Mirror json(): attach err.status so the caller (inbound/sent recovery) can branch on the HTTP
+      // code (the 404 mapping-rebuild path needs this — the bare Error below would otherwise be invisible
+      // to the `err.status === 404` check and a media 404 would dead-letter instead of recover).
+      const e = new Error(`Chatwoot postMedia -> ${res.status}`) as Error & { status?: number };
+      e.status = res.status;
+      throw e;
+    }
     return JSON.parse(res.body || '{}') as { id: number };
   }
 
