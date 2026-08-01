@@ -8,6 +8,25 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-08-01
+
+No behaviour change. 1.1.0 has now been smoke-tested against a newer host, so the tested-version field
+is updated to match.
+
+### Verified
+
+- **Confirmed against a live OpenWA 0.12.1 host**, with a connected WhatsApp session, driven by real
+  WhatsApp messages from a second connected number in a real WhatsApp group, against a real self-hosted
+  LibreTranslate instance (English + Indonesian models) reachable at `http://localhost:7001` from inside
+  the host container. `/tr status` reported `Translator: ok` — a live health probe of LibreTranslate
+  through the host-proxied `ctx.net.fetch`. `/tr on` returned `✅ Translation activated.`, and both
+  `/tr setlang en` (self) and `/tr setlang id <number>` applied and read back correctly in `/tr status`.
+  The message `good morning, how are you today` was answered with
+  `ID: selamat pagi, bagaimana kabarmu hari ini`.
+- **The transformer-band fix from 1.1.0 holds**: the hook registered at priority 50, the Transformer
+  band assigned in `PLUGIN-STANDARD.md`.
+- **Not covered:** load or concurrency.
+
 ## [1.1.0] — 2026-07-31
 
 ### Fixed

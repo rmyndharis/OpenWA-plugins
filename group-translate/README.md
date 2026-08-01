@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `group-translate` |
-| **Version** | 1.1.0 |
-| **Released** | 2026-07-31 |
+| **Version** | 1.1.1 |
+| **Released** | 2026-08-01 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.8.1) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.12.1) |
 | **Keywords** | translation, libretranslate, i18n, groups, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/group-translate](https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate) |
 <!-- END DETAILS -->
@@ -56,6 +56,10 @@ Default prefix `/tr` (configurable). Read-only commands are open; the rest are a
 1. **Run a LibreTranslate instance.** The plugin calls its `/translate` endpoint over `ctx.net.fetch`.
    Add the instance's `host:port` to the manifest `net.allow` before packaging, and — if it's on
    `localhost`/a private host — also set `SSRF_ALLOWED_HOSTS` on the OpenWA host (see [Security](#security)).
+   The default `libretranslateUrl` (`http://localhost:7001`) *is* a loopback address, so out of the box
+   this plugin cannot reach its backend at all until this is done: set the environment variable
+   **`SSRF_ALLOWED_HOSTS`** on the OpenWA host itself — not in this plugin's config — e.g.
+   `SSRF_ALLOWED_HOSTS=localhost,127.0.0.1`.
 2. Have OpenWA **≥ 0.7.0** running with a logged-in WhatsApp session for the group(s) you want to translate.
 3. Install and enable the plugin (see [Install](#install)), then have a group admin run `/tr on`.
 
