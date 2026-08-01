@@ -1,7 +1,7 @@
 {
   "id": "faq-bot",
   "name": "FAQ / Auto-Reply Bot",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Auto-replies to inbound WhatsApp messages from configurable FAQ keyword/regex rules.",
@@ -19,7 +19,7 @@
   ],
   "status": "stable",
   "minOpenWAVersion": "0.6.1",
-  "testedOpenWAVersion": "0.8.1",
+  "testedOpenWAVersion": "0.12.1",
   "provides": [
     "auto-reply"
   ],

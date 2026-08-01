@@ -8,6 +8,21 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-08-01
+
+No behaviour change. 0.2.0 has now been smoke-tested against a newer host, so the tested-version field
+is updated to match.
+
+### Verified
+
+- **Confirmed against a live OpenWA 0.12.1 host**, with a connected WhatsApp session, this plugin
+  enabled alongside four other responder plugins (including chat-flow and faq-bot) and driven by real
+  messages from a second connected WhatsApp number. A message matching nothing more specific fell
+  through to the other catch-all responder rather than this plugin, as expected from the 0.2.0
+  last-registered priority; with that other catch-all disabled, the same kind of message was then
+  answered by this plugin with its configured away message.
+- **Not covered:** group chats, media messages, and behaviour under load.
+
 ## [0.2.0] — 2026-07-31
 
 ### Fixed

@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `faq-bot` |
-| **Version** | 0.2.0 |
-| **Released** | 2026-07-31 |
+| **Version** | 0.2.1 |
+| **Released** | 2026-08-01 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.6.1 (tested 0.8.1) |
+| **Requires OpenWA** | ≥ 0.6.1 (tested 0.12.1) |
 | **Keywords** | faq, auto-reply, chatbot, support, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/faq-bot](https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot) |
 <!-- END DETAILS -->
