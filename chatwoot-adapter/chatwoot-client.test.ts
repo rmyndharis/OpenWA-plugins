@@ -40,6 +40,47 @@ test('createContact on 422 re-searches and returns the existing contact (find-ex
   assert.deepEqual(await c.createContact('621@c.us', 'Budi'), { id: 11, sourceId: 'src-11' });
 });
 
+test('createContact on 422 adopts a contact that owns the phone under a different identifier', async () => {
+  // A contact created by hand or by another integration holds the phone but not our JID identifier —
+  // the identifier search misses it, and before the fallback every message from the chat dead-lettered.
+  const { fn, calls } = fakeFetch({
+    'POST /api/v1/accounts/3/contacts': { status: 422, body: { message: 'Phone number has already been taken' } },
+    'GET /api/v1/accounts/3/contacts/search': {
+      body: { payload: [{ id: 21, identifier: 'wa:628123', phone_number: '+628123', contact_inboxes: [{ inbox: { id: 7 }, source_id: 'src-21' }] }] },
+    },
+    'PUT /api/v1/accounts/3/contacts/21': { body: { id: 21 } },
+  });
+  const c = new ChatwootClient(fn, cfg);
+  assert.deepEqual(await c.createContact('628123@c.us', 'Budi', '+628123'), { id: 21, sourceId: 'src-21' });
+  // The contact is re-keyed to the JID so future identifier searches resolve it directly.
+  const put = calls.find(x => x.init?.method === 'PUT' && x.url.endsWith('/contacts/21'))!;
+  assert.deepEqual(JSON.parse(put.init!.body as string), { identifier: '628123@c.us' });
+});
+
+test('createContact adoption still returns the contact when the identifier re-key fails', async () => {
+  const { fn } = fakeFetch({
+    'POST /api/v1/accounts/3/contacts': { status: 422, body: { message: 'taken' } },
+    'GET /api/v1/accounts/3/contacts/search': {
+      body: { payload: [{ id: 22, phone_number: '+628123', contact_inboxes: [{ inbox: { id: 7 }, source_id: 'src-22' }] }] },
+    },
+    'PUT /api/v1/accounts/3/contacts/22': { status: 422, body: { message: 'identifier taken elsewhere' } },
+  });
+  const c = new ChatwootClient(fn, cfg);
+  assert.deepEqual(await c.createContact('628123@c.us', 'Budi', '+628123'), { id: 22, sourceId: 'src-22' });
+});
+
+test('createContact on 422 with no identifier or phone match rethrows the original error', async () => {
+  const { fn } = fakeFetch({
+    'POST /api/v1/accounts/3/contacts': { status: 422, body: { message: 'taken' } },
+    'GET /api/v1/accounts/3/contacts/search': { body: { payload: [{ id: 30, phone_number: '+9999' }] } },
+  });
+  const c = new ChatwootClient(fn, cfg);
+  await assert.rejects(
+    c.createContact('628123@c.us', 'Budi', '+628123'),
+    (err: Error & { status?: number }) => err.status === 422,
+  );
+});
+
 test('postText posts an incoming message with the api token header', async () => {
   const { fn, calls } = fakeFetch({ 'POST /api/v1/accounts/3/conversations/55/messages': { body: { id: 999 } } });
   const res = await new ChatwootClient(fn, cfg).postText(55, 'hello');

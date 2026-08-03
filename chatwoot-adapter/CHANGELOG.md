@@ -22,6 +22,27 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
   quoted message has no external id (for example a note imported by an external tool without a
   `source_id`) goes out unquoted, as before.
 
+### Fixed
+
+- **Inbound messages no longer dead-letter when the phone number already belongs to a Chatwoot contact
+  keyed under a different identifier.** A contact created by hand, by another integration, or before this
+  adapter took over the inbox can hold the chat's phone number without the adapter's JID identifier. The
+  create then 422s, the identifier-based fallback search misses the contact, and — because the same
+  collision recurs on every delivery — each message from that chat burned its whole retry budget into the
+  dead-letter queue while the plugin's health stayed green until the retries were exhausted. The adapter
+  now falls back to searching by phone number, adopts the matching contact, and re-keys its identifier to
+  the JID so future lookups resolve it directly. The re-key is best-effort: if it fails (say, a
+  conflicting identifier on another contact), the phone match alone still delivers the message — merging
+  the duplicate contacts in Chatwoot remains safe, as before.
+
+### Verified
+
+- **Reproduced and confirmed against a live OpenWA 0.12.1 host** (Baileys engine) and a self-hosted
+  Chatwoot v4.16.2: an API-channel inbox previously fed by a custom bridge had contacts keyed
+  `wa:<digits>`. Every inbound WhatsApp message from those chats 422'd and dead-lettered
+  ("2 dead-lettered after 5 attempts"). Manually re-keying the contacts' identifiers to the JID — exactly
+  what this fix automates — immediately restored inbound relay for those chats.
+
 ## [0.8.0] — 2026-08-01
 
 ### Added

@@ -78,9 +78,33 @@ export class ChatwootClient {
       if ((err as { status?: number }).status === 422) {
         const found = await this.searchContact(identifier);
         if (found) return { id: found.id, sourceId: found.sourceId ?? (await this.ensureContactInbox(found.id)) };
+        // Identifier free, yet create still 422s: the phone belongs to a contact keyed under a DIFFERENT
+        // identifier — created by hand, by another integration, or before this adapter took over the inbox.
+        // Without this fallback the identifier search misses it on every delivery and each message from
+        // the chat burns its whole retry budget into the dead-letter queue. Adopt that contact instead.
+        const adopted = phone ? await this.adoptContactByPhone(phone, identifier) : null;
+        if (adopted) return { id: adopted.id, sourceId: adopted.sourceId ?? (await this.ensureContactInbox(adopted.id)) };
       }
       throw err;
     }
+  }
+
+  // Find the contact that owns `phone` and re-key it to our JID `identifier`, so every future
+  // searchContact() resolves it directly. The re-key is best-effort: if it fails (e.g. a conflicting
+  // identifier elsewhere), the phone match alone still threads this message — next delivery just takes
+  // this fallback again instead of dead-lettering.
+  private async adoptContactByPhone(phone: string, identifier: string): Promise<{ id: number; sourceId?: string } | null> {
+    const { data } = await this.json<{
+      payload?: Array<{ id: number; phone_number?: string; contact_inboxes?: Array<{ inbox?: { id?: number }; source_id?: string }> }>;
+    }>(`${this.base()}/contacts/search?q=${encodeURIComponent(phone)}`);
+    const hit = (data.payload ?? []).find(c => c.phone_number === phone);
+    if (!hit) return null;
+    try {
+      await this.json(`${this.base()}/contacts/${hit.id}`, { method: 'PUT', body: JSON.stringify({ identifier }) });
+    } catch {
+      // Keep the match — adoption is an optimization, not a requirement for delivering this message.
+    }
+    return { id: hit.id, sourceId: hit.contact_inboxes?.find(ci => ci.inbox?.id === this.cfg.inboxId)?.source_id };
   }
 
   async ensureContactInbox(contactId: number): Promise<string> {
