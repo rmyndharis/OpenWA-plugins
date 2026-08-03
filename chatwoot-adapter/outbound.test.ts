@@ -58,6 +58,48 @@ test('relays an outgoing agent reply with an explicit chatId', async () => {
   assert.deepEqual(sent, [{ sessionId: 'sess', chatId: 'c@wa', type: 'text', text: 'hi' }]);
 });
 
+test('an agent "Reply to" rides out as a WhatsApp quote (replyTo = quoted source_id)', async () => {
+  const { deps: d, sent } = deps();
+  await handleOutbound(
+    d,
+    req({
+      event: 'message_created', message_type: 'outgoing', private: false, id: 6, content: 'quoted answer',
+      inbox: { id: 7 }, conversation: { id: 55 },
+      content_attributes: { in_reply_to: 41, in_reply_to_external_id: 'WA_QUOTED_1' },
+    }),
+  );
+  assert.deepEqual(sent, [{ sessionId: 'sess', chatId: 'c@wa', type: 'text', text: 'quoted answer', replyTo: 'WA_QUOTED_1' }]);
+});
+
+test('a reply whose quoted message has no external id goes unquoted, not dropped', async () => {
+  const { deps: d, sent } = deps();
+  await handleOutbound(
+    d,
+    req({
+      event: 'message_created', message_type: 'outgoing', private: false, id: 7, content: 'plain',
+      inbox: { id: 7 }, conversation: { id: 55 },
+      content_attributes: { in_reply_to: 41 },
+    }),
+  );
+  assert.deepEqual(sent, [{ sessionId: 'sess', chatId: 'c@wa', type: 'text', text: 'plain' }]);
+});
+
+test('a quoted reply with an attachment carries replyTo on the media envelope', async () => {
+  const { deps: d, sent } = deps();
+  await handleOutbound(
+    d,
+    req({
+      event: 'message_created', message_type: 'outgoing', private: false, id: 10, content: 'see this',
+      inbox: { id: 7 }, conversation: { id: 55 },
+      attachments: [{ id: 1, file_type: 'image', data_url: 'https://chat.acme.com/blob/x.jpg' }],
+      content_attributes: { in_reply_to_external_id: 'WA_QUOTED_2' },
+    }),
+  );
+  assert.deepEqual(sent, [
+    { sessionId: 'sess', chatId: 'c@wa', type: 'image', mediaUrl: 'https://chat.acme.com/blob/x.jpg', text: 'see this', replyTo: 'WA_QUOTED_2' },
+  ]);
+});
+
 test('relays an outbound audio attachment as a WhatsApp voice note (#607)', async () => {
   const { deps: d, sent } = deps();
   await handleOutbound(

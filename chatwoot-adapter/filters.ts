@@ -26,6 +26,9 @@ export interface ChatwootWebhookMessage {
   inbox?: { id?: number };
   sender?: { type?: string };
   attachments?: Array<{ id?: number; file_type?: string; data_url?: string }>;
+  // Set when the agent used "Reply to": `in_reply_to_external_id` is the quoted message's source_id,
+  // which is the WhatsApp message id for everything this adapter posts — so it can ride out as a quote.
+  content_attributes?: { in_reply_to?: number; in_reply_to_external_id?: string };
   changed_attributes?: Array<Record<string, { current_value?: unknown; previous_value?: unknown }>>;
 }
 

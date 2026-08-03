@@ -83,6 +83,10 @@ async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: Cha
     // reply if Chatwoot re-announces an already-relayed message under a NEW delivery id during the upgrade
     // window — visible and self-correcting, unlike silently dropping a genuine agent reply.
     if (id && (await deps.store.hasSeen('cw', id, target.sessionId))) return;
+    // An agent "Reply to" carries the quoted message's source_id — a WA message id for everything this
+    // adapter posts — and the engine renders it as a real WhatsApp quote. Absent or foreign (a Chatwoot
+    // message without source_id quotes as external id undefined), the reply just goes unquoted.
+    const replyTo = evt.content_attributes?.in_reply_to_external_id;
     let res: unknown;
     if (media) {
       res = await deps.conversations.send({
@@ -91,9 +95,16 @@ async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: Cha
         type: media.type,
         mediaUrl: media.url,
         text: text || undefined,
+        ...(replyTo ? { replyTo } : {}),
       });
     } else {
-      res = await deps.conversations.send({ sessionId: target.sessionId, chatId: target.chatId, type: 'text', text });
+      res = await deps.conversations.send({
+        sessionId: target.sessionId,
+        chatId: target.chatId,
+        type: 'text',
+        text,
+        ...(replyTo ? { replyTo } : {}),
+      });
     }
     if (id) await deps.store.markSeen('cw', id, target.sessionId);
     // Echo guard for the own-send relay (#615): the message we just sent to WhatsApp will come back as a

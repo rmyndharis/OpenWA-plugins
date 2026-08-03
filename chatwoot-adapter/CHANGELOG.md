@@ -6,6 +6,17 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+### Added
+
+- **An agent's "Reply to" in Chatwoot now reaches WhatsApp as a real quote.** The adapter posts every
+  message with its WhatsApp id as `source_id`, and when an agent replies to a specific message Chatwoot
+  hands that id back as `content_attributes.in_reply_to_external_id` — but the outbound relay ignored it,
+  so the reply arrived as a plain message and the person on WhatsApp couldn't tell which message it
+  answered. The relay now passes it through as the send envelope's `replyTo`, for text and attachment
+  replies alike. A reply whose quoted message has no external id (for example a note imported by an
+  external tool without a `source_id`) still goes out — just unquoted, as before, rather than being
+  dropped.
+
 ## [0.8.0] — 2026-08-01
 
 ### Added
