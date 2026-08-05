@@ -113,6 +113,7 @@ export async function handleInbound(
       await relayInbound(deps, sessionId, msg);
     } catch (err) {
       deps.log('inbound relay failed; queued for retry', err);
+      deps.onRelayError(err);
       // Strip an oversized media blob before persisting so a huge value can't be rejected by the storage
       // layer (which would lose the message — it's already markSeen); the retry then posts a placeholder.
       const dropped = await deps.store

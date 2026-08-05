@@ -75,6 +75,7 @@ async function wire(sessionId = 'sess') {
     relayGroups: true, relayMedia: true, backfillLimit: 0, backfillAllOnce: false, log: () => {},
     // Both callbacks are required on InboundDeps; the cast would hide an omitted one.
     onInboundLost: () => {},
+    onRelayError: () => {},
     onBackfillExhausted: () => {},
   } as unknown as InboundDeps;
 
@@ -164,6 +165,7 @@ test("one tenant's mirror marker does not suppress another tenant's reply with t
     client: { postText: async () => { posted.push({ id: 60 }); return { id: 60 }; }, postMedia: async () => ({ id: 60 }) },
     // Both callbacks are required on InboundDeps; the cast would hide an omitted one.
     onInboundLost: () => {},
+    onRelayError: () => {},
     onBackfillExhausted: () => {},
   } as unknown as InboundDeps;
   await handleSent(inboundA, 'sessA', 'Engine', { ...own, chatId: 'alice@c.us' } as IncomingMessage);
@@ -207,6 +209,7 @@ test('an echo webhook processed while the adapter post is still in flight is NOT
     relayGroups: true, relayMedia: true, backfillLimit: 0, backfillAllOnce: false, log: () => {},
     // Both callbacks are required on InboundDeps; the cast would hide an omitted one.
     onInboundLost: () => {},
+    onRelayError: () => {},
     onBackfillExhausted: () => {},
   } as unknown as InboundDeps;
   const sent: Array<{ chatId?: string }> = [];

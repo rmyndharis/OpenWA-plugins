@@ -50,6 +50,7 @@ function deps(
     log: over.log ?? (() => {}),
     // Both callbacks are required on InboundDeps; the cast would hide an omitted one.
     onInboundLost: () => {},
+    onRelayError: () => {},
     onBackfillExhausted: () => {},
   } as unknown as InboundDeps;
   return { deps: d, counts: () => ({ contacts, convs }), posted, seen };
