@@ -12,7 +12,7 @@
   "keywords": ["chatwoot", "helpdesk", "inbox", "handover", "two-way", "agent", "whatsapp", "openwa"],
   "status": "stable",
   "minOpenWAVersion": "0.8.7",
-  "testedOpenWAVersion": "0.12.1",
+  "testedOpenWAVersion": "0.14.0",
   "sdkVersion": "1",
   "permissions": ["net:fetch", "conversation:send", "webhook:ingress", "engine:read"],
   "net": { "allow": [], "allowConfigHosts": ["baseUrl"] },

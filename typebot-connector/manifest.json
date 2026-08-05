@@ -12,7 +12,7 @@
   "keywords": ["typebot", "chatbot", "flow", "bot", "no-code", "two-way", "whatsapp", "openwa"],
   "status": "stable",
   "minOpenWAVersion": "0.8.2",
-  "testedOpenWAVersion": "0.12.1",
+  "testedOpenWAVersion": "0.14.0",
   "sdkVersion": "1",
   "permissions": ["net:fetch", "conversation:send"],
   "net": { "allow": [], "allowConfigHosts": ["apiHost", "mediaHost"] },

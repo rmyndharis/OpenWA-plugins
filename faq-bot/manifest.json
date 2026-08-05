@@ -19,7 +19,7 @@
   ],
   "status": "stable",
   "minOpenWAVersion": "0.6.1",
-  "testedOpenWAVersion": "0.12.1",
+  "testedOpenWAVersion": "0.14.0",
   "provides": [
     "auto-reply"
   ],

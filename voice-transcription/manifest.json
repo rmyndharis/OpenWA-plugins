@@ -21,7 +21,7 @@
   ],
   "status": "beta",
   "minOpenWAVersion": "0.7.0",
-  "testedOpenWAVersion": "0.12.1",
+  "testedOpenWAVersion": "0.14.0",
   "provides": [
     "transcription"
   ],

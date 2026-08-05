@@ -20,7 +20,7 @@
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.12.1) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.14.0) |
 | **Keywords** | transcription, speech-to-text, stt, whisper, voice, audio, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/voice-transcription](https://github.com/rmyndharis/OpenWA-plugins/tree/main/voice-transcription) |
 <!-- END DETAILS -->
