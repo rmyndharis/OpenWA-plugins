@@ -6,6 +6,8 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-08-05
+
 ### Added
 
 - **An agent's "Reply to" in Chatwoot now reaches WhatsApp as a real quote.** The adapter posts every
