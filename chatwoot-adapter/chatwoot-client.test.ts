@@ -57,6 +57,21 @@ test('createContact on 422 adopts a contact that owns the phone under a differen
   assert.deepEqual(JSON.parse(put.init!.body as string), { identifier: '628123@c.us' });
 });
 
+test('createContact adoption never re-keys a contact already keyed to a WA JID', async () => {
+  // The phone can collide with a contact this adapter itself minted under the OTHER JID form (a chat seen
+  // as @lid before the lid->phone cache warmed, or the reverse). Adopting it is right; overwriting its
+  // identifier is not — that would flip the contact between the two forms on every mapping-loss event.
+  const { fn, calls } = fakeFetch({
+    'POST /api/v1/accounts/3/contacts': { status: 422, body: { message: 'Phone number has already been taken' } },
+    'GET /api/v1/accounts/3/contacts/search': {
+      body: { payload: [{ id: 23, identifier: '628123@c.us', phone_number: '+628123', contact_inboxes: [{ inbox: { id: 7 }, source_id: 'src-23' }] }] },
+    },
+  });
+  const c = new ChatwootClient(fn, cfg);
+  assert.deepEqual(await c.createContact('118367890123478@lid', 'Budi', '+628123'), { id: 23, sourceId: 'src-23' });
+  assert.equal(calls.some(x => x.init?.method === 'PUT'), false);
+});
+
 test('createContact adoption still returns the contact when the identifier re-key fails', async () => {
   const { fn } = fakeFetch({
     'POST /api/v1/accounts/3/contacts': { status: 422, body: { message: 'taken' } },

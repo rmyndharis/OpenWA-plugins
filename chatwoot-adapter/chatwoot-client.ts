@@ -74,7 +74,8 @@ export class ChatwootClient {
       const src = contact.contact_inboxes?.find(ci => ci.inbox?.id === this.cfg.inboxId)?.source_id;
       return { id: contact.id, sourceId: src ?? (await this.ensureContactInbox(contact.id)) };
     } catch (err) {
-      // 422 "already exists" (Chatwoot doesn't enforce phone uniqueness but does on identifier) → reuse.
+      // 422 "already exists": Chatwoot enforces uniqueness on BOTH identifier and phone_number, account-wide.
+      // Try the identifier first (the key this adapter owns), then the phone.
       if ((err as { status?: number }).status === 422) {
         const found = await this.searchContact(identifier);
         if (found) return { id: found.id, sourceId: found.sourceId ?? (await this.ensureContactInbox(found.id)) };
@@ -95,14 +96,24 @@ export class ChatwootClient {
   // this fallback again instead of dead-lettering.
   private async adoptContactByPhone(phone: string, identifier: string): Promise<{ id: number; sourceId?: string } | null> {
     const { data } = await this.json<{
-      payload?: Array<{ id: number; phone_number?: string; contact_inboxes?: Array<{ inbox?: { id?: number }; source_id?: string }> }>;
+      payload?: Array<{
+        id: number;
+        identifier?: string;
+        phone_number?: string;
+        contact_inboxes?: Array<{ inbox?: { id?: number }; source_id?: string }>;
+      }>;
     }>(`${this.base()}/contacts/search?q=${encodeURIComponent(phone)}`);
     const hit = (data.payload ?? []).find(c => c.phone_number === phone);
     if (!hit) return null;
-    try {
-      await this.json(`${this.base()}/contacts/${hit.id}`, { method: 'PUT', body: JSON.stringify({ identifier }) });
-    } catch {
-      // Keep the match — adoption is an optimization, not a requirement for delivering this message.
+    // Only re-key a contact that isn't already keyed to a WhatsApp JID. A contact holding one — @lid vs
+    // @c.us for the same person, say — was minted by this adapter, and overwriting it would flip the
+    // contact between the two forms on every mapping-loss event. Adopting it is still correct.
+    if (!/@(c\.us|lid|g\.us)$/.test(hit.identifier ?? '')) {
+      try {
+        await this.json(`${this.base()}/contacts/${hit.id}`, { method: 'PUT', body: JSON.stringify({ identifier }) });
+      } catch {
+        // Keep the match — adoption is an optimization, not a requirement for delivering this message.
+      }
     }
     return { id: hit.id, sourceId: hit.contact_inboxes?.find(ci => ci.inbox?.id === this.cfg.inboxId)?.source_id };
   }

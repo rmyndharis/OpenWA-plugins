@@ -33,7 +33,8 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
   now falls back to searching by phone number, adopts the matching contact, and re-keys its identifier to
   the JID so future lookups resolve it directly. The re-key is best-effort: if it fails (say, a
   conflicting identifier on another contact), the phone match alone still delivers the message — merging
-  the duplicate contacts in Chatwoot remains safe, as before.
+  the duplicate contacts in Chatwoot remains safe, as before. A contact already keyed to a WhatsApp JID is
+  adopted but never re-keyed, so a chat seen under both JID forms cannot flip the contact back and forth.
 
 ### Verified
 
