@@ -28,12 +28,25 @@ function fakeStorage(): PluginStorage {
 }
 const fakeMappings: PluginMappingsCapability = { upsert: async () => {}, get: async () => null, getByProvider: async () => null };
 
-function deps(over: { store?: Record<string, unknown> } = {}) {
+// `rejectReplyTo` models the engine refusing one specific quote target (a message outside the
+// engine's retained window), the way ctx.conversations.send surfaces MessageNotFoundError.
+function deps(over: { store?: Record<string, unknown>; rejectReplyTo?: string } = {}) {
   const sent: Array<{ sessionId?: string; chatId?: string; type: string; text?: string }> = [];
   const handovers: Array<[unknown, string]> = [];
   const d = {
     lock: new KeyedAsyncLock(),
-    conversations: { send: async (e: { sessionId?: string; chatId?: string; type: string; text?: string }) => void sent.push(e) },
+    conversations: {
+      // Mirrors the host facade (core conversation-send-facade.ts): a media envelope carrying BOTH a
+      // mediaUrl and a replyTo is rejected outright — the engine media path cannot quote. Modelling it
+      // here is what stops a "quoted attachment" envelope from passing the suite and dead-lettering live.
+      send: async (e: { sessionId?: string; chatId?: string; type: string; text?: string; mediaUrl?: string; replyTo?: string }) => {
+        if (e.replyTo && e.mediaUrl && e.type !== 'text') {
+          throw new Error('conversation.send: replyTo is not supported for media messages');
+        }
+        if (e.replyTo && e.replyTo === over.rejectReplyTo) throw new Error('MessageNotFoundError');
+        sent.push(e);
+      },
+    },
     handover: { set: async (k: unknown, s: string) => void handovers.push([k, s]) },
     engine: { canonicalChatId: async (_s: string, c: string) => c },
     store: {
@@ -56,6 +69,66 @@ test('relays an outgoing agent reply with an explicit chatId', async () => {
   );
   assert.deepEqual(r, { status: 200 });
   assert.deepEqual(sent, [{ sessionId: 'sess', chatId: 'c@wa', type: 'text', text: 'hi' }]);
+});
+
+test('an agent "Reply to" rides out as a WhatsApp quote (replyTo = quoted source_id)', async () => {
+  const { deps: d, sent } = deps();
+  await handleOutbound(
+    d,
+    req({
+      event: 'message_created', message_type: 'outgoing', private: false, id: 6, content: 'quoted answer',
+      inbox: { id: 7 }, conversation: { id: 55 },
+      content_attributes: { in_reply_to: 41, in_reply_to_external_id: 'WA_QUOTED_1' },
+    }),
+  );
+  assert.deepEqual(sent, [{ sessionId: 'sess', chatId: 'c@wa', type: 'text', text: 'quoted answer', replyTo: 'WA_QUOTED_1' }]);
+});
+
+test('a reply whose quoted message has no external id goes unquoted, not dropped', async () => {
+  const { deps: d, sent } = deps();
+  await handleOutbound(
+    d,
+    req({
+      event: 'message_created', message_type: 'outgoing', private: false, id: 7, content: 'plain',
+      inbox: { id: 7 }, conversation: { id: 55 },
+      content_attributes: { in_reply_to: 41 },
+    }),
+  );
+  assert.deepEqual(sent, [{ sessionId: 'sess', chatId: 'c@wa', type: 'text', text: 'plain' }]);
+});
+
+test('a quoted reply with an attachment omits replyTo — the media envelope must not carry a quote', async () => {
+  // The engine media path cannot quote, and the host REJECTS an envelope that carries both (see the
+  // fake send above). Delivering the attachment unquoted beats dead-lettering it for a quote decoration.
+  const { deps: d, sent } = deps();
+  await handleOutbound(
+    d,
+    req({
+      event: 'message_created', message_type: 'outgoing', private: false, id: 10, content: 'see this',
+      inbox: { id: 7 }, conversation: { id: 55 },
+      attachments: [{ id: 1, file_type: 'image', data_url: 'https://chat.acme.com/blob/x.jpg' }],
+      content_attributes: { in_reply_to_external_id: 'WA_QUOTED_2' },
+    }),
+  );
+  assert.deepEqual(sent, [
+    { sessionId: 'sess', chatId: 'c@wa', type: 'image', mediaUrl: 'https://chat.acme.com/blob/x.jpg', text: 'see this' },
+  ]);
+});
+
+test('an unresolvable quote target still delivers the reply, unquoted', async () => {
+  // The quoted message can fall outside the engine's retained window (wwjs keeps ~100 per chat, Baileys
+  // 5000 overall), and Chatwoot happily hands back its id anyway. Losing the quote is acceptable; losing
+  // the agent's reply to the dead-letter queue is not.
+  const { deps: d, sent } = deps({ rejectReplyTo: 'WA_GONE' });
+  await handleOutbound(
+    d,
+    req({
+      event: 'message_created', message_type: 'outgoing', private: false, id: 11, content: 'still answers',
+      inbox: { id: 7 }, conversation: { id: 55 },
+      content_attributes: { in_reply_to: 41, in_reply_to_external_id: 'WA_GONE' },
+    }),
+  );
+  assert.deepEqual(sent, [{ sessionId: 'sess', chatId: 'c@wa', type: 'text', text: 'still answers' }]);
 });
 
 test('relays an outbound audio attachment as a WhatsApp voice note (#607)', async () => {
