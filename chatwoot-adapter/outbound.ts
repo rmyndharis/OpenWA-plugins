@@ -83,28 +83,33 @@ async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: Cha
     // reply if Chatwoot re-announces an already-relayed message under a NEW delivery id during the upgrade
     // window — visible and self-correcting, unlike silently dropping a genuine agent reply.
     if (id && (await deps.store.hasSeen('cw', id, target.sessionId))) return;
-    // An agent "Reply to" carries the quoted message's source_id — a WA message id for everything this
-    // adapter posts — and the engine renders it as a real WhatsApp quote. Absent or foreign (a Chatwoot
-    // message without source_id quotes as external id undefined), the reply just goes unquoted.
-    const replyTo = evt.content_attributes?.in_reply_to_external_id;
     let res: unknown;
     if (media) {
+      // No replyTo on a media envelope: the engine media path cannot quote, and the host REJECTS an
+      // envelope carrying both — which would dead-letter the whole reply for a quote decoration. A
+      // quoted attachment therefore goes out unquoted, with its caption intact.
       res = await deps.conversations.send({
         sessionId: target.sessionId,
         chatId: target.chatId,
         type: media.type,
         mediaUrl: media.url,
         text: text || undefined,
-        ...(replyTo ? { replyTo } : {}),
       });
     } else {
-      res = await deps.conversations.send({
-        sessionId: target.sessionId,
-        chatId: target.chatId,
-        type: 'text',
-        text,
-        ...(replyTo ? { replyTo } : {}),
-      });
+      const env = { sessionId: target.sessionId, chatId: target.chatId, type: 'text' as const, text };
+      // An agent "Reply to" carries the quoted message's source_id — a WA message id for everything this
+      // adapter posts — and the engine renders it as a real WhatsApp quote. Best-effort: the target can
+      // sit outside the engine's retained window (whatsapp-web.js keeps ~100 messages per chat, Baileys
+      // 5000 overall) and the engine then throws, so a refused quote retries unquoted rather than burning
+      // the retry budget into the dead-letter queue. The re-send matches how a failed send is already
+      // handled here — mark-after-success, so a duplicate is possible but a lost agent reply is not.
+      const replyTo = evt.content_attributes?.in_reply_to_external_id;
+      res = replyTo
+        ? await deps.conversations.send({ ...env, replyTo }).catch(err => {
+            deps.log('quote target unresolvable; sending the reply unquoted', err);
+            return deps.conversations.send(env);
+          })
+        : await deps.conversations.send(env);
     }
     if (id) await deps.store.markSeen('cw', id, target.sessionId);
     // Echo guard for the own-send relay (#615): the message we just sent to WhatsApp will come back as a
