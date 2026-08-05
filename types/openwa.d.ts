@@ -1,7 +1,7 @@
 // Vendored OpenWA plugin contract. There is no published @openwa SDK package; keep this in sync
 // with the OpenWA version you target. All imports of this module must be `import type`.
 //
-// Last aligned against OpenWA core v0.12.0 (tag), verified field-by-field against
+// Last aligned against OpenWA core v0.14.0 (tag), verified field-by-field against
 // src/core/plugins/plugin.interfaces.ts, src/core/hooks/hook.interfaces.ts, plugin-net.ts,
 // sandbox/{worker-bootstrap,worker-capability,worker-hooks,worker-webhooks}.ts and
 // src/engine/interfaces/whatsapp-engine.interface.ts. Where this file narrows the host on purpose it
@@ -236,9 +236,10 @@ export type PluginI18n = Record<string, PluginI18nLocale>;
  *
  * One member is deliberately NOT vendored: `registerSearchProvider`, which the host does provide. No
  * plugin here is a search backend, and typing it would mean hand-copying the host's SearchQuery /
- * SearchResults shapes with nothing to keep them honest. Note it is ungated by any permission, and
- * under the default SEARCH_PROVIDER=auto a plugin that registers becomes the gateway's ACTIVE search
- * backend — worth knowing before adding it.
+ * SearchResults shapes with nothing to keep them honest. Adding it needs the `search:provide`
+ * permission in the manifest (required since core 0.12.2 — the host denies the registration outright
+ * without it), and under the default SEARCH_PROVIDER=auto a plugin that registers becomes the
+ * gateway's ACTIVE search backend, superseding builtin-fts — worth knowing before adding it.
  */
 export interface PluginContext {
   pluginId: string;

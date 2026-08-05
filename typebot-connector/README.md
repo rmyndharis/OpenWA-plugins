@@ -20,7 +20,7 @@
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.2 (tested 0.12.1) |
+| **Requires OpenWA** | ≥ 0.8.2 (tested 0.14.0) |
 | **Keywords** | typebot, chatbot, flow, bot, no-code, two-way, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/typebot-connector](https://github.com/rmyndharis/OpenWA-plugins/tree/main/typebot-connector) |
 <!-- END DETAILS -->
@@ -111,6 +111,11 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
   tell whose flow it belongs to, and guessing would feed one contact's answer into another's session.
 - `payment` steps and non-renderable embeds can't be shown on WhatsApp and get a short fallback
   message. Streaming AI blocks are resolved server-side into normal text bubbles.
+- **Link bubbles look plainer from OpenWA 0.14.0 on the Baileys engine.** A link bubble and a redirect
+  step are sent as the bare URL, and WhatsApp used to draw a preview card for them. From 0.14.0 Baileys
+  only generates that card when the sender asks for it, and a plugin has no way to ask — so these
+  bubbles arrive as plain links. Nothing is lost and every link still works; if the card matters, put
+  the context in the bubble's own text. The whatsapp-web.js engine is unaffected.
 
 ### Per-session config
 
