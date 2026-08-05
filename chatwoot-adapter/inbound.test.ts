@@ -61,6 +61,7 @@ function makeDeps(
     lock: new KeyedAsyncLock(), client, store: mapping, engine, instanceId: 'inst',
     relayGroups: true, relayMedia: true, backfillLimit: over.backfillLimit ?? 0, log: over.log ?? (() => {}),
     onInboundLost: (msgId: string) => void lost.push(msgId),
+    onRelayError: () => {},
     onBackfillExhausted: over.onBackfillExhausted ?? (() => {}),
   } as unknown as InboundDeps;
   return { deps: d, counts: () => ({ contacts, convs }), posted, posts, lost };

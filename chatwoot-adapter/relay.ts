@@ -21,6 +21,10 @@ export interface InboundDeps {
   // lost. The only way this failure reaches an operator: the retry queue can't count an entry it never
   // managed to store, so healthCheck would otherwise report green while dropping messages.
   onInboundLost: (msgId: string, err: unknown) => void;
+  // Called on every failed relay, before the message is queued for retry. The error text is the single
+  // most useful thing an operator can be told (it carries the Chatwoot status and response body), and
+  // `log` only reaches the host's stdout — healthCheck is the one channel the dashboard renders.
+  onRelayError: (err: unknown) => void;
   // Called once when a chat's history import has burned MAX_BACKFILL_ATTEMPTS. Mirrors onInboundLost:
   // the durable per-chat counter stops the retries, this makes the give-up visible on healthCheck.
   onBackfillExhausted: (chatId: string) => void;

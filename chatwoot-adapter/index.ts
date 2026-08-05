@@ -48,6 +48,12 @@ function readConfig(raw: Record<string, unknown>): ChatwootFullConfig {
   if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
     throw new Error('chatwoot-adapter: baseUrl must be an https URL without embedded credentials');
   }
+  // A value copied out of the dashboard's address bar (…/app/accounts/2/settings/inboxes/8) parses and
+  // passes every check above, then has /api/v1/accounts/<id> appended to it and 404s on every request —
+  // with the plugin reporting healthy until the retries burn out. Reject it at Save time instead.
+  if (parsed.pathname !== '/' && parsed.pathname !== '') {
+    throw new Error('chatwoot-adapter: baseUrl must be the Chatwoot origin only (e.g. https://chat.example.com), with no path');
+  }
   const rawLimit = Number(raw.backfillLimit);
   return {
     baseUrl,
@@ -66,6 +72,10 @@ export default class ChatwootAdapter implements IPlugin {
   private retryTimer: ReturnType<typeof setInterval> | null = null;
   private store: MappingStore | null = null;
   private deadLetterCount = 0;
+  // Message of the most recent failed relay, surfaced on healthCheck. The counters say a relay is failing;
+  // this says WHY (a Chatwoot status + response body, an SSRF refusal, a TLS error), which is otherwise
+  // only in the host's stdout — the dashboard renders healthCheck's message and no plugin log.
+  private lastRelayError: string | null = null;
   // Inbound messages that could neither be relayed nor queued — actual data loss, almost always the host
   // rejecting a write because the plugin is at its storage quota. Counted separately from dead-lettering:
   // a dead letter was at least retried MAX_RETRY_ATTEMPTS times, this one never got a single attempt.
@@ -108,6 +118,7 @@ export default class ChatwootAdapter implements IPlugin {
         ctx.logger.error(`inbound message ${msgId} LOST: could not be relayed and could not be queued`, e);
       },
       onBackfillExhausted: this.onBackfillExhausted,
+      onRelayError: (e: unknown) => void (this.lastRelayError = e instanceof Error ? e.message : String(e)),
     });
 
     ctx.registerHook(
@@ -259,6 +270,8 @@ export default class ChatwootAdapter implements IPlugin {
     if (this.backfillExhausted.size > 0) {
       parts.push(`${this.backfillExhausted.size} chat(s) gave up on history import after ${MAX_BACKFILL_ATTEMPTS} attempts`);
     }
+    // Appended last and only when something is actually wrong: on a green plugin it would be stale noise.
+    if (parts.length && this.lastRelayError) parts.push(`last error: ${this.lastRelayError.slice(0, 300)}`);
     return {
       healthy: this.deadLetterCount === 0 && this.lostCount === 0 && !saturated,
       message: parts.join('; ') || undefined,

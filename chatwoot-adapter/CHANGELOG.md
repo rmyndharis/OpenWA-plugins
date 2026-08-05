@@ -36,6 +36,17 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
   the duplicate contacts in Chatwoot remains safe, as before. A contact already keyed to a WhatsApp JID is
   adopted but never re-keyed, so a chat seen under both JID forms cannot flip the contact back and forth.
 
+- **A failing relay now says why, on the plugin's health check.** The reason a message did not reach
+  Chatwoot — the API status and response body, a refused private address, a certificate error — was
+  written to the host's log and nowhere else, while the health check reported only counts. An operator
+  saw "1 dead-lettered after 5 attempts" with no way to find out what went wrong. The health check now
+  appends `last error: …` whenever something is actually failing.
+- **A `baseUrl` with a path is rejected when the settings are saved, instead of failing on every
+  message.** The plugin appends `/api/v1/accounts/<id>` to this value, so a URL copied out of the
+  Chatwoot dashboard's address bar (`https://chat.example.com/app/accounts/2/settings/inboxes/8`)
+  produced a nonsense request path and 404'd every relay — while the plugin enabled cleanly and looked
+  healthy until the retries ran out. It now has to be the origin only.
+
 ### Verified
 
 - **Reproduced and confirmed against a live OpenWA 0.12.1 host** (Baileys engine) and a self-hosted

@@ -71,6 +71,39 @@ test('relayOwnMessages=false gates the message:sent handler off (no Chatwoot API
   assert.equal(fetches(), 0);
 });
 
+test('onEnable rejects a baseUrl carrying a path (the address-bar copy-paste)', async () => {
+  // `base()` appends /api/v1/accounts/<id> to this value, so a URL copied out of the Chatwoot dashboard
+  // produces .../app/accounts/2/settings/inboxes/8/api/v1/... and 404s every single request — while enable
+  // succeeds and healthCheck stays green until the retries burn out.
+  for (const bad of ['https://chat.acme.com/app', 'https://chat.acme.com/app/accounts/2/settings/inboxes/8']) {
+    const { ctx } = fakeCtx({ ...goodConfig, baseUrl: bad });
+    await assert.rejects(new ChatwootAdapter().onEnable(ctx), /baseUrl must be the Chatwoot origin/);
+  }
+  // A bare origin, with or without the trailing slash `base()` already strips, stays valid.
+  for (const ok of ['https://chat.acme.com', 'https://chat.acme.com/', 'https://chat.acme.com:8443']) {
+    const { ctx } = fakeCtx({ ...goodConfig, baseUrl: ok });
+    await new ChatwootAdapter().onEnable(ctx);
+  }
+});
+
+test('healthCheck surfaces the last relay error, so the cause is visible without server logs', async () => {
+  // The whole point of #63: the error exists and is logged, but the log only reaches container stdout.
+  // The dashboard shows healthCheck's message, so the reason has to ride along with the counters.
+  const { ctx, cbs } = fakeCtx(goodConfig);
+  const adapter = new ChatwootAdapter();
+  await adapter.onEnable(ctx);
+  await cbs['message:received']({
+    sessionId: 'sess',
+    source: 'Engine',
+    data: { id: 'm1', fromMe: false, chatId: '628123@c.us', body: 'hi', type: 'chat', isGroup: false },
+  });
+  // The hook fires the relay off-thread so a slow Chatwoot never blocks the WA pipeline — let it settle.
+  for (let i = 0; i < 10; i++) await new Promise(res => setImmediate(res));
+  const h = await adapter.healthCheck();
+  assert.match(h.message ?? '', /last error: /);
+  await adapter.onDisable();
+});
+
 test('healthCheck reports the pending retry backlog (healthy — pending is transient)', async () => {
   const { ctx, storageMap } = fakeCtx(goodConfig);
   storageMap.set('retry:sess:m1', { sessionId: 'sess', chatId: 'c@wa', msg: { id: 'm1' }, attempts: 1, enqueuedAt: 1 });
