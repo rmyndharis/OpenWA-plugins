@@ -2006,7 +2006,48 @@
     "i18n": {
       "es": {
         "name": "Transcripción de Notas de Voz",
-        "description": "Transcribe las notas de voz entrantes de WhatsApp a texto mediante un backend de voz a texto compatible con OpenAI (Speaches/faster-whisper autoalojado o Groq/OpenAI) y entrega un evento message.transcription a tu webhook, para que los bots y la IA puedan leer y responder al audio. Fuera de la ruta de entrega de mensajes; desactivado hasta que se habilite."
+        "description": "Transcribe las notas de voz entrantes de WhatsApp a texto mediante un backend de voz a texto compatible con OpenAI (Speaches/faster-whisper autoalojado o Groq/OpenAI) y entrega un evento message.transcription a tu webhook, para que los bots y la IA puedan leer y responder al audio. Fuera de la ruta de entrega de mensajes; desactivado hasta que se habilite.",
+        "config": {
+          "sttBaseUrl": {
+            "title": "URL base de STT"
+          },
+          "sttApiKey": {
+            "title": "Clave API de STT"
+          },
+          "model": {
+            "title": "Modelo"
+          },
+          "language": {
+            "title": "Sugerencia de idioma"
+          },
+          "provider": {
+            "title": "Etiqueta del proveedor"
+          },
+          "timeoutMs": {
+            "title": "Tiempo de espera de STT (ms)"
+          },
+          "enabledMessageTypes": {
+            "title": "Tipos de mensaje a transcribir"
+          },
+          "maxSizeBytes": {
+            "title": "Tamaño máximo de audio (bytes)"
+          },
+          "maxPerHour": {
+            "title": "Transcripciones máximas / hora / sesión"
+          },
+          "deliveryWebhookUrl": {
+            "title": "URL del webhook de entrega"
+          },
+          "deliverySecret": {
+            "title": "Secreto de entrega"
+          },
+          "deliveryTimeoutMs": {
+            "title": "Tiempo de espera de entrega (ms)"
+          },
+          "chatDelivery": {
+            "title": "Entrega en el chat"
+          }
+        }
       },
       "fr": {
         "name": "Transcription de notes vocales",
