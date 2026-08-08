@@ -77,6 +77,26 @@ function buildEntry(id) {
     download: manifest.repository
       ? `${manifest.repository}/releases/download/${manifest.id}-v${manifest.version}/${manifest.id}.zip`
       : null,
+    // What the plugin DECLARES it binds. Published so a reader can compare a plugin's stated purpose
+    // against the host capabilities it asks for — a mismatch there is a real signal.
+    //
+    // NOT a security boundary, and must never be presented as one. docs/30-plugin-sandboxing.md is
+    // explicit: a worker_thread is not an OS-level sandbox, and a plugin keeps `require('fs')`,
+    // `process` and raw sockets whatever it declares here. `net.allow` gates the host-mediated
+    // `ctx.net.fetch`, not the plugin's own outbound traffic. These fields describe intent and the
+    // mediated surface; they do not constrain a malicious plugin.
+    permissions: manifest.permissions ?? [],
+    net: manifest.net ?? null,
+    // Route shapes only — an ingress route is a @Public() endpoint once provisioned, so which routes a
+    // plugin opens is worth seeing before installing it.
+    ingress: Array.isArray(manifest.ingress)
+      ? manifest.ingress.map((r) => ({
+          route: r.route,
+          methods: r.methods ?? null,
+          signature: r.signature?.scheme ?? null,
+        }))
+      : null,
+    sessionScoped: manifest.sessionScoped ?? false,
     ...(manifest.i18n ? { i18n: manifest.i18n } : {}),
   };
 }

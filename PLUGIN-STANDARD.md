@@ -350,9 +350,34 @@ One entry per plugin, written by `scripts/catalog.mjs` from each manifest + chan
   "keywords", "minOpenWAVersion", "testedOpenWAVersion",
   "releasedAt",           // from the top CHANGELOG heading
   "repoPath", "repoUrl", "homepage",
-  "download"              // predictable GitHub Release asset URL: <repo>/releases/download/<id>-v<version>/<id>.zip
+  "download",             // predictable GitHub Release asset URL: <repo>/releases/download/<id>-v<version>/<id>.zip
+
+  // What the plugin DECLARES it binds — see the caveat below before treating any of it as a guarantee.
+  "permissions",          // the capability permissions from the manifest
+  "net",                  // the manifest `net` block, or null
+  "ingress",              // [{ route, methods, signature }] per declared ingress route, or null
+  "sessionScoped"         // whether activation is per-session
 }
 ```
+
+### What the declared fields are, and are not
+
+They let a reader compare a plugin's stated purpose against the host capabilities it asks for, before
+installing it. A translation plugin that declares `webhook:ingress`, or a logger whose `net.allow`
+names a host its README never mentions, is worth a second look. The `ingress` entries matter most:
+a provisioned ingress route is a `@Public()` endpoint, so knowing which routes a plugin opens — and
+whether they are signed — is information you want *before* the install, not after.
+
+> ⚠️ **They are not a security boundary, and must never be presented as one.**
+> [`docs/30-plugin-sandboxing.md`](https://github.com/rmyndharis/OpenWA/blob/main/docs/30-plugin-sandboxing.md)
+> is explicit: a `worker_thread` is a separate V8 context **in the same OS process, under the same
+> user** — not an OS-level sandbox. A plugin keeps `require('fs')`, `process` and raw sockets
+> whatever it declares here, and `net.allow` gates the host-mediated `ctx.net.fetch`, not the
+> plugin's own outbound traffic.
+>
+> So an empty `permissions` array means the plugin binds no *mediated* capability. It does not mean
+> the plugin can do nothing. Reading this list as an enforcement guarantee is worse than not
+> publishing it at all — which is why it ships with this paragraph attached.
 
 Size and sha256 are **not** in the catalog — they are release artifacts (GitHub Release notes/assets),
 so the catalog stays deterministic and CI's drift check stays stable. This file is also the data source
