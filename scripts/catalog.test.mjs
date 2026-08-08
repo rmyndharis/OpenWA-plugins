@@ -3,7 +3,7 @@
 // version/changelog drift gate lives in scripts/catalog.mjs itself.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 
 test('plugins.json carries i18n for a plugin whose manifest has it', () => {
   const catalog = JSON.parse(readFileSync(new URL('../plugins.json', import.meta.url), 'utf8'));
@@ -21,4 +21,31 @@ test('every stable plugin ships a full i18n block', () => {
     assert.ok(e.i18n, `${e.id} (stable) has no i18n block`);
     for (const l of LOCALES) assert.ok(e.i18n[l], `${e.id} i18n missing locale ${l}`);
   }
+});
+
+// A locale that carries `name`/`description` but no `config` block passes every check there was:
+// catalog.mjs only warns when a locale is entirely ABSENT, and warns rather than fails. The result is
+// a plugin whose name and description translate while all of its config-field titles stay English —
+// voice-transcription's `es` did exactly that, and being `beta` also put it outside the stable-only
+// test above.
+test('a locale that translates a plugin translates all of its config fields', () => {
+  const root = new URL('../', import.meta.url);
+  const dirs = readdirSync(root, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && existsSync(new URL(`${d.name}/manifest.json`, root)))
+    .map((d) => d.name);
+
+  const gaps = [];
+  for (const dir of dirs) {
+    const m = JSON.parse(readFileSync(new URL(`${dir}/manifest.json`, root), 'utf8'));
+    const fields = Object.keys(m.configSchema?.properties ?? {});
+    if (!fields.length || !m.i18n) continue;
+    // Only locales that bother to translate at all are held to this — a plugin may legitimately ship
+    // fewer locales than another.
+    for (const [locale, block] of Object.entries(m.i18n)) {
+      const translated = Object.keys(block.config ?? {});
+      const missing = fields.filter((f) => !translated.includes(f));
+      if (missing.length) gaps.push(`${dir} [${locale}]: ${missing.length}/${fields.length} untranslated`);
+    }
+  }
+  assert.deepEqual(gaps, []);
 });

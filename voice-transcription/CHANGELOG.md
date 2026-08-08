@@ -6,6 +6,12 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+### Fixed
+
+- **Spanish now translates the configuration fields, not just the plugin name** — the `es` locale carried
+  `name` and `description` but no `config` block, so a Spanish dashboard showed a Spanish title above
+  thirteen English field labels. Every other locale already had one.
+
 ## [1.2.1] — 2026-08-01
 
 No behaviour change. 1.2.0 has now been smoke-tested against a newer host, so the tested-version field
