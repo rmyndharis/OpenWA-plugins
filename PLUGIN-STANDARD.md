@@ -56,9 +56,9 @@ OpenWA-plugins/
   "net": { "allow": ["api.example.com:443"] }, // outbound-HTTP allowlist for ctx.net.fetch (needs "net:fetch")
   "configUi": { "entry": "config/index.html", "height": 600 }, // sandboxed-iframe config editor (see below)
 
-  // ── Returned by the API (not yet rendered by the dashboard) ──
+  // ── Returned by the API; `author` shows on the catalog row and is searchable there ──
   "author": "Name <email>",     // string form (npm-style)
-  "license": "MIT",
+  "license": "MIT",            // stored and returned, not rendered
 
   // ── Standard catalog metadata (OpenWA stores but ignores; used by our tooling) ──
   "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/my-plugin",
@@ -356,7 +356,8 @@ One entry per plugin, written by `scripts/catalog.mjs` from each manifest + chan
 
 Size and sha256 are **not** in the catalog — they are release artifacts (GitHub Release notes/assets),
 so the catalog stays deterministic and CI's drift check stays stable. This file is also the data source
-for a future OpenWA in-dashboard marketplace.
+for the OpenWA in-dashboard marketplace, which the Plugins page reads to offer catalog installs
+alongside uploads.
 
 ## Tooling (npm scripts)
 
@@ -375,4 +376,5 @@ for a future OpenWA in-dashboard marketplace.
 Tag a release as **`<plugin-id>-vX.Y.Z`** (the version must match the manifest + changelog). The
 `release` GitHub Action builds the plugin, attaches `<id>.zip` + `<id>.zip.sha256` to a GitHub Release,
 and uses the matching CHANGELOG section as the release notes. Users install by downloading that asset
-and uploading it in the dashboard (until the in-dashboard marketplace lands).
+and uploading it in the dashboard. The dashboard can also install straight from this catalog — the
+Plugins page offers Upload and Catalog as two modes of the same install flow.

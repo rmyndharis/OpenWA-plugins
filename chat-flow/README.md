@@ -76,16 +76,16 @@ sandboxed frame. A reply that doesn't match any option re-sends the current menu
 ```bash
 node package.mjs chat-flow    # produces chat-flow.zip at the repo root
 
-curl -X POST "https://your-openwa-host/plugins/install" \
+curl -X POST "https://your-openwa-host/api/plugins/install" \
   -H "X-API-Key: <ADMIN_API_KEY>" -F "file=@chat-flow.zip"
 
-curl -X PUT "https://your-openwa-host/plugins/chat-flow/config" \
+curl -X PUT "https://your-openwa-host/api/plugins/chat-flow/config" \
   -H "X-API-Key: <ADMIN_API_KEY>" -H "Content-Type: application/json" \
   -d '{ "config": { "trigger": "menu", "greeting": "Hi! 1. Pricing 2. Support",
         "options": [ { "key": "1", "text": "Plans start at Rp100.000" },
                      { "key": "2", "text": "Email support@example.com" } ] } }'
 
-curl -X POST "https://your-openwa-host/plugins/chat-flow/enable" \
+curl -X POST "https://your-openwa-host/api/plugins/chat-flow/enable" \
   -H "X-API-Key: <ADMIN_API_KEY>"
 ```
 

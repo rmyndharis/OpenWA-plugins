@@ -4,7 +4,7 @@
 
 ![type: extension](https://img.shields.io/badge/type-extension-blue.svg)
 ![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)
-![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.6.2-25D366.svg)
+![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.7.0-25D366.svg)
 [![downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Frmyndharis%2FOpenWA-plugins%2Fbadges%2Fdownloads%2Fafter-hours.json)](https://github.com/rmyndharis/OpenWA-plugins/releases?q=after-hours)
 
 ## Details
@@ -48,7 +48,7 @@ absent day is also closed. Times are 24-hour, `open < close` (same-day):
 
 ## Setup
 
-1. Have OpenWA **≥ 0.6.2** running with a logged-in WhatsApp session.
+1. Have OpenWA **≥ 0.7.0** running with a logged-in WhatsApp session.
 2. Install and enable the plugin (see [Install](#install)).
 3. Set your weekly schedule, timezone, and away message (see [Configuration](#configuration)) — the
    schedule is interpreted in your `timezone` via `Intl`, independent of the host clock.
@@ -58,14 +58,14 @@ absent day is also closed. Times are 24-hour, `open < close` (same-day):
 ```bash
 node package.mjs after-hours    # produces after-hours.zip at the repo root
 
-curl -X POST "https://your-openwa-host/plugins/install" \
+curl -X POST "https://your-openwa-host/api/plugins/install" \
   -H "X-API-Key: <ADMIN_API_KEY>" -F "file=@after-hours.zip"
 
-curl -X PUT "https://your-openwa-host/plugins/after-hours/config" \
+curl -X PUT "https://your-openwa-host/api/plugins/after-hours/config" \
   -H "X-API-Key: <ADMIN_API_KEY>" -H "Content-Type: application/json" \
   -d '{ "config": { "schedule": "{\"mon\":\"09:00-17:00\",\"sun\":null}", "timezone": "Asia/Jakarta", "awayMessage": "Terima kasih! Kami sedang tutup dan akan membalas di jam kerja." } }'
 
-curl -X POST "https://your-openwa-host/plugins/after-hours/enable" \
+curl -X POST "https://your-openwa-host/api/plugins/after-hours/enable" \
   -H "X-API-Key: <ADMIN_API_KEY>"
 ```
 
@@ -84,8 +84,10 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 
 ## Compatibility
 
-Targets OpenWA **≥ 0.6.2** (sandboxed runtime with `Intl` timezone data and `onConfigChange` forwarding,
-so schedule edits apply live without a re-enable).
+Targets OpenWA **≥ 0.7.0**, which is what the manifest declares and what the catalog publishes. The
+runtime features it relies on — sandboxed `Intl` timezone data and `onConfigChange` forwarding, so
+schedule edits apply live without a re-enable — arrived in 0.6.2, but the supported floor is the
+declared one.
 
 ### Per-session config
 

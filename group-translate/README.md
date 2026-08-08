@@ -81,14 +81,14 @@ Default prefix `/tr` (configurable). Read-only commands are open; the rest are a
 # Build from source (released .zip files are on the Releases page):
 node package.mjs group-translate    # produces group-translate.zip at the repo root
 
-curl -X POST "https://your-openwa-host/plugins/install" \
+curl -X POST "https://your-openwa-host/api/plugins/install" \
   -H "X-API-Key: <ADMIN_API_KEY>" -F "file=@group-translate.zip"
 
-curl -X PUT "https://your-openwa-host/plugins/group-translate/config" \
+curl -X PUT "https://your-openwa-host/api/plugins/group-translate/config" \
   -H "X-API-Key: <ADMIN_API_KEY>" -H "Content-Type: application/json" \
   -d '{ "config": { "libretranslateUrl": "http://libretranslate:7001", "timeoutMs": 4000 } }'
 
-curl -X POST "https://your-openwa-host/plugins/group-translate/enable" \
+curl -X POST "https://your-openwa-host/api/plugins/group-translate/enable" \
   -H "X-API-Key: <ADMIN_API_KEY>"
 ```
 

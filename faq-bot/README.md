@@ -60,14 +60,14 @@
 ```bash
 node package.mjs faq-bot    # produces faq-bot.zip at the repo root
 
-curl -X POST "https://your-openwa-host/plugins/install" \
+curl -X POST "https://your-openwa-host/api/plugins/install" \
   -H "X-API-Key: <ADMIN_API_KEY>" -F "file=@faq-bot.zip"
 
-curl -X PUT "https://your-openwa-host/plugins/faq-bot/config" \
+curl -X PUT "https://your-openwa-host/api/plugins/faq-bot/config" \
   -H "X-API-Key: <ADMIN_API_KEY>" -H "Content-Type: application/json" \
   -d '{ "config": { "rules": "[{\"mode\":\"contains\",\"pattern\":\"harga\",\"reply\":\"Harga mulai 100rb\"}]" } }'
 
-curl -X POST "https://your-openwa-host/plugins/faq-bot/enable" \
+curl -X POST "https://your-openwa-host/api/plugins/faq-bot/enable" \
   -H "X-API-Key: <ADMIN_API_KEY>"
 ```
 

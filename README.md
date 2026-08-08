@@ -82,7 +82,7 @@ Plugins are managed by an **ADMIN** API key, either through the OpenWA dashboard
 **1. Build the plugin package** (see [Building from source](#building-from-source)) to get `gsheets-logger.zip`, then upload it:
 
 ```bash
-curl -X POST "https://your-openwa-host/plugins/install" \
+curl -X POST "https://your-openwa-host/api/plugins/install" \
   -H "X-API-Key: <ADMIN_API_KEY>" \
   -F "file=@gsheets-logger.zip"
 ```
@@ -90,7 +90,7 @@ curl -X POST "https://your-openwa-host/plugins/install" \
 **2. Configure it** (secrets are masked on read and preserved on write):
 
 ```bash
-curl -X PUT "https://your-openwa-host/plugins/gsheets-logger/config" \
+curl -X PUT "https://your-openwa-host/api/plugins/gsheets-logger/config" \
   -H "X-API-Key: <ADMIN_API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{ "config": { "spreadsheetId": "1AbC...defG", "serviceAccountJson": "{...}", "sheetTab": "Logs" } }'
@@ -103,7 +103,7 @@ runtime status. What is not automatic is a worker that crashed mid-run: nothing 
 next restart or an explicit re-enable.
 
 ```bash
-curl -X POST "https://your-openwa-host/plugins/gsheets-logger/enable" \
+curl -X POST "https://your-openwa-host/api/plugins/gsheets-logger/enable" \
   -H "X-API-Key: <ADMIN_API_KEY>"
 ```
 

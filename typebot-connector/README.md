@@ -73,14 +73,14 @@ The same applies to a `choice` step, which arrives as a numbered list the contac
 ```bash
 node package.mjs typebot-connector    # produces typebot-connector.zip at the repo root
 
-curl -X POST "https://your-openwa-host/plugins/install" \
+curl -X POST "https://your-openwa-host/api/plugins/install" \
   -H "X-API-Key: <ADMIN_API_KEY>" -F "file=@typebot-connector.zip"
 
-curl -X PUT "https://your-openwa-host/plugins/typebot-connector/config" \
+curl -X PUT "https://your-openwa-host/api/plugins/typebot-connector/config" \
   -H "X-API-Key: <ADMIN_API_KEY>" -H "Content-Type: application/json" \
   -d '{ "config": { "apiHost": "https://typebot.io", "publicId": "<public-id>" } }'
 
-curl -X POST "https://your-openwa-host/plugins/typebot-connector/enable" \
+curl -X POST "https://your-openwa-host/api/plugins/typebot-connector/enable" \
   -H "X-API-Key: <ADMIN_API_KEY>"
 ```
 
