@@ -1,11 +1,18 @@
 // Vendored OpenWA plugin contract. There is no published @openwa SDK package; keep this in sync
 // with the OpenWA version you target. All imports of this module must be `import type`.
 //
-// Last aligned against OpenWA core v0.14.0 (tag), verified field-by-field against
+// Last aligned against OpenWA core v0.14.5 (tag), verified field-by-field against
 // src/core/plugins/plugin.interfaces.ts, src/core/hooks/hook.interfaces.ts, plugin-net.ts,
 // sandbox/{worker-bootstrap,worker-capability,worker-hooks,worker-webhooks}.ts and
 // src/engine/interfaces/whatsapp-engine.interface.ts. Where this file narrows the host on purpose it
 // says so; where the host is stricter than this file, the comment names the runtime consequence.
+//
+// ⚠️ "verified field-by-field" is a HAND check, and nothing enforces it — this repo ships separately
+// and cannot import from core. It has been wrong before: the v0.14.0 alignment silently omitted six
+// host fields, four of which predated it by several minor versions, and every one of them was an
+// unannounced gap rather than a deliberate narrowing. When re-aligning, diff MEMBER BY MEMBER against
+// the six files named above and annotate anything left out, so a future reader can tell an omission
+// from a decision.
 //
 // v0.7 surface: `ctx.net.fetch` (host-proxied, SSRF-guarded outbound HTTP — gated by the
 // "net:fetch" permission + manifest `net.allow` host allowlist), and the manifest fields
@@ -108,6 +115,8 @@ export interface ChatSummary {
   id: string;
   name: string;
   isGroup: boolean;
+  /** User-facing chat kind. `isGroup` is retained for back-compat; `kind` is the full discriminator. */
+  kind: ChatKind;
   unreadCount: number;
   timestamp: number;
   lastMessage?: string;
@@ -304,6 +313,13 @@ export interface ConversationSendEnvelope {
   text?: string;
   mediaUrl?: string;
   replyTo?: string;
+  /**
+   * Ask the engine for a link preview on a plain text send. Baileys generates one only when this is
+   * `true`, so a plugin relaying a URL gets a bare link without it; whatsapp-web.js previews by
+   * default and takes `false` to suppress. Ignored on media, location and quoted sends, which route
+   * through engine paths that take no preview option.
+   */
+  linkPreview?: boolean;
   /** WGS84, required for `type: 'location'` (-90..90 / -180..180), ignored otherwise. */
   latitude?: number;
   longitude?: number;
@@ -398,6 +414,16 @@ export interface IncomingMessage {
   quotedMessage?: { id: string; body: string };
   // Shared location (`type: 'location'`), when present.
   location?: { latitude: number; longitude: number; description?: string; address?: string; url?: string };
+  /** WhatsApp disappearing-messages timer in seconds, per chat, on every message. 0 or absent = no
+   *  timer. Known values: 86400 (24h), 604800 (7d), 7776000 (90d). */
+  ephemeralDuration?: number;
+  /** Set for `call` (call_log) messages: video vs voice, and whether an incoming call went
+   *  unanswered. */
+  call?: { video: boolean; missed: boolean };
+  /** Styling of a text status/story: background as `#RRGGBB`. Only set by engines that expose it. */
+  backgroundColor?: string;
+  /** Styling of a text status/story: the WhatsApp font index. Only set by engines that expose it. */
+  font?: number;
 }
 
 /**
