@@ -174,14 +174,14 @@ Send yourself a WhatsApp message, then confirm the pipeline end to end:
 ```bash
 node package.mjs gsheets-logger    # produces gsheets-logger.zip at the repo root
 
-curl -X POST "https://your-openwa-host/plugins/install" \
+curl -X POST "https://your-openwa-host/api/plugins/install" \
   -H "X-API-Key: <ADMIN_API_KEY>" -F "file=@gsheets-logger.zip"
 
-curl -X PUT "https://your-openwa-host/plugins/gsheets-logger/config" \
+curl -X PUT "https://your-openwa-host/api/plugins/gsheets-logger/config" \
   -H "X-API-Key: <ADMIN_API_KEY>" -H "Content-Type: application/json" \
   -d '{ "config": { "spreadsheetId": "<ID>", "serviceAccountJson": "<paste JSON>", "sheetTab": "Logs" } }'
 
-curl -X POST "https://your-openwa-host/plugins/gsheets-logger/enable" \
+curl -X POST "https://your-openwa-host/api/plugins/gsheets-logger/enable" \
   -H "X-API-Key: <ADMIN_API_KEY>"
 ```
 

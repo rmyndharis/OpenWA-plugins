@@ -100,16 +100,16 @@ out of order — do not assume ordering).
 
 ```bash
 # Upload the packaged zip
-curl -X POST http://localhost:2785/plugins/install \
+curl -X POST http://localhost:2785/api/plugins/install \
   -H "X-API-Key: $OPENWA_API_KEY" -F "file=@voice-transcription.zip"
 
 # Configure (per session, or '*' for all)
-curl -X PUT http://localhost:2785/plugins/voice-transcription/config \
+curl -X PUT http://localhost:2785/api/plugins/voice-transcription/config \
   -H "X-API-Key: $OPENWA_API_KEY" -H 'Content-Type: application/json' \
   -d '{"sttBaseUrl":"http://127.0.0.1:8000","model":"small","deliveryWebhookUrl":"http://127.0.0.1:5678/webhook/transcript"}'
 
 # Enable
-curl -X POST http://localhost:2785/plugins/voice-transcription/enable \
+curl -X POST http://localhost:2785/api/plugins/voice-transcription/enable \
   -H "X-API-Key: $OPENWA_API_KEY"
 ```
 

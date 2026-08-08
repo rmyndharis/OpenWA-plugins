@@ -77,14 +77,14 @@ passing nothing. Guard any template that must have a number, e.g. with a `notFou
 ```bash
 node package.mjs http-action    # produces http-action.zip at the repo root
 
-curl -X POST "https://your-openwa-host/plugins/install" \
+curl -X POST "https://your-openwa-host/api/plugins/install" \
   -H "X-API-Key: <ADMIN_API_KEY>" -F "file=@http-action.zip"
 
-curl -X PUT "https://your-openwa-host/plugins/http-action/config" \
+curl -X PUT "https://your-openwa-host/api/plugins/http-action/config" \
   -H "X-API-Key: <ADMIN_API_KEY>" -H "Content-Type: application/json" \
   -d '{ "config": { "baseUrl": "https://erp.example.com", "actions": "[{\"id\":\"check-order\",\"match\":{\"type\":\"prefix\",\"value\":\"cek-order \"},\"request\":{\"method\":\"GET\",\"path\":\"/orders/{{args.0}}\"},\"replyTemplate\":\"Order {{response.orderId}}: {{response.status}}\"}]" } }'
 
-curl -X POST "https://your-openwa-host/plugins/http-action/enable" \
+curl -X POST "https://your-openwa-host/api/plugins/http-action/enable" \
   -H "X-API-Key: <ADMIN_API_KEY>"
 ```
 
