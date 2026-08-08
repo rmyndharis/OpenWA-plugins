@@ -6,6 +6,8 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+## [1.2.2] — 2026-08-08
+
 ### Fixed
 
 - **Spanish now translates the configuration fields, not just the plugin name** — the `es` locale carried
