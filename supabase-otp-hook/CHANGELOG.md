@@ -5,6 +5,15 @@ All notable changes to this plugin are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **The README no longer promises a dead-session `503` that Option B cannot deliver** — the host
+  preflight probes the instance's `sessionScope`, so a blank scope skips the check and a delivery whose
+  fallback session is down is acked `200` and lost with no provider retry. Both the provisioning list
+  and the Security section now scope that guarantee to Option A.
+
 ## [0.3.0] — 2026-07-30
 
 ### Removed
