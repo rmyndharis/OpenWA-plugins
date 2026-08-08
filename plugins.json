@@ -419,7 +419,6 @@
     "ingress": [
       {
         "route": "chatwoot",
-        "methods": null,
         "signature": "hmac-sha256"
       }
     ],
@@ -1670,7 +1669,6 @@
     "ingress": [
       {
         "route": "send-sms",
-        "methods": null,
         "signature": "standard-webhooks"
       }
     ],

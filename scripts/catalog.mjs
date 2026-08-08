@@ -92,11 +92,12 @@ function buildEntry(id) {
     ingress: Array.isArray(manifest.ingress)
       ? manifest.ingress.map((r) => ({
           route: r.route,
-          methods: r.methods ?? null,
           signature: r.signature?.scheme ?? null,
         }))
       : null,
-    sessionScoped: manifest.sessionScoped ?? false,
+    // No default: validateManifest has already refused a manifest that omits this, and the host reads
+    // it as global only when it is explicitly false — so a default here could only disagree with both.
+    sessionScoped: manifest.sessionScoped,
     ...(manifest.i18n ? { i18n: manifest.i18n } : {}),
   };
 }

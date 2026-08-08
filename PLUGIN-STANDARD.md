@@ -70,9 +70,18 @@ OpenWA-plugins/
 }
 ```
 
-Repo gates (enforced by `scripts/catalog.mjs`, hard failure in CI): every manifest must declare
-`sessionScoped` explicitly, and a `status: "stable"` manifest must declare `testedOpenWAVersion`. A
-missing `i18n` block (or missing locales) is a warning, not a failure.
+Repo gates — all hard failures in CI. `scripts/catalog.mjs` refuses to build the catalog unless every
+plugin:
+
+- declares `sessionScoped` explicitly (`true` or `false`);
+- declares `testedOpenWAVersion` when `status` is `"stable"`;
+- ships a `CHANGELOG.md` carrying a released `## [x.y.z] — YYYY-MM-DD` heading;
+- has a `manifest.json` `version` equal to that heading's version.
+
+`catalog.mjs` only *warns* about i18n — a missing block, or a missing locale — but the test suite does
+not: `npm test` fails when a `stable` plugin is missing any supported locale, and when any plugin ships
+a locale that translates its name and description without translating every `configSchema` field. Treat
+i18n as gated; the warning is where you notice a gap, not where it is stopped.
 
 ### `configSchema` field vocabulary (v0.7)
 
