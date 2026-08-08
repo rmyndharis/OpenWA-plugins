@@ -49,3 +49,45 @@ test('a locale that translates a plugin translates all of its config fields', ()
   }
   assert.deepEqual(gaps, []);
 });
+
+// The catalog is the data source the in-dashboard marketplace reads, and it carried nothing about what
+// a plugin binds — so "install only plugins you trust" had no in-product evidence to work from. These
+// hold the published fields to the manifests they come from.
+test('the catalog publishes what each plugin declares', () => {
+  const root = new URL('../', import.meta.url);
+  const catalog = JSON.parse(readFileSync(new URL('plugins.json', root), 'utf8'));
+  const entries = catalog.plugins ?? catalog;
+
+  const drift = [];
+  for (const e of entries) {
+    const m = JSON.parse(readFileSync(new URL(`${e.id}/manifest.json`, root), 'utf8'));
+    const declared = m.permissions ?? [];
+    if (JSON.stringify(e.permissions ?? []) !== JSON.stringify(declared)) {
+      drift.push(`${e.id}: permissions ${JSON.stringify(e.permissions)} != manifest ${JSON.stringify(declared)}`);
+    }
+    if (JSON.stringify(e.net ?? null) !== JSON.stringify(m.net ?? null)) {
+      drift.push(`${e.id}: net differs from manifest`);
+    }
+    const routes = Array.isArray(m.ingress) ? m.ingress.map((r) => r.route) : null;
+    const published = Array.isArray(e.ingress) ? e.ingress.map((r) => r.route) : null;
+    if (JSON.stringify(published) !== JSON.stringify(routes)) {
+      drift.push(`${e.id}: ingress routes ${JSON.stringify(published)} != manifest ${JSON.stringify(routes)}`);
+    }
+  }
+  assert.deepEqual(drift, []);
+});
+
+test('the ingress-declaring plugins publish their route shapes', () => {
+  // Two plugins declare ingress. A provisioned ingress route is a @Public() endpoint, so which routes
+  // exist and whether they are signed is the part worth seeing before an install.
+  const catalog = JSON.parse(readFileSync(new URL('../plugins.json', import.meta.url), 'utf8'));
+  const withIngress = (catalog.plugins ?? catalog).filter((e) => Array.isArray(e.ingress) && e.ingress.length);
+
+  assert.ok(withIngress.length >= 1, 'expected at least one plugin publishing ingress routes');
+  for (const e of withIngress) {
+    for (const r of e.ingress) {
+      assert.ok(typeof r.route === 'string' && r.route.length, `${e.id} ingress entry has no route`);
+      assert.ok('signature' in r, `${e.id} ingress entry does not say whether it is signed`);
+    }
+  }
+});
