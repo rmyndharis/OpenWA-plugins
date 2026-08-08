@@ -88,6 +88,9 @@ test('the ingress-declaring plugins publish their route shapes', () => {
     for (const r of e.ingress) {
       assert.ok(typeof r.route === 'string' && r.route.length, `${e.id} ingress entry has no route`);
       assert.ok('signature' in r, `${e.id} ingress entry does not say whether it is signed`);
+      // Pinned so a published field always has a manifest field behind it: an earlier `methods` column
+      // read straight through to a key `PluginIngressRoute` does not define, so it was null every time.
+      assert.deepEqual(Object.keys(r).sort(), ['route', 'signature'], `${e.id} ingress entry shape`);
     }
   }
 });
