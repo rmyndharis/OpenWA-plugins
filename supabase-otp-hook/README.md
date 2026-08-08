@@ -79,6 +79,11 @@ the Standard Webhooks signature).
 
 - **Option A — bind to a session.** Set `sessionScope` to a logged-in WhatsApp session id. Simplest.
 - **Option B — use a fallback.** Leave `sessionScope` blank, set `fallbackSessionId` in plugin config.
+  ⚠️ **This gives up the dead-session 503.** The host preflight probes the *instance* scope, and a blank
+  scope has no single session to probe — `fallbackSessionId` is plugin config the host never sees. So a
+  delivery whose fallback session is down is answered `200 {"ok":true}`, Supabase treats it as
+  delivered and does not retry, and the OTP is lost. The only trace is the plugin's
+  `sendText failed (background)` log line. Prefer Option A wherever the sending session is known.
 - **Option C — misconfiguration.** Both blank → the handler drops the delivery (no session to send from).
 
 > The plugin's **Sessions** tab controls *activity*, not *which session sends*. Sending session = `sessionScope` or `fallbackSessionId`, in that order.
@@ -163,7 +168,9 @@ set `fallbackSessionId`.
 
 - Webhook secret stored as the instance secret (masked on dashboard reads after mint).
 - Signature verified **host-side, before any send or plugin code runs**, constant-time compare, 5-min replay window.
-- A bad signature returns **401** synchronously; a dead session returns **503** synchronously (host-side preflight) — neither reaches the plugin.
+- A bad signature returns **401** synchronously. A dead session returns **503** synchronously **only under
+  Option A** — the host-side preflight probes the instance's `sessionScope`, so a blank scope (Option B)
+  skips the check and the delivery is acked `200` before the plugin runs. Neither case reaches plugin code.
 - Permissions: `webhook:ingress` + `messages:send` only (liveness is checked host-side, so no `engine:read`).
 
 ## Changelog
