@@ -118,7 +118,7 @@ curl -X PATCH "$OPENWA/api/integration/plugins/supabase-otp-hook/instances/defau
 
 ## Install
 
-**Option A — dashboard.** Download `supabase-otp-hook.zip` from the [Releases page](https://github.com/maplerichie/OpenWA-plugins/releases), then dashboard → Plugins → Install → upload.
+**Option A — dashboard.** Download `supabase-otp-hook.zip` from the [Releases page](https://github.com/rmyndharis/OpenWA-plugins/releases), then dashboard → Plugins → Install → upload.
 
 **Option B — CLI.**
 

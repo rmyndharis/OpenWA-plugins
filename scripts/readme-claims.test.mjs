@@ -44,6 +44,29 @@ test('every gateway URL in a README carries the /api prefix', () => {
   assert.deepEqual(offenders, []);
 });
 
+test("a plugin README links the repository its manifest names", () => {
+  // supabase-otp-hook was contributed from another account, and its Install section pointed at that
+  // account's fork for the download. PR #54 corrected `repository` in the manifest — which is what the
+  // catalog derives release URLs from — but the README sentence was missed, so the documented path stayed
+  // a fork with zero releases: a page that opens, looks right, and offers nothing. That is the same shape
+  // as the permission drift this file already guards, and the second time here that a manifest was fixed
+  // while the prose describing it was not.
+  //
+  // `author` deliberately keeps the original contributor and is not a URL, so it is untouched by this.
+  const wrong = [];
+  for (const dir of pluginDirs) {
+    const readme = join(root, dir, 'README.md');
+    if (!existsSync(readme)) continue;
+    const repo = JSON.parse(readFileSync(join(root, dir, 'manifest.json'), 'utf8')).repository;
+    const owner = repo?.match(/github\.com\/([\w.-]+)\//)?.[1];
+    if (!owner) continue;
+    for (const m of readFileSync(readme, 'utf8').matchAll(/([\w.-]+)\/OpenWA-plugins/g)) {
+      if (m[1] !== owner) wrong.push(`${dir}: README links ${m[1]}/OpenWA-plugins, manifest repository is ${owner}`);
+    }
+  }
+  assert.deepEqual([...new Set(wrong)], []);
+});
+
 test("each plugin README's stated OpenWA floor matches its manifest", () => {
   // after-hours carried a hand-maintained badge and two prose mentions saying 0.6.2 while the manifest
   // declared 0.7.0 — three numbers, one of them the one the catalog actually publishes.
