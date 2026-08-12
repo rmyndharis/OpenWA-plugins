@@ -10,6 +10,12 @@ The version here always matches `manifest.json`'s `version`.
 
 ### Fixed
 
+- **A message with no text no longer draws a fallback reply.** A sticker, image or voice note arrives
+  with an empty body, so no rule could match it and the fallback answered a picture with "I did not
+  understand" — and claimed the event, so a plugin that could handle media never saw it.
+- **A failed fallback send no longer silences the chat for a whole cooldown window.** The cooldown slot
+  is claimed before the send, so a send that threw spent the window on a reply that never arrived. The
+  slot is released on failure; a matched rule is retried on the next message the same way.
 - **Two rule patterns that could freeze the plugin are now rejected.** The safety analyser reasoned that
   a small bounded repeat is bounded by its constant, which holds for a variable-width body but not for an
   unbounded one: `(a+){3}` expands to `a+a+a+` and backtracks exponentially. It also treated any group as
