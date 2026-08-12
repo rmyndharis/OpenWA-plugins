@@ -6,6 +6,21 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-08-12
+
+### Changed
+
+- **Declared the `storage:use` permission.** This plugin leans on plugin storage more than anything
+  else in the catalog, and each of the four things it keeps there prevents a different visible
+  failure: the WhatsApp-chat-to-Chatwoot-conversation mapping (without it every message opens a new
+  conversation instead of continuing the existing one), the de-duplication buckets (without them a
+  redelivered message is posted to Chatwoot twice), the retry queue (without it a message that arrives
+  while Chatwoot is briefly unreachable is simply lost), and the one-shot bulk-import marker (without
+  it a re-enable re-imports history that is already there). OpenWA is moving `ctx.storage` behind a
+  permission the manifest has to declare; without it all four are refused. Declaring it changes
+  nothing on the hosts you run today — an unrecognized permission is ignored — so 0.9.1 behaves
+  exactly like 0.9.0.
+
 ## [0.9.0] — 2026-08-05
 
 ### Added
