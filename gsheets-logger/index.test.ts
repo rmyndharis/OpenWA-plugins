@@ -233,3 +233,36 @@ test('restoring a buffer reports what it dropped instead of losing rows silently
   assert.match(warns[0], /2 malformed/);
   assert.match(warns[0], /\d+ oldest/);
 });
+
+test('rows buffered for the old spreadsheet never cross into the new one', async () => {
+  // onConfigChange drains before swapping so rows land in the sheet they belong to. But flush() swallows
+  // its own failure, so with Sheets unreachable the drain leaves every row in place — and the next flush
+  // sends message content captured under one spreadsheet and credential to a different one.
+  const logger = new GSheetsLogger();
+  const stored: Record<string, unknown> = {};
+  const warns: string[] = [];
+  const harness = logger as unknown as { client: unknown; ctx: unknown; buffer: string[][] };
+  harness.client = { appendRows: async (): Promise<void> => { throw new Error('sheets unreachable'); } };
+  harness.ctx = {
+    storage: { get: async (k: string) => stored[k] ?? null, set: async (k: string, v: unknown) => void (stored[k] = v) },
+    logger: { warn: (m: string): void => void warns.push(m), error: (): void => {}, log: (): void => {} },
+  };
+  harness.buffer = [['old-row-1'], ['old-row-2']];
+
+  await logger.onConfigChange(
+    {
+      config: { spreadsheetId: 'NEW-SHEET', serviceAccountJson: validSa },
+      net: { fetch: async () => ({ ok: true, status: 200, body: '{}' }) },
+      storage: { get: async (k: string) => stored[k] ?? null, set: async (k: string, v: unknown) => void (stored[k] = v) },
+      logger: { warn: (m: string): void => void warns.push(m), error: (): void => {}, log: (): void => {} },
+    } as never,
+    {},
+  );
+  await logger.onUnload();
+
+  assert.deepEqual(harness.buffer, [], 'undelivered rows must not remain queued against the new sheet');
+  assert.ok(warns.some((w) => /2 row/.test(w)), `the operator must be told, got ${JSON.stringify(warns)}`);
+  const parked = Object.entries(stored).find(([k]) => k.includes('undelivered'));
+  assert.ok(parked, `the rows must be kept somewhere, stored keys: ${Object.keys(stored)}`);
+  assert.deepEqual(parked?.[1], [['old-row-1'], ['old-row-2']]);
+});

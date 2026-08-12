@@ -4,6 +4,10 @@ import { buildRow } from './row.ts';
 
 const LOGGED_EVENTS: HookEvent[] = ['message:received', 'message:sent', 'message:failed', 'message:ack'];
 const BUFFER_KEY = 'buffer';
+// Rows that could not be delivered to the spreadsheet they were captured for. Kept out of the live
+// buffer so they are never sent to a different target, and out of the way of the quota by sharing the
+// same caps as the buffer itself.
+const UNDELIVERED_KEY = 'buffer:undelivered';
 const MAX_BUFFER = 5000;
 // The row cap alone does not bound memory: row.ts allows 50,000 characters per cell across 14 columns,
 // so 5,000 rows can reach hundreds of millions of characters against a 256 MB worker heap — and the
@@ -143,6 +147,25 @@ export default class GSheetsLogger implements IPlugin {
     // Drain to the current (old) client before swapping, so rows buffered before a spreadsheet/credential
     // rotation land in the sheet they belong to — not the new one. flush() is guarded and a no-op when empty.
     await this.flush();
+    // flush() swallows its own failure, so a drain that could not reach Sheets leaves every row in place.
+    // Those rows carry message content captured under the previous spreadsheet and credentials; sending
+    // them to the new target would move it across exactly the boundary the operator just changed. Park
+    // them under their own key instead — kept, but never delivered anywhere they do not belong.
+    if (this.buffer.length > 0) {
+      const undelivered = this.buffer.splice(0, this.buffer.length);
+      try {
+        const existing = await this.ctx?.storage.get<string[][]>(UNDELIVERED_KEY);
+        const kept = [...(Array.isArray(existing) ? existing : []), ...undelivered];
+        capBuffer(kept, MAX_BUFFER, MAX_BUFFER_CHARS);
+        await this.ctx?.storage.set(UNDELIVERED_KEY, kept);
+        ctx.logger.warn(
+          `gsheets-logger: ${undelivered.length} row(s) were still undelivered at a config change; ` +
+            `parked under "${UNDELIVERED_KEY}" rather than sent to the new sheet`,
+        );
+      } catch (err) {
+        ctx.logger.error(`gsheets-logger: ${undelivered.length} undelivered row(s) could not be parked`, err);
+      }
+    }
     this.ctx = ctx;
     const { config, sa } = parseConfig(ctx.config);
     this.client = new SheetsClient(ctx.net.fetch.bind(ctx.net), sa, config.spreadsheetId, config.sheetTab);
