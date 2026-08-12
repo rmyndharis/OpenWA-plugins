@@ -9,6 +9,15 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Debug mode no longer writes the verification code or the destination number to the log.** Debug is
+  switched on precisely when a delivery is misbehaving, so its output is what gets pasted into a support
+  thread or shipped to a log collector — and an OTP is a live credential with the number beside it
+  naming its owner. The send line now records the message length instead of the message, and every chat
+  id in a log line is reduced to its last four digits, which is enough to correlate two lines about the
+  same chat.
+
+### Fixed
+
 - **The README no longer promises a dead-session `503` that Option B cannot deliver** — the host
   preflight probes the instance's `sessionScope`, so a blank scope skips the check and a delivery whose
   fallback session is down is acked `200` and lost with no provider retry. Both the provisioning list

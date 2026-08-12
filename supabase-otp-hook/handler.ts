@@ -60,6 +60,16 @@ export function phoneToChatId(phone: unknown): string | undefined {
 }
 
 /** Substitute {appName} and {otp} into the template in a single pass. */
+/**
+ * A chat id reduced to what a diagnostic actually needs: enough to correlate two lines about the same
+ * chat, not enough to identify its owner. Debug output is what gets pasted into a support thread or
+ * shipped to a log collector, and a WhatsApp id is a phone number.
+ */
+export function maskChatId(chatId: string): string {
+  const [local, domain = 'c.us'] = chatId.split('@');
+  return local.length <= 4 ? `***@${domain}` : `***${local.slice(-4)}@${domain}`;
+}
+
 export function composeMessage(template: string, otp: string, appName: string): string {
   return template.replace(/\{appName\}|\{otp\}/g, token => (token === '{appName}' ? appName : otp));
 }
@@ -105,20 +115,21 @@ export async function handleSendSms(deps: HandlerDeps, req: WebhookRequest): Pro
       instanceId: req.instanceId,
       deliveryId: req.deliveryId,
       sessionId,
-      chatId: targetChatId,
+      chatId: maskChatId(targetChatId),
     });
   }
 
   const text = composeMessage(cfg.messageTemplate, otp, cfg.appName);
-  if (cfg.debug) deps.log('supabase-otp-hook: sending OTP', { debug: true, sessionId, chatId: targetChatId, text });
+  // Never the code itself: it is a live credential, and debug is on exactly when output is being shared.
+  if (cfg.debug) deps.log('supabase-otp-hook: sending OTP', { debug: true, sessionId, chatId: maskChatId(targetChatId), textLength: text.length });
 
   // Fire-and-forget: the worker dispatch is bounded to 5 s (INGRESS_DISPATCH_TIMEOUT_MS), so awaiting a
   // slow send risks a 504 → retry → DUPLICATE OTP. Background it; failures are logged, not retried.
   void deps.messages.sendText(sessionId, targetChatId, text).then(
-    () => { if (cfg.debug) deps.log('supabase-otp-hook: sendText ok', { debug: true, sessionId, chatId: targetChatId }); },
+    () => { if (cfg.debug) deps.log('supabase-otp-hook: sendText ok', { debug: true, sessionId, chatId: maskChatId(targetChatId) }); },
     (err: unknown) => {
       deps.log('supabase-otp-hook: sendText failed (background)', {
-        sessionId, chatId: targetChatId, error: err instanceof Error ? err.message : String(err),
+        sessionId, chatId: maskChatId(targetChatId), error: err instanceof Error ? err.message : String(err),
       });
     },
   );
