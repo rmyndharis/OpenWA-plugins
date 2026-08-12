@@ -1,10 +1,10 @@
 import { build } from 'esbuild';
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { rm, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { zipStore } from './scripts/zip-store.mjs';
-import { configUiMember } from './scripts/entry-path.mjs';
+import { configUiMember, collectEntryFiles } from './scripts/entry-path.mjs';
 
 const plugin = process.argv[2];
 if (!plugin) {
@@ -76,15 +76,12 @@ if (manifest.configUi?.entry) {
   entries.push(member);
 }
 
-// Resolve each entry (file or directory) to zip members with forward-slash relative paths.
-function collectEntryFiles(base, rel) {
-  const abs = join(base, rel);
-  if (statSync(abs).isDirectory()) {
-    return readdirSync(abs, { withFileTypes: true }).flatMap((e) => collectEntryFiles(base, `${rel}/${e.name}`));
-  }
-  return [{ name: rel, data: readFileSync(abs) }];
+let result;
+try {
+  result = entries.flatMap((entry) => collectEntryFiles(dir, entry));
+} catch (e) {
+  fail(e.message);
 }
-const result = entries.flatMap((entry) => collectEntryFiles(dir, entry));
 
 // The archive members are chosen here, not read from the manifest, so a `main` pointing anywhere else
 // produces a package every gate in this repo accepts and the host refuses: it rejects an archive whose
