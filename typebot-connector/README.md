@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `typebot-connector` |
-| **Version** | 0.2.1 |
-| **Released** | 2026-07-31 |
+| **Version** | 0.2.2 |
+| **Released** | 2026-08-12 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -134,6 +134,8 @@ in storage, so flows across sessions never interfere.
 - The `apiToken` is stored as a secret and sent only to your Typebot host (and only when set).
 - Bot replies originate from your Typebot flow (operator-trusted content); the plugin forwards them as
   outbound messages and declares `conversation:send` + `net:fetch`.
+- Per-conversation flow state (Typebot session id, awaited input, last activity) is kept in
+  `ctx.storage`, which the plugin declares with `storage:use`. No message content is stored.
 
 ## Changelog
 
