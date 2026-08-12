@@ -6,6 +6,20 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+## [1.2.3] — 2026-08-12
+
+### Changed
+
+- **Declared the `storage:use` permission.** Two things live in plugin storage, one key each per
+  WhatsApp session: the list of voice notes already transcribed, and the hourly counter behind the
+  rate cap. OpenWA is moving `ctx.storage` behind a permission the manifest has to declare, and
+  without it both are refused — which costs money rather than just state. The de-duplication list is
+  what stops the same voice note being sent to the speech-to-text backend twice, and the counter is
+  what enforces `maxPerHour`; lose them and every redelivery becomes another paid transcription with
+  no ceiling, plus a duplicate transcript the contact sees when `chatDelivery` is set to `reply`.
+  Declaring the permission changes nothing on the hosts you run today — an unrecognized permission is
+  ignored — so 1.2.3 behaves exactly like 1.2.2.
+
 ## [1.2.2] — 2026-08-08
 
 ### Fixed
