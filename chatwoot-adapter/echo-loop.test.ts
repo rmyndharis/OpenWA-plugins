@@ -172,15 +172,15 @@ test("one tenant's mirror marker does not suppress another tenant's reply with t
   assert.equal(posted.length, 1);
 
   // Tenant B's agent now replies, and Chatwoot happens to number THAT message 60 as well. The delivery
-  // is UNSCOPED, which is what makes this bite: a guard that keyed the marker on the delivery scope would
-  // fall back to a global `seen:cw:60` and find tenant A's marker sitting there.
+  // carries B's scope, so the marker lookup is `seen:sessB:cw:60` and tenant A's marker cannot reach it.
+  // A guard keyed on the bare id would fall back to a global `seen:cw:60` and find A's marker there.
   const sent: Array<{ chatId?: string }> = [];
   const outboundB = {
     lock, store, engine, inboxId: INBOX_ID, log: () => {},
     conversations: { send: async (e: { chatId?: string }) => { sent.push(e); return { messageId: 'wa-b' }; } },
     handover: { set: async () => {} },
   } as unknown as OutboundDeps;
-  await handleOutbound(outboundB, mirrorWebhook(60, undefined));
+  await handleOutbound(outboundB, mirrorWebhook(60, 'sessB'));
 
   assert.equal(sent.length, 1, "tenant B's genuine reply was suppressed by tenant A's echo marker");
   assert.equal(sent[0].chatId, 'bob@c.us');
@@ -230,4 +230,32 @@ test('an echo webhook processed while the adapter post is still in flight is NOT
   await Promise.all([relayPromise, echoPromise]);
 
   assert.deepEqual(sent, [], 'the echo was processed before the marker landed and got re-sent to WhatsApp');
+});
+
+test('a scope-less delivery for a conversation id two tenants claim is dropped, not guessed', async () => {
+  // Chatwoot conversation ids are per-account autoincrement, so two relayed accounts collide on one as a
+  // matter of course. The unscoped reverse key used to hold whichever session linked last, so a delivery
+  // without a session scope resolved to that one — an agent reply for one customer delivered to another
+  // customer's number. Nothing in a scope-less delivery says which tenant it belongs to, so there is no
+  // right answer to pick; dropping it is the only safe outcome, and the adapter logs the miss.
+  const store = new MappingStore(fakeStorage(), fakeMappings);
+  const lock = new KeyedAsyncLock();
+  const engine = { canonicalChatId: async (_s: string, c: string) => c };
+  await store.link('sessA', 'alice@c.us', 'instA', { conversationId: 55, contactId: 1, sourceId: 'a' });
+  await store.link('sessB', 'bob@c.us', 'instB', { conversationId: 55, contactId: 2, sourceId: 'b' });
+
+  const sent: Array<{ chatId?: string }> = [];
+  const deps = {
+    lock, store, engine, inboxId: INBOX_ID, log: () => {},
+    conversations: { send: async (e: { chatId?: string }) => { sent.push(e); return { messageId: 'x' }; } },
+    handover: { set: async () => {} },
+  } as unknown as OutboundDeps;
+
+  await handleOutbound(deps, mirrorWebhook(61, undefined));
+  assert.deepEqual(sent, [], 'a scope-less delivery must never be routed to a guessed tenant');
+
+  // A single-tenant mapping is unaffected: the unscoped key is still claimed and still resolves.
+  const solo = new MappingStore(fakeStorage(), fakeMappings);
+  await solo.link('sessOnly', 'solo@c.us', 'inst', { conversationId: 55, contactId: 3, sourceId: 's' });
+  assert.deepEqual(await solo.getByConversation(55), { sessionId: 'sessOnly', chatId: 'solo@c.us' });
 });

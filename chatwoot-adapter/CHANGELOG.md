@@ -8,6 +8,17 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ### Fixed
 
+- **An agent reply can no longer reach the wrong customer.** Chatwoot conversation ids are per-account
+  autoincrement, so two relayed accounts share one routinely. Alongside the tenant-scoped reverse
+  mapping, an unscoped one was rewritten on every link, leaving it pointing at whichever session linked
+  last — a delivery that arrived without a session scope resolved through it and was sent to that
+  session's chat. The unscoped mapping is now claimed only while unclaimed and marked unusable once a
+  second session claims the same id, so such a delivery is dropped and logged rather than guessed.
+  Mappings written before scoping keep resolving, and single-tenant hosts are unaffected.
+- **Recovering one session no longer drops another session's replies.** Unlinking by conversation id
+  deleted the shared unscoped mapping as well, silently breaking the other tenant until its next
+  inbound message. It is now removed only when it belongs to the session being unlinked.
+
 - **Attachment uploads now use an unpredictable multipart boundary.** The boundary was built from the
   conversation id and the file's byte length, both of which a sender can work out from the media they
   send — so an attachment crafted to contain that exact boundary could close the part early and append
