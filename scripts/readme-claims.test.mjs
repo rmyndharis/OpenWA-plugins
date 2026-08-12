@@ -28,6 +28,76 @@ const flatten = (text) => text.replace(/\s+/g, ' ');
 // would sweep in `http://127.0.0.1:8000` (STT) and `http://127.0.0.1:5678/webhook/transcript` (n8n).
 const GATEWAY_HOSTS = /your-openwa-host|localhost:2785|127\.0\.0\.1:2785|<host>/;
 
+// The PLUGIN-level OpenWA floors a README states. These READMEs also state per-feature floors —
+// gsheets-logger's ack rows need 0.6.1, chatwoot-adapter's attachment backfill needs 0.8.6 — which are
+// legitimately different numbers from the manifest, so comparing those would fail correct documentation.
+//
+// The corpus separates the two by capitalisation, consistently: a plugin-level claim opens a sentence
+// ("Targets OpenWA…", "Requires OpenWA…", "Have OpenWA…") or heads a Compatibility bullet as bold
+// **OpenWA**, while a per-feature floor sits mid-sentence behind a lowercase verb ("…rows** require
+// OpenWA ≥ v0.6.1", "Needs OpenWA 0.8.6+"). The lead-ins are matched case-SENSITIVELY on purpose — the
+// capital is the signal, not an accident of style.
+//
+// Shared with the precondition test, which asserts the result is non-empty. Without that, a README
+// wording its floor in none of these shapes makes the comparison pass while comparing nothing.
+function statedFloors(text) {
+  const flat = flatten(text);
+  const stated = new Set();
+  for (const m of text.matchAll(/badge\/OpenWA-%E2%89%A5%20([0-9.]+)-/g)) stated.add(m[1]);
+  for (const m of flat.matchAll(/(?:Targets|Requires|Have) OpenWA\s*\*\*≥\s*v?([0-9.]+)\*\*/g)) stated.add(m[1]);
+  for (const m of flat.matchAll(/(?:Targets|Requires|Have) OpenWA\s+v?([0-9.]+)\+/g)) stated.add(m[1]);
+  for (const m of flat.matchAll(/\*\*OpenWA\*\*\s*≥\s*v?([0-9.]+)/g)) stated.add(m[1]);
+  return stated;
+}
+
+// The GitHub owners a README links this repository under. Matched case-INSENSITIVELY because GitHub
+// repository names are: `someone/OpenWA-Plugins` resolves in a browser, so a case-sensitive match would
+// let a fork link through by seeing nothing at all.
+const repoOwnersIn = (text) => [...text.matchAll(/([\w.-]+)\/OpenWA-plugins/gi)].map((m) => m[1]);
+
+test('every plugin supplies what the checks below need', () => {
+  // Three checks below opt a plugin out when an input they need is absent: no README, no `repository`
+  // to take an owner from, no `minOpenWAVersion` to compare. Those are quiet `continue`s, and a quiet
+  // skip is indistinguishable from a pass — the suite stays green while checking nothing, which is the
+  // exact failure mode the rest of this file exists to catch.
+  //
+  // Asserting the precondition once is better than counting units inside each check: while this passes,
+  // none of those five skips can fire, and when a plugin arrives without one of these inputs THIS test
+  // names the missing input instead of the plugin quietly dropping out of three other tests. Deliberate
+  // narrowing is left alone — the `/api` check ignores third-party hosts and the completeness check
+  // ignores a README that does not enumerate, both because that is the correct scope, not an accident.
+  // Discovery itself is the widest version of the problem: `pluginDirs` is derived from this file's own
+  // location, so moving the file or restructuring the repo empties it and EVERY check below passes
+  // having examined nothing at all.
+  assert.ok(pluginDirs.length > 0, `no plugin directories discovered under ${root}`);
+
+  const missing = [];
+  // The root README is prepended to the /api check by hand and dropped by a silent `.filter(existsSync)`;
+  // after this test it is the only entry that filter can still remove, and it carries gateway URLs.
+  if (!existsSync(join(root, 'README.md'))) missing.push('root README.md is absent — the /api check would skip it');
+
+  for (const dir of pluginDirs) {
+    const readme = join(root, dir, 'README.md');
+    if (!existsSync(readme)) {
+      missing.push(`${dir}: no README.md — three checks would skip it`);
+      continue; // the per-README assertions below cannot run, and would only repeat this
+    }
+    const text = readFileSync(readme, 'utf8');
+    const m = JSON.parse(readFileSync(join(root, dir, 'manifest.json'), 'utf8'));
+
+    // Both halves of each comparison, not just the manifest half. A missing input on the README side
+    // does not skip the loop — it lets the loop run and compare an empty set, which is the same green
+    // for a different reason, and the README side is the half that actually goes missing.
+    if (!m.minOpenWAVersion) missing.push(`${dir}: no minOpenWAVersion — the version-floor check would skip it`);
+    if (statedFloors(text).size === 0) missing.push(`${dir}: README states no OpenWA floor — the version-floor check would compare nothing`);
+    if (!/github\.com\/[\w.-]+\//.test(m.repository ?? '')) {
+      missing.push(`${dir}: repository is absent or not a github.com URL — the repository-link check would skip it`);
+    }
+    if (repoOwnersIn(text).length === 0) missing.push(`${dir}: README links no <owner>/OpenWA-plugins — the repository-link check would compare nothing`);
+  }
+  assert.deepEqual(missing, []);
+});
+
 test('every gateway URL in a README carries the /api prefix', () => {
   // The gateway mounts a global `/api` prefix, so `<host>/plugins/...` answers 404. 27 copy-pasteable
   // curl commands addressed it without the prefix.
@@ -60,8 +130,10 @@ test("a plugin README links the repository its manifest names", () => {
     const repo = JSON.parse(readFileSync(join(root, dir, 'manifest.json'), 'utf8')).repository;
     const owner = repo?.match(/github\.com\/([\w.-]+)\//)?.[1];
     if (!owner) continue;
-    for (const m of readFileSync(readme, 'utf8').matchAll(/([\w.-]+)\/OpenWA-plugins/g)) {
-      if (m[1] !== owner) wrong.push(`${dir}: README links ${m[1]}/OpenWA-plugins, manifest repository is ${owner}`);
+    for (const linked of repoOwnersIn(readFileSync(readme, 'utf8'))) {
+      if (linked.toLowerCase() !== owner.toLowerCase()) {
+        wrong.push(`${dir}: README links ${linked}/OpenWA-plugins, manifest repository is ${owner}`);
+      }
     }
   }
   assert.deepEqual([...new Set(wrong)], []);
@@ -76,35 +148,22 @@ test("each plugin README's stated OpenWA floor matches its manifest", () => {
     if (!existsSync(readme)) continue;
     const declared = JSON.parse(readFileSync(join(root, dir, 'manifest.json'), 'utf8')).minOpenWAVersion;
     if (!declared) continue;
-    const text = readFileSync(readme, 'utf8');
-    const flat = flatten(text);
-    const stated = new Set();
-    for (const m of text.matchAll(/badge\/OpenWA-%E2%89%A5%20([0-9.]+)-/g)) stated.add(m[1]);
-    // Only PLUGIN-level floors. These READMEs also state per-feature floors — gsheets-logger's ack rows
-    // need 0.6.1, chatwoot-adapter's attachment backfill needs 0.8.6 — and those are legitimately
-    // different numbers from the manifest, so comparing them would fail correct documentation.
-    //
-    // The corpus separates the two by capitalisation, and it does so consistently: a plugin-level claim
-    // opens a sentence ("Targets OpenWA…", "Requires OpenWA…", "Have OpenWA…") or heads a Compatibility
-    // bullet as bold **OpenWA**, while a per-feature floor sits mid-sentence behind a lowercase verb
-    // ("…rows** require OpenWA ≥ v0.6.1", "Needs OpenWA 0.8.6+"). So the lead-ins are matched
-    // case-SENSITIVELY on purpose — the capital is the signal, not an accident of style.
-    //
-    // Until now only the `OpenWA **≥ x**` shape was matched at all, and it escaped the ack-row sentence
-    // purely because that one writes `v0.6.1` with a v. Dropping the v would have turned correct prose
-    // into a failure; the two plugins with the HIGHEST floors, chatwoot-adapter and supabase-otp-hook,
-    // meanwhile stated theirs in shapes nothing looked at.
-    for (const m of flat.matchAll(/(?:Targets|Requires|Have) OpenWA\s*\*\*≥\s*v?([0-9.]+)\*\*/g)) stated.add(m[1]);
-    for (const m of flat.matchAll(/(?:Targets|Requires|Have) OpenWA\s+v?([0-9.]+)\+/g)) stated.add(m[1]);
-    for (const m of flat.matchAll(/\*\*OpenWA\*\*\s*≥\s*v?([0-9.]+)/g)) stated.add(m[1]);
-    for (const v of stated) if (v !== declared) mismatches.push(`${dir}: README says ${v}, manifest says ${declared}`);
+    for (const v of statedFloors(readFileSync(readme, 'utf8'))) {
+      if (v !== declared) mismatches.push(`${dir}: README says ${v}, manifest says ${declared}`);
+    }
   }
   assert.deepEqual(mismatches, []);
 });
 
-// The five permissions the host enforces at the capability boundary, plus `storage:use` — the sixth,
-// added when OpenWA moved ctx.storage behind a declaration gate.
-const KNOWN_PERMISSIONS = ['messages:send', 'engine:read', 'net:fetch', 'conversation:send', 'webhook:ingress', 'storage:use'];
+// The five permissions the host enforces at the capability boundary, plus `storage:use` (added when
+// OpenWA moved ctx.storage behind a declaration gate) and `search:provide` (required by core since
+// 0.12.2). No plugin here declares `search:provide`, which is exactly why it belongs in this floor
+// rather than only in the manifest-derived union below: the union can only see names some manifest
+// already declares, so without this entry a README claiming `search:provide` — over-declaring a
+// capability the plugin does not have — would be invisible to the check written to catch that.
+const KNOWN_PERMISSIONS = [
+  'messages:send', 'engine:read', 'net:fetch', 'conversation:send', 'webhook:ingress', 'storage:use', 'search:provide',
+];
 
 // The vocabulary must include anything a manifest actually declares, not just the names known when this
 // was written. Hardcoding the list alone fails in both directions the moment a plugin adopts a newer
