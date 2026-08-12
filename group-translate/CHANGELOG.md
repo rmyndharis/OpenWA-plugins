@@ -8,6 +8,19 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.3.1] — 2026-08-12
+
+### Changed
+
+- **Declared the `storage:use` permission.** Each group's settings — whether translation is on, the
+  language learned for every participant, and any delegated controllers — are kept in plugin storage.
+  OpenWA is moving `ctx.storage` behind a permission the manifest has to declare, and a plugin that
+  does not name it will have those reads and writes refused once the host enforces that. The failure
+  would surface mid-conversation rather than at install: the plugin would keep running and quietly
+  forget every group's configuration. Declaring it now costs nothing on the hosts you are running
+  today — an unrecognized permission is ignored — so this release behaves exactly like 1.3.0
+  everywhere 1.3.0 ran.
+
 ## [1.3.0] — 2026-08-01
 
 ### Fixed

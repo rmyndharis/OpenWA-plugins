@@ -870,7 +870,7 @@
   {
     "id": "group-translate",
     "name": "Group Auto-Translation",
-    "version": "1.3.0",
+    "version": "1.3.1",
     "type": "extension",
     "status": "stable",
     "description": "Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled.",
@@ -886,15 +886,16 @@
     ],
     "minOpenWAVersion": "0.7.0",
     "testedOpenWAVersion": "0.14.0",
-    "releasedAt": "2026-08-01",
+    "releasedAt": "2026-08-12",
     "repoPath": "group-translate",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/group-translate-v1.3.0/group-translate.zip",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/group-translate-v1.3.1/group-translate.zip",
     "permissions": [
       "messages:send",
       "engine:read",
-      "net:fetch"
+      "net:fetch",
+      "storage:use"
     ],
     "net": {
       "allow": [
