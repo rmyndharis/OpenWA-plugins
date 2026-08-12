@@ -89,7 +89,9 @@ export class FlowEngine {
     messageId: string,
     depth = 0,
   ): Promise<boolean> {
-    context.logger.debug('[FlowEngine] Processing message', { sessionId, chatId, body: messageBody });
+    // Not the message body: this line runs for every inbound message, and the dashboard renders plugin
+    // logs. The length is what a diagnostic actually uses — "did the engine see anything at all".
+    context.logger.debug('[FlowEngine] Processing message', { sessionId, chatId, bodyLength: messageBody.length });
 
     const input = messageBody.trim();
     const stateKey = `state__${sessionId}__${conversation}`.replace(/:/g, '_');

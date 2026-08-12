@@ -1,6 +1,16 @@
 import { randomBytes } from 'node:crypto';
 import { buildMultipartBody } from './multipart.ts';
 
+/**
+ * A request URL with its query string dropped. These errors surface in `healthCheck`, which the
+ * dashboard renders — and the contact-search URL carries the customer's phone number in `?q=`. The path
+ * is all a diagnostic needs: it says which endpoint failed.
+ */
+function redactUrl(url: string): string {
+  const q = url.indexOf('?');
+  return q === -1 ? url : `${url.slice(0, q)}?…`;
+}
+
 export interface ChatwootConfig {
   baseUrl: string;
   apiToken: string;
@@ -44,7 +54,7 @@ export class ChatwootClient {
   ): Promise<{ status: number; data: T }> {
     const res = await this.fetch(url, { ...init, headers: this.headers({ 'Content-Type': 'application/json', ...init?.headers }) });
     if (!res.ok) {
-      const e = new Error(`Chatwoot ${init?.method ?? 'GET'} ${url} -> ${res.status}: ${res.body.slice(0, 300)}`) as Error & {
+      const e = new Error(`Chatwoot ${init?.method ?? 'GET'} ${redactUrl(url)} -> ${res.status}`) as Error & {
         status?: number;
       };
       e.status = res.status;
