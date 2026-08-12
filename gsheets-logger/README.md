@@ -25,9 +25,9 @@
 | **Repository** | [OpenWA-plugins/gsheets-logger](https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger) |
 <!-- END DETAILS -->
 
-The installed version is also visible in the OpenWA dashboard Plugins list (`v0.2.3`), via
-`GET /plugins/gsheets-logger`, and at runtime in the enable log line and `healthCheck`
-(`GET /plugins/gsheets-logger/health` → `"v0.2.3 — N rows buffered"`).
+The installed version is also visible in the OpenWA dashboard Plugins list, via
+`GET /api/plugins/gsheets-logger`, and at runtime in the enable log line and `healthCheck`
+(`GET /api/plugins/gsheets-logger/health` → `"v<version> — N rows buffered"`).
 
 ## Features
 
@@ -147,7 +147,7 @@ Send yourself a WhatsApp message, then confirm the pipeline end to end:
 
 1. **Events are arriving.** Call the health endpoint:
    ```
-   GET /plugins/gsheets-logger/health   →   "v0.2.3 — N rows buffered"
+   GET /api/plugins/gsheets-logger/health   →   "v<version> — N rows buffered"
    ```
    If `N` grows, messages are reaching the plugin — the only step left is the write to Google.
 2. **Writes are succeeding.** A healthy flush logs nothing; a failed one logs
@@ -245,7 +245,7 @@ The service-account JSON is marked `secret` in the config schema, so OpenWA mask
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md). Latest: **0.2.3** (2026-07-02) — cap oversized cells, extend the formula-injection guard to `+`/`-`, floor the flush interval.
+See [CHANGELOG.md](./CHANGELOG.md).
 
 ## License
 

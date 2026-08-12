@@ -78,6 +78,15 @@ function collectEntryFiles(base, rel) {
   return [{ name: rel, data: readFileSync(abs) }];
 }
 const result = entries.flatMap((entry) => collectEntryFiles(dir, entry));
+
+// The archive members are chosen here, not read from the manifest, so a `main` pointing anywhere else
+// produces a package every gate in this repo accepts and the host refuses: it rejects an archive whose
+// `main` is not among its entries, at install, after the release is already tagged and published.
+const mainInZip = join('.', manifest.main).split('\\').join('/');
+if (!result.some((f) => f.name === mainInZip)) {
+  fail(`manifest main "${manifest.main}" is not in the package (members: ${result.map((f) => f.name).join(', ')})`);
+}
+
 await writeFile(zipPath, zipStore(result));
 
 // ── Report size + sha256 (release artifacts — surfaced here and in the GitHub Release) ──

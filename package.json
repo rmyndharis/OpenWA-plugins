@@ -7,7 +7,7 @@
   "license": "MIT",
   "engines": { "node": ">=22" },
   "scripts": {
-    "build": "for d in */; do if [ -f \"${d}manifest.json\" ]; then node package.mjs \"${d%/}\"; fi; done",
+    "build": "set -e; for d in */; do if [ -f \"${d}manifest.json\" ]; then node package.mjs \"${d%/}\"; fi; done",
     "catalog": "node scripts/catalog.mjs",
     "catalog:check": "node scripts/catalog.mjs --check",
     "test": "node scripts/run-tests.mjs",

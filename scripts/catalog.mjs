@@ -24,6 +24,23 @@ function discoverPlugins() {
 
 const SUPPORTED_LOCALES = ['en', 'es', 'fr', 'it', 'ar', 'he', 'te', 'zh-CN', 'zh-HK'];
 
+// Every permission the host actually enforces (core `PluginCapabilityPermission`). Nothing else in the
+// toolchain looked at these names: the array was passed straight through to plugins.json, which is what
+// the in-dashboard marketplace reads, so an invented or misspelled one was published verbatim and only
+// discovered when the capability it was meant to unlock silently failed at runtime.
+//
+// A closed list makes adopting a genuinely new permission a deliberate one-line edit here — which is the
+// point. `storage:use` reached seven manifests without anything in this repo ever checking the name.
+const HOST_PERMISSIONS = new Set([
+  'messages:send',
+  'engine:read',
+  'net:fetch',
+  'storage:use',
+  'webhook:ingress',
+  'conversation:send',
+  'search:provide',
+]);
+
 // Manifest hygiene gates (hard failures) and soft warnings. Keep these aligned with PLUGIN-STANDARD.md.
 function validateManifest(id, manifest) {
   if (manifest.sessionScoped === undefined) {
@@ -31,6 +48,14 @@ function validateManifest(id, manifest) {
   }
   if (manifest.status === 'stable' && !manifest.testedOpenWAVersion) {
     throw new Error(`${id}: status "stable" requires testedOpenWAVersion (the newest host actually smoke-tested)`);
+  }
+  for (const p of manifest.permissions ?? []) {
+    if (!HOST_PERMISSIONS.has(p)) {
+      throw new Error(
+        `${id}: unknown permission "${p}" — the host enforces only ${[...HOST_PERMISSIONS].join(', ')}. ` +
+          `If OpenWA has added one, add it to HOST_PERMISSIONS in this file in the same change.`,
+      );
+    }
   }
   if (!manifest.i18n || Object.keys(manifest.i18n).length === 0) {
     console.warn(`⚠ ${id}: no i18n block — dashboard shows English only`);
