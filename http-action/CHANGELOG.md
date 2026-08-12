@@ -3,6 +3,19 @@
 All notable changes to HTTP Action Bot are listed here. Versions follow [Semantic Versioning](https://semver.org/),
 and the top entry's version must match `manifest.json`.
 
+## [0.2.2] — 2026-08-12
+
+### Changed
+
+- **Declared the `storage:use` permission.** Answered commands are recorded in plugin storage for
+  three days, and that record is what makes a command idempotent: if the host redelivers a message,
+  the marker is what stops the REST call being made a second time. OpenWA is moving `ctx.storage`
+  behind a permission the manifest has to declare, and without it those markers cannot be written or
+  read. This plugin's job is to cause side effects in someone else's system, so losing idempotency
+  does not degrade the plugin — it means one WhatsApp command can create two orders, two tickets, or
+  two charges. Declaring the permission changes nothing on the hosts you run today: an unrecognized
+  permission is ignored, so 0.2.2 behaves exactly like 0.2.1.
+
 ## [0.2.1] — 2026-08-01
 
 ### Changed
