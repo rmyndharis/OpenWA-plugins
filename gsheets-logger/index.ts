@@ -5,6 +5,10 @@ import { buildRow } from './row.ts';
 const LOGGED_EVENTS: HookEvent[] = ['message:received', 'message:sent', 'message:failed', 'message:ack'];
 const BUFFER_KEY = 'buffer';
 const MAX_BUFFER = 5000;
+// The row cap alone does not bound memory: row.ts allows 50,000 characters per cell across 14 columns,
+// so 5,000 rows can reach hundreds of millions of characters against a 256 MB worker heap — and the
+// message body a sender controls is one of those cells. ~4M characters is ~8 MB of UTF-16.
+const MAX_BUFFER_CHARS = 4_000_000;
 
 // Observer band. Must run before any responder: a responder returning {continue:false} ends the chain,
 // and at the default priority of 100 this plugin would simply stop seeing claimed messages.
@@ -70,6 +74,24 @@ export async function flushBuffer(buffer: string[][], append: (rows: string[][])
   }
 }
 
+// Drop oldest-first until both caps hold, returning how many rows went. Rows only pile up this deep
+// while Sheets is unreachable, and the oldest are the least useful. The character total is recomputed
+// per call rather than tracked incrementally because flushBuffer splices and unshifts this same array
+// from outside — a running total would drift out of sync with it on every retained failure.
+export function capBuffer(buffer: string[][], maxRows: number, maxChars: number): number {
+  const before = buffer.length;
+  if (buffer.length > maxRows) buffer.splice(0, buffer.length - maxRows);
+
+  let total = 0;
+  for (const row of buffer) for (const cell of row) total += cell.length;
+  // Keep the newest row whatever its size: a single row over the cap is still worth more than nothing.
+  while (total > maxChars && buffer.length > 1) {
+    for (const cell of buffer[0]) total -= cell.length;
+    buffer.shift();
+  }
+  return before - buffer.length;
+}
+
 export default class GSheetsLogger implements IPlugin {
   private buffer: string[][] = [];
   private client: SheetsClient | null = null;
@@ -117,7 +139,13 @@ export default class GSheetsLogger implements IPlugin {
   async onDisable(): Promise<void> {
     this.stopTimer();
     await this.flush();
-    await this.ctx?.storage.set(BUFFER_KEY, this.buffer);
+    try {
+      await this.ctx?.storage.set(BUFFER_KEY, this.buffer);
+    } catch (err) {
+      // `set` rejects once the plugin directory would exceed its 50 MiB quota. Nothing here can rescue
+      // the rows, but an unhandled rejection would both lose them silently and escape onDisable itself.
+      this.ctx?.logger.error(`gsheets-logger: could not persist ${this.buffer.length} buffered rows`, err);
+    }
   }
 
   async onUnload(): Promise<void> {
@@ -143,10 +171,9 @@ export default class GSheetsLogger implements IPlugin {
 
   private enqueue(hook: HookContext): void {
     this.buffer.push(buildRow(hook));
-    if (this.buffer.length > MAX_BUFFER) {
-      const dropped = this.buffer.length - MAX_BUFFER;
-      this.buffer.splice(0, dropped);
-      this.ctx?.logger.warn(`gsheets-logger: buffer cap ${MAX_BUFFER} exceeded, dropped ${dropped} oldest rows`);
+    const dropped = capBuffer(this.buffer, MAX_BUFFER, MAX_BUFFER_CHARS);
+    if (dropped > 0) {
+      this.ctx?.logger.warn(`gsheets-logger: buffer cap exceeded, dropped ${dropped} oldest rows`);
     }
     if (this.buffer.length >= this.batchSize) void this.flush();
   }
