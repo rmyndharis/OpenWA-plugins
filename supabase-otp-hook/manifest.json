@@ -13,7 +13,7 @@
   "status": "beta",
   "minOpenWAVersion": "0.8.16",
   "testedOpenWAVersion": "0.14.0",
-  "sdkVersion": "1",
+  "sdkVersion": 1,
   "permissions": ["webhook:ingress", "messages:send"],
   "sessionScoped": true,
   "sessions": ["*"],
