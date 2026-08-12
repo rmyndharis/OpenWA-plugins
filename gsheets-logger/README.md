@@ -39,10 +39,11 @@ The installed version is also visible in the OpenWA dashboard Plugins list (`v0.
   dependencies**, so the package is tiny.
 - **Formula-injection safe** — writes with `valueInputOption=RAW` and neutralizes CSV/Sheets formula
   triggers, while leaving legitimate `+`/`-` content (phone numbers) intact in free-text cells.
-- **Least privilege** — declares only `net:fetch`, allowlisted to the two fixed Google hosts
+- **Least privilege** — declares `net:fetch`, allowlisted to the two fixed Google hosts
   (`oauth2.googleapis.com`, `sheets.googleapis.com`) via `net.allow`; all outbound HTTP goes through the
-  host-proxied, SSRF-guarded `ctx.net.fetch`. It only reads hook events and writes to your sheet,
-  never sends messages or reads contacts.
+  host-proxied, SSRF-guarded `ctx.net.fetch`. It also declares `storage:use` for the single key holding
+  the pending row batch. It only reads hook events and writes to your sheet, never sends messages or
+  reads contacts.
 - **Self-reporting version** — surfaces its own version in logs and `healthCheck`.
 
 ## What it logs

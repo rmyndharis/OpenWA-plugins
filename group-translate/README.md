@@ -111,7 +111,8 @@ Then, in the group, an admin runs `/tr on`. Or install the packaged `.zip` from
 ## Compatibility
 
 Targets OpenWA **≥ 0.7.0** — outbound HTTP uses the v0.7 `ctx.net.fetch` capability. Declares
-`messages:send`, `engine:read` (for admin checks), and `net:fetch`.
+`messages:send`, `engine:read` (for admin checks), `net:fetch`, and `storage:use` (each group's
+settings and learned participant languages).
 
 ### Per-session config
 
