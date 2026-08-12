@@ -5,6 +5,43 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 
+// Three of the checks below iterate a list that can come back empty — no plugin directories, no stable
+// entries, no catalog entries at all — and an empty loop is indistinguishable from a passing one. Proven
+// rather than assumed: run this file against a tree holding `{"plugins":[]}` and no plugin directories,
+// and three of the five tests stay green having examined nothing. Only the two that already assert a
+// non-empty list go red.
+//
+// Asserting the inputs once here is better than counting units inside each check: while this passes,
+// none of those empty-iteration paths can fire, and when an input disappears THIS test names which one.
+// Discovery is the widest version of the problem — `root` is derived from this file's own location, so
+// moving the file empties every list below at once.
+test('the catalog supplies what the checks below need', () => {
+  const root = new URL('../', import.meta.url);
+  const dirs = readdirSync(root, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && existsSync(new URL(`${d.name}/manifest.json`, root)))
+    .map((d) => d.name);
+  const catalog = JSON.parse(readFileSync(new URL('plugins.json', root), 'utf8'));
+  const entries = catalog.plugins ?? catalog;
+
+  assert.ok(dirs.length > 0, `no plugin directories discovered under ${root.pathname}`);
+  assert.ok(entries.length > 0, 'plugins.json lists no entries — the drift checks would compare nothing');
+  assert.ok(
+    entries.some((e) => e.status === 'stable'),
+    'no entry is stable — the full-i18n check would iterate an empty list',
+  );
+  // The config-translation check skips a plugin with no config fields or no i18n. That skip is correct
+  // per plugin and fatal across all of them, so assert at least one plugin actually reaches the loop —
+  // and reaches its INNER loop too: that one iterates the locales, so a manifest carrying `"i18n": {}`
+  // satisfies a truthy check while the check itself still examines zero locales.
+  assert.ok(
+    dirs.some((d) => {
+      const m = JSON.parse(readFileSync(new URL(`${d}/manifest.json`, root), 'utf8'));
+      return Object.keys(m.configSchema?.properties ?? {}).length > 0 && Object.keys(m.i18n ?? {}).length > 0;
+    }),
+    'no plugin has both configSchema fields and a non-empty i18n block — the config-translation check would examine nothing',
+  );
+});
+
 test('plugins.json carries i18n for a plugin whose manifest has it', () => {
   const catalog = JSON.parse(readFileSync(new URL('../plugins.json', import.meta.url), 'utf8'));
   const entries = catalog.plugins ?? catalog;

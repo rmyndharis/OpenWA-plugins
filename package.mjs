@@ -4,6 +4,7 @@ import { rm, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { zipStore } from './scripts/zip-store.mjs';
+import { configUiMember } from './scripts/entry-path.mjs';
 
 const plugin = process.argv[2];
 if (!plugin) {
@@ -65,8 +66,14 @@ const entries = ['manifest.json', 'dist/index.js', 'dist/package.json'];
 // A configUi plugin ships a static editor bundle the host serves in a sandboxed iframe — include it.
 if (manifest.configUi?.entry) {
   const ui = manifest.configUi.entry;
+  let member;
+  try {
+    member = configUiMember(ui);
+  } catch (e) {
+    fail(e.message);
+  }
   if (!existsSync(join(dir, ui))) fail(`configUi.entry "${ui}" not found`);
-  entries.push(ui.includes('/') ? ui.split('/')[0] : ui);
+  entries.push(member);
 }
 
 // Resolve each entry (file or directory) to zip members with forward-slash relative paths.
@@ -87,12 +94,14 @@ if (!result.some((f) => f.name === mainInZip)) {
   fail(`manifest main "${manifest.main}" is not in the package (members: ${result.map((f) => f.name).join(', ')})`);
 }
 
-await writeFile(zipPath, zipStore(result));
-
 // ── Report size + sha256 (release artifacts — surfaced here and in the GitHub Release) ──
-const buf = readFileSync(zipPath);
-const sha256 = createHash('sha256').update(buf).digest('hex');
-const kb = (buf.length / 1024).toFixed(1);
-if (buf.length > 5 * 1024 * 1024) fail(`package is ${kb} KB, over the 5 MB install limit`);
+// Size is checked before the write, not after: an oversized archive that fails the limit used to be
+// left behind on disk anyway.
+const zip = zipStore(result);
+const kb = (zip.length / 1024).toFixed(1);
+if (zip.length > 5 * 1024 * 1024) fail(`package is ${kb} KB, over the 5 MB install limit`);
+await writeFile(zipPath, zip);
+
+const sha256 = createHash('sha256').update(zip).digest('hex');
 console.log(`✓ Packaged ${plugin} v${manifest.version} → ${zipName}  (${kb} KB)`);
 console.log(`  sha256: ${sha256}`);

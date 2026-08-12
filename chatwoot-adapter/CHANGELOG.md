@@ -6,6 +6,14 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+### Fixed
+
+- **Attachment uploads now use an unpredictable multipart boundary.** The boundary was built from the
+  conversation id and the file's byte length, both of which a sender can work out from the media they
+  send — so an attachment crafted to contain that exact boundary could close the part early and append
+  parts of its own to the request reaching Chatwoot. The boundary is now 16 random bytes, which removes
+  the possibility rather than filtering for it.
+
 ## [0.9.1] — 2026-08-12
 
 ### Changed

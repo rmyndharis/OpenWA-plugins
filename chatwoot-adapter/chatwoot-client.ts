@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { buildMultipartBody } from './multipart.ts';
 
 export interface ChatwootConfig {
@@ -165,7 +166,9 @@ export class ChatwootClient {
     file: { filename: string; contentType: string; data: Uint8Array },
     opts: MessagePostOptions & { isVoiceMessage?: boolean } = {},
   ): Promise<{ id: number }> {
-    const boundary = `----cw${conversationId}${file.data.byteLength}`;
+    // Random, not derived: the media bytes are attacker-controlled, and a boundary they can predict is a
+    // boundary they can embed to forge extra parts. Matches typebot-connector's producer.
+    const boundary = `----cw${randomBytes(16).toString('hex')}`;
     const fields = [
       { name: 'content', value: content },
       { name: 'message_type', value: opts.messageType ?? 'incoming' },

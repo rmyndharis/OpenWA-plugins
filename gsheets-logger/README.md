@@ -34,7 +34,8 @@ The installed version is also visible in the OpenWA dashboard Plugins list, via
 - **Logs all four message events** — `message:received`, `message:sent`, `message:failed`, `message:ack` —
   one row per event with a fixed 14-column schema.
 - **Buffered batch writes** with retain-on-failure (rows are kept and retried on a Sheets error),
-  a 5000-row cap, and persistence to plugin storage so the buffer survives restarts.
+  a 5000-row and ~4M-character cap (oldest dropped first, reported in the log), and persistence to
+  plugin storage so the buffer survives restarts.
 - **Service-account auth** (JWT RS256) using only Node built-ins (`crypto` + `fetch`) — **zero runtime
   dependencies**, so the package is tiny.
 - **Formula-injection safe** — writes with `valueInputOption=RAW` and neutralizes CSV/Sheets formula

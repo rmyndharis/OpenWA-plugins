@@ -138,3 +138,98 @@ test('logs at observer priority so a responder claim can never starve it', async
   assert.equal(registered.length, 4);
   assert.ok(registered.every(r => r.priority === 10), 'every logged event registers at 10');
 });
+
+test('the buffer is capped by total size, not just row count', () => {
+  // MAX_BUFFER caps the row COUNT at 5,000 while row.ts allows 50,000 characters per cell, so the row
+  // cap alone permits a buffer far past the 256 MB worker heap — and the message body a sender controls
+  // is one of those cells. Rows are only retained this long when Sheets is unreachable.
+  const logger = new GSheetsLogger();
+  const harness = logger as unknown as {
+    buffer: string[][];
+    ctx: unknown;
+    batchSize: number;
+    enqueue(hook: unknown): void;
+  };
+  harness.ctx = { logger: { warn: (): void => {} } };
+  harness.batchSize = Number.MAX_SAFE_INTEGER; // never trip the size-triggered flush
+  const big = 'x'.repeat(50_000);
+
+  for (let i = 0; i < 500; i++) {
+    harness.enqueue({
+      event: 'message:received',
+      sessionId: 's1',
+      timestamp: new Date('2026-06-22T10:00:00.000Z'),
+      source: 'Engine',
+      data: { id: `M${i}`, from: 'a@c.us', to: 'me', chatId: 'a@c.us', body: big, type: 'text', fromMe: false, isGroup: false },
+    });
+  }
+
+  const chars = harness.buffer.reduce((n, row) => n + row.reduce((m, cell) => m + cell.length, 0), 0);
+  assert.ok(harness.buffer.length < 500, `expected oldest rows to be dropped, buffer still holds ${harness.buffer.length}`);
+  assert.ok(chars <= 8_000_000, `buffer holds ${chars} characters — the row cap alone does not bound memory`);
+});
+
+test('onDisable survives a storage quota rejection and says how many rows were lost', async () => {
+  // ctx.storage.set REJECTS once the plugin directory would exceed its 50 MiB quota, and the repo
+  // standard is explicit that a swallowed quota error is silent data loss. onDisable persisted without
+  // a guard, so the rejection escaped the lifecycle call itself.
+  const logger = new GSheetsLogger();
+  const logged: string[] = [];
+  const harness = logger as unknown as { client: unknown; ctx: unknown; buffer: string[][] };
+  harness.client = null; // flush() is a no-op, so onDisable goes straight to persisting
+  harness.ctx = {
+    storage: { set: async (): Promise<void> => { throw new Error('quota exceeded'); } },
+    logger: { error: (msg: string): void => void logged.push(msg), warn: (): void => {} },
+  };
+  harness.buffer = [['a'], ['b']];
+
+  await assert.doesNotReject(() => logger.onDisable());
+  assert.ok(
+    logged.some((m) => m.includes('2')),
+    `expected the number of lost rows to be logged, got ${JSON.stringify(logged)}`,
+  );
+});
+
+const enableCtx = (stored: unknown, warns: string[] = []): unknown => ({
+  config: { spreadsheetId: 'sid', serviceAccountJson: validSa },
+  net: { fetch: async () => ({ ok: true, status: 200, body: '{}' }) },
+  storage: { get: async () => stored, set: async () => {} },
+  logger: { log: (): void => {}, warn: (m: string): void => void warns.push(m), error: (): void => {} },
+  registerHook: (): void => {},
+});
+
+test('a restored buffer is filtered to rows of strings before anything uses it', async () => {
+  // The buffer comes back from ctx.storage, and everything downstream assumes rows of strings — the
+  // size accounting reads every cell's length, and the Sheets append sends them verbatim. A stored
+  // value of another shape must not reach either.
+  const logger = new GSheetsLogger();
+  await logger.onEnable(enableCtx([['ok', 'row'], null, 42, [{}], ['also', 'fine']]) as never);
+  await logger.onUnload();
+  assert.deepEqual((logger as unknown as { buffer: string[][] }).buffer, [['ok', 'row'], ['also', 'fine']]);
+});
+
+test('a restored buffer is capped on load, not only when the next message arrives', async () => {
+  // Without this the plugin can come back up holding far more than the cap allows and stay that way
+  // until traffic resumes — exactly when the host is least able to absorb it.
+  const stored = Array.from({ length: 500 }, () => ['x'.repeat(50_000)]);
+  const logger = new GSheetsLogger();
+  await logger.onEnable(enableCtx(stored) as never);
+  await logger.onUnload();
+  const buffer = (logger as unknown as { buffer: string[][] }).buffer;
+  const chars = buffer.reduce((n, row) => n + row.reduce((m, cell) => m + cell.length, 0), 0);
+  assert.ok(chars <= 8_000_000, `restored buffer holds ${chars} characters`);
+});
+
+test('restoring a buffer reports what it dropped instead of losing rows silently', async () => {
+  // This plugin exists to produce a complete audit trail, so discarding rows without a word is the
+  // worst shape the loss can take — the operator has no way to know the sheet has a hole in it.
+  const warns: string[] = [];
+  const stored = [...Array.from({ length: 400 }, () => ['x'.repeat(50_000)]), 'garbage', null];
+  const logger = new GSheetsLogger();
+  await logger.onEnable(enableCtx(stored, warns) as never);
+  await logger.onUnload();
+
+  assert.equal(warns.length, 1, `expected exactly one warning, got ${JSON.stringify(warns)}`);
+  assert.match(warns[0], /2 malformed/);
+  assert.match(warns[0], /\d+ oldest/);
+});
