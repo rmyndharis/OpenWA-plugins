@@ -121,6 +121,57 @@ test('every gateway URL in a README carries the /api prefix', () => {
   assert.deepEqual(offenders, []);
 });
 
+test('every copy-pasteable config curl wraps its body in {"config": …}', () => {
+  // `PUT /api/plugins/:id/config` takes `{ "config": { … } }`. A body with the fields at the root is
+  // still well-formed JSON, so nothing rejects it locally — it just configures nothing. Sibling to the
+  // /api check above: same failure shape (a curl that cannot be pasted), different half of the command.
+  const withExample = new Set();
+  const offenders = [];
+  for (const file of readmes) {
+    const name = file.replace(root + '/', '');
+    // Join backslash continuations first, so each curl command lands on one line. Matching the command
+    // and its continuations in a single pattern does not work: the leading `[^\n]*` eats the trailing
+    // backslash, and because the continuation group may repeat zero times the match still succeeds — so
+    // the engine never backtracks and every command silently truncates to its first line.
+    // Splitting on newlines is not enough either: chat-flow's `-d` payload spans three lines inside one
+    // pair of single quotes, which the shell accepts and a per-line scan would truncate. Split on the
+    // start of the NEXT curl instead, then stop at the end of the code fence.
+    const joined = readFileSync(file, 'utf8').replace(/\\\n\s*/g, ' ');
+    for (const chunk of joined.split(/\n(?=\s*curl\b)/)) {
+      if (!/^\s*curl\b/.test(chunk)) continue;
+      const cmd = chunk.split('```')[0];
+      if (!/-X\s+PUT/.test(cmd) || !/\/plugins\/[^/\s"']+\/config\b/.test(cmd)) continue;
+      withExample.add(file);
+      const body = /-d\s+'([^']*)'/.exec(cmd);
+      if (!body) {
+        offenders.push(`${name}: PUT …/config carries no -d body`);
+        continue;
+      }
+      let parsed;
+      try {
+        parsed = JSON.parse(body[1]);
+      } catch {
+        offenders.push(`${name}: the -d body is not valid JSON`);
+        continue;
+      }
+      if (!('config' in parsed)) offenders.push(`${name}: fields sit at the root (${Object.keys(parsed).join(', ')}) instead of under "config"`);
+    }
+  }
+  assert.deepEqual(offenders, []);
+  // Enumerate what IS there. Should the command parsing above stop matching — a README switching to
+  // httpie, or wrapping the command differently — this check would otherwise stay green having examined
+  // nothing. The expectation is derived, not hand-listed: any README that names the config endpoint at
+  // all owes this check one command it can read. chatwoot-adapter names it nowhere (it is configured
+  // through `/integration/plugins/:id/instances`) and so is excluded by the corpus rather than by a list
+  // that would go stale.
+  const namesEndpoint = readmes.filter((f) => /\/plugins\/[^/\s"']+\/config\b/.test(readFileSync(f, 'utf8')));
+  assert.deepEqual(
+    namesEndpoint.filter((f) => !withExample.has(f)).map((f) => f.replace(root + '/', '')),
+    [],
+    'these READMEs name the config endpoint but show no PUT command this check can read',
+  );
+});
+
 test("a plugin README links the repository its manifest names", () => {
   // supabase-otp-hook was contributed from another account, and its Install section pointed at that
   // account's fork for the download. PR #54 corrected `repository` in the manifest — which is what the

@@ -106,7 +106,7 @@ curl -X POST http://localhost:2785/api/plugins/install \
 # Configure (per session, or '*' for all)
 curl -X PUT http://localhost:2785/api/plugins/voice-transcription/config \
   -H "X-API-Key: $OPENWA_API_KEY" -H 'Content-Type: application/json' \
-  -d '{"sttBaseUrl":"http://127.0.0.1:8000","model":"small","deliveryWebhookUrl":"http://127.0.0.1:5678/webhook/transcript"}'
+  -d '{ "config": { "sttBaseUrl": "http://127.0.0.1:8000", "model": "small", "deliveryWebhookUrl": "http://127.0.0.1:5678/webhook/transcript" } }'
 
 # Enable
 curl -X POST http://localhost:2785/api/plugins/voice-transcription/enable \
