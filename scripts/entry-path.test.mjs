@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { configUiMember, collectEntryFiles } from './entry-path.mjs';
+import { configUiMember, collectEntryFiles, collectMembers } from './entry-path.mjs';
 
 test('a configUi entry resolves to the top-level name the packager archives', () => {
   assert.equal(configUiMember('editor.html'), 'editor.html');
@@ -70,6 +70,26 @@ test('a symlink inside the packaged tree is refused instead of followed out of t
     // And one nested a level down, where the entry itself is an ordinary directory.
     symlinkSync(join(root, 'outside'), join(plugin, 'config', 'nested'));
     assert.throws(() => collectEntryFiles(plugin, 'config'), /symlink/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an entry nested under another entry contributes each member once', () => {
+  // configUiMember returns the TOP-LEVEL name, so a configUi entry of 'dist/ui.html' adds 'dist' to a
+  // list that already names 'dist/index.js' and 'dist/package.json' — and the archive then carried
+  // each of those twice. Extractors do not agree on what a duplicate name means, and the size check
+  // counts the bytes twice either way.
+  const root = mkdtempSync(join(tmpdir(), 'entry-members-'));
+  try {
+    mkdirSync(join(root, 'dist'), { recursive: true });
+    writeFileSync(join(root, 'manifest.json'), '{}');
+    writeFileSync(join(root, 'dist', 'index.js'), 'bundle');
+    writeFileSync(join(root, 'dist', 'ui.html'), '<html></html>');
+
+    const names = collectMembers(root, ['manifest.json', 'dist/index.js', 'dist']).map((f) => f.name);
+    assert.deepEqual([...names].sort(), ['dist/index.js', 'dist/ui.html', 'manifest.json']);
+    assert.equal(new Set(names).size, names.length, `duplicate members: ${names.join(', ')}`);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

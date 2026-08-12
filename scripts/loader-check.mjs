@@ -3,7 +3,7 @@
 // needs. So a bundle that throws on require — or default-exports the wrong shape — is first discovered
 // by the host at install, after the tag and the GitHub Release are already published. Run after a build.
 import { createRequire } from 'node:module';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { discoverPluginDirs } from './run-tests.mjs';
@@ -13,7 +13,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export function assertLoadable(mod, id) {
   const Plugin = mod?.default;
   if (typeof Plugin !== 'function') {
-    throw new Error(`${id}: dist/index.js does not default-export a constructor (got ${typeof Plugin})`);
+    throw new Error(`${id}: the built bundle does not default-export a constructor (got ${typeof Plugin})`);
   }
   let instance;
   try {
@@ -49,9 +49,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const failures = [];
   let handles = process.getActiveResourcesInfo().length;
   for (const id of dirs) {
-    const bundle = join(ROOT, id, 'dist', 'index.js');
+    // Load what `main` names, not a hard-coded path: `main` is the file the host requires at install,
+    // and it is the one package.mjs asserts is in the archive. Checking a different file would leave
+    // the published entry point untested while reporting success.
+    const main = JSON.parse(readFileSync(join(ROOT, id, 'manifest.json'), 'utf8')).main;
+    const bundle = join(ROOT, id, main);
     if (!existsSync(bundle)) {
-      failures.push(`${id}: dist/index.js is missing — run \`npm run build\` first`);
+      failures.push(`${id}: ${main} is missing — run \`npm run build\` first`);
       continue;
     }
     // require() is separated from the shape check so a bundle that throws on load is still reported
@@ -60,7 +64,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     try {
       mod = require(bundle);
     } catch (err) {
-      failures.push(`${id}: dist/index.js threw on require — ${err.message}`);
+      failures.push(`${id}: the built bundle threw on require — ${err.message}`);
       continue;
     }
     try {
