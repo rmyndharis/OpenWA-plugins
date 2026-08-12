@@ -145,6 +145,26 @@ test('postMedia marks a voice note and threads it (is_voice_message + source_id 
   assert.match(raw, /filename="voice.ogg"/);
 });
 
+test('postMedia picks an unpredictable boundary instead of deriving it from the attachment', async () => {
+  // The boundary was `----cw<conversationId><data.byteLength>` — both halves derivable from an attachment
+  // the sender controls, so crafted bytes carrying that exact boundary would forge extra multipart parts.
+  const { fn, calls } = fakeFetch({ 'POST /api/v1/accounts/3/conversations/55/messages': { body: { id: 1 } } });
+  const c = new ChatwootClient(fn, cfg);
+  const file = { filename: 'a.jpg', contentType: 'image/jpeg', data: new Uint8Array([1, 2, 3]) };
+  const boundaryOf = () => /boundary=(.+)$/.exec(calls.at(-1)!.init!.headers!['Content-Type'])![1];
+
+  await c.postMedia(55, '', file);
+  const first = boundaryOf();
+  await c.postMedia(55, '', file);
+  const second = boundaryOf();
+
+  assert.notEqual(first, second, 'two identical posts must not reuse a boundary');
+  assert.doesNotMatch(first, /^----cw\d+$/, 'boundary must not be conversation id + byte length');
+  // The header and the body must agree, or Chatwoot cannot parse the parts at all.
+  const raw = Buffer.from(calls.at(-1)!.init!.body as Uint8Array).toString('latin1');
+  assert.ok(raw.startsWith(`--${second}\r\n`), 'body must open with the boundary the header announces');
+});
+
 test('postMedia on a non-ok response rejects with err.status set (so the 404 mapping-rebuild path can branch on it)', async () => {
   // Inbound/sent recovery branches on `err.status === 404` to rebuild the dangling conversation mapping.
   // json() already attaches status; postMedia did NOT — a media 404 would silently dead-letter. This test
