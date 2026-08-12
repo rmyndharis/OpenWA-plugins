@@ -40,13 +40,20 @@ const GATEWAY_HOSTS = /your-openwa-host|localhost:2785|127\.0\.0\.1:2785|<host>/
 //
 // Shared with the precondition test, which asserts the result is non-empty. Without that, a README
 // wording its floor in none of these shapes makes the comparison pass while comparing nothing.
+// A dotted version, bounded so it cannot swallow the punctuation that follows it. `[0-9.]+` is the
+// tempting spelling and it is wrong on the one pattern below that has no terminator: "**OpenWA** ≥
+// 0.8.7." at the end of a sentence captures "0.8.7." and reports a mismatch against a manifest that
+// says "0.8.7". The three terminated patterns happen to be safe, but they are written this way too so
+// the next pattern copied from them inherits the bounded form rather than the hazard.
+const VER = '(\\d+(?:\\.\\d+)*)';
+
 function statedFloors(text) {
   const flat = flatten(text);
   const stated = new Set();
-  for (const m of text.matchAll(/badge\/OpenWA-%E2%89%A5%20([0-9.]+)-/g)) stated.add(m[1]);
-  for (const m of flat.matchAll(/(?:Targets|Requires|Have) OpenWA\s*\*\*≥\s*v?([0-9.]+)\*\*/g)) stated.add(m[1]);
-  for (const m of flat.matchAll(/(?:Targets|Requires|Have) OpenWA\s+v?([0-9.]+)\+/g)) stated.add(m[1]);
-  for (const m of flat.matchAll(/\*\*OpenWA\*\*\s*≥\s*v?([0-9.]+)/g)) stated.add(m[1]);
+  for (const m of text.matchAll(new RegExp(`badge/OpenWA-%E2%89%A5%20${VER}-`, 'g'))) stated.add(m[1]);
+  for (const m of flat.matchAll(new RegExp(`(?:Targets|Requires|Have) OpenWA\\s*\\*\\*≥\\s*v?${VER}\\*\\*`, 'g'))) stated.add(m[1]);
+  for (const m of flat.matchAll(new RegExp(`(?:Targets|Requires|Have) OpenWA\\s+v?${VER}\\+`, 'g'))) stated.add(m[1]);
+  for (const m of flat.matchAll(new RegExp(`\\*\\*OpenWA\\*\\*\\s*≥\\s*v?${VER}`, 'g'))) stated.add(m[1]);
   return stated;
 }
 
@@ -186,11 +193,17 @@ const PERMISSIONS = [
 // in "makes no outbound network calls and declares only `messages:send`" and invert a true claim. The
 // preceding token may not carry sentence-ending punctuation, so a question answered "No." before a
 // positive mention is not read as negating it.
+// PERMISSIONS is no longer a fixed list of safe literals — it absorbs whatever the manifests declare,
+// so a name is untrusted input to the regex built from it. An unescaped `weird:a(b` does not mis-match,
+// it throws "Invalid regular expression: Unterminated group" and takes the whole file down with a
+// SyntaxError instead of a named failure.
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 function mentionsOf(flat) {
   const positive = new Set();
   const negative = new Set();
   for (const p of PERMISSIONS) {
-    for (const m of flat.matchAll(new RegExp('([^\\s.!?;:]+ )?`' + p + '`', 'g'))) {
+    for (const m of flat.matchAll(new RegExp('([^\\s.!?;:]+ )?`' + escapeRe(p) + '`', 'g'))) {
       const prev = (m[1] ?? '').toLowerCase().replace(/[^a-z]/g, '');
       (prev === 'no' || prev === 'not' || prev === 'never' ? negative : positive).add(p);
     }

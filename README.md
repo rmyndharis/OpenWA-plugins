@@ -144,7 +144,7 @@ my-plugin/
   "type": "extension",          // only "extension" is user-installable
   "main": "dist/index.js",      // require()-able file inside the package
   "description": "…",
-  "permissions": ["messages:send"],   // enforced gates: messages:send · engine:read · net:fetch · webhook:ingress · conversation:send
+  "permissions": ["messages:send"],   // enforced gates: messages:send · engine:read · net:fetch · webhook:ingress · conversation:send · storage:use · search:provide
   "sessions": ["*"],                   // session-id scope; omit ⇒ all sessions
   "hooks": ["message:received"],       // declared interest (informational)
   "configSchema": {                    // drives the dashboard settings form
@@ -204,7 +204,7 @@ React to activity with `ctx.registerHook(event, handler, priority?)`. Handlers a
 
 ### Capabilities
 
-The `PluginContext` exposes a deliberately small surface. The two action capabilities are gated by `manifest.permissions` — calling one you didn't declare throws `PluginCapabilityError`.
+The `PluginContext` exposes a deliberately small surface. Every capability below with a permission in the last column is gated by `manifest.permissions` — calling one you didn't declare throws `PluginCapabilityError`, at the call rather than at load, so an undeclared capability fails mid-run and not at install.
 
 | Capability | Methods | Permission |
 | ---------- | ------- | ---------- |
@@ -215,10 +215,20 @@ The `PluginContext` exposes a deliberately small surface. The two action capabil
 | `ctx.handover` | `set(…, state)` — bot/human/closed handover for a mapped chat (v1) | `conversation:send` |
 | `ctx.mappings` | `upsert` · `get` · `getByProvider` — WA-chat ↔ provider-conversation mapping (v1) | `conversation:send` |
 | `ctx.registerWebhook` | claim an inbound ingress route (v1) | `webhook:ingress` |
-| `ctx.storage` | `get` · `set` · `delete` · `list` (namespaced per plugin) | — |
+| `ctx.storage` | `get` · `set` · `delete` · `list` (namespaced per plugin) | `storage:use` |
 | `ctx.logger` | `log` · `debug` · `warn` · `error` | — |
 
-Also available: `ctx.config`, `ctx.manifest`, `ctx.pluginId`, `ctx.registerHook`, `ctx.hookManager`.
+Also available: `ctx.config`, `ctx.pluginId`, `ctx.registerHook`.
+
+> `ctx.storage` was ungated until OpenWA moved it behind `storage:use`. A plugin that persists anything
+> should declare it now rather than when its host is upgraded: an older host ignores an unrecognized
+> permission, so the declaration is free, and a newer one denies the call — mid-conversation, because
+> permissions are checked at the call and not at load.
+>
+> There is no `ctx.manifest` and no `ctx.hookManager` on the sandboxed context the worker builds, so
+> reading `ctx.manifest.version` typechecks against a stale copy of the vendored types and throws at
+> runtime. To know your own version, bake it in at build time (see `package.mjs`, which defines
+> `__PLUGIN_VERSION__` from the manifest).
 
 ### Constraints to design around
 

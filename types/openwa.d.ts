@@ -82,8 +82,13 @@ export interface PluginLogger {
 }
 
 /**
- * Per-plugin key/value storage. Needs no manifest permission. One JSON file per key under
- * `<dataDir>/plugins/<pluginId>/`, so key COUNT is a real cost, not just key size:
+ * Per-plugin key/value storage. Needs the "storage:use" permission — all four verbs assert it, so an
+ * undeclared plugin is denied at the first call rather than at load. It was ungated until OpenWA gated
+ * it (core `plugin-capability-context.ts` `buildStorageCapability`); declaring it is inert on an older
+ * host, which is why a plugin should declare it now rather than when its host is upgraded.
+ *
+ * One JSON file per key under `<dataDir>/plugins/<pluginId>/`, so key COUNT is a real cost, not just
+ * key size:
  *
  * - `set` REJECTS once the plugin's directory would exceed 50 MiB ("storage quota exceeded"), and the
  *   quota is measured by a synchronous readdir + stat of every key on EVERY write. A plugin that
@@ -255,6 +260,7 @@ export interface PluginContext {
   /** The RESOLVED config for `sessionId` (the per-session slice merged over the "*" defaults). */
   config: Record<string, unknown>;
   logger: PluginLogger;
+  /** Per-plugin key/value store (needs the "storage:use" permission — see PluginStorage). */
   storage: PluginStorage;
   registerHook(event: HookEvent, handler: HookHandler, priority?: number): void;
   messages: PluginMessagingCapability;
