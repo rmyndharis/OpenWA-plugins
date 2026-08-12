@@ -45,7 +45,9 @@ const TAG_RE = /^(.+)-v\d+\.\d+\.\d+$/;
 
 for (const release of await fetchAllReleases()) {
   const id = release.tag_name?.match(TAG_RE)?.[1];
-  if (!id || !(id in totals)) continue;
+  // Object.hasOwn, not `in`: `in` walks the prototype chain, so a release tagged `constructor-v1.0.0`
+  // or `__proto__-v1.0.0` would pass this gate and then write a badge for a plugin that does not exist.
+  if (!id || !Object.hasOwn(totals, id)) continue;
   for (const asset of release.assets ?? []) {
     if (asset.name === `${id}.zip`) totals[id] += asset.download_count;
   }

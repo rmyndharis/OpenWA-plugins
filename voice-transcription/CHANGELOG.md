@@ -6,6 +6,13 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+### Fixed
+
+- **The multipart boundary for an upload is now drawn from the CSPRNG.** It was built from two
+  `Math.random()` values. The audio bytes come from a sender, so a boundary that can be predicted is one
+  that can be embedded to forge extra parts of the request. Matches the producers in the other plugins.
+
+
 ### Changed
 
 - **`chatDelivery: reply` now says what it does in a group.** The option posts a quote-reply to the
