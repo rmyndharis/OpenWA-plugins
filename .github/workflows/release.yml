@@ -43,8 +43,22 @@ jobs:
             echo "tag version $PLUGIN_VERSION != manifest version $MV"; exit 1
           fi
 
+      # ci.yml runs on pushes and PRs to main, never on tags — and a tag can be pushed at any commit.
+      # Without this the release path would happily publish an artifact built from a red commit, and the
+      # zip reaches users the moment the Release is created.
+      - name: Verify before publishing anything
+        run: |
+          npm run typecheck
+          npm test
+          npm run catalog:check
+
       - name: Build & package (validates version↔changelog and size)
         run: node package.mjs "$PLUGIN_ID"
+
+      # The last point at which a bundle the host cannot load is still cheap to fix. After this step the
+      # Release is created and the zip is installable.
+      - name: The built bundle loads as a plugin
+        run: node scripts/loader-check.mjs "$PLUGIN_ID"
 
       - name: Checksum + release notes
         run: |

@@ -31,3 +31,6 @@ jobs:
               echo "::endgroup::"
             fi
           done
+
+      - name: Every built bundle loads as a plugin
+        run: node scripts/loader-check.mjs
