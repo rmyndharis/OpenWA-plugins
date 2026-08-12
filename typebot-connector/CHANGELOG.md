@@ -6,6 +6,19 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-08-12
+
+### Changed
+
+- **Declared the `storage:use` permission.** The plugin keeps one small record per conversation in
+  plugin storage — the Typebot session id, what input the bot is waiting for, and when the chat was
+  last active. Typebot owns the flow itself; this record is the only thing tying a WhatsApp chat to
+  its running Typebot session. OpenWA is moving `ctx.storage` behind a permission the manifest has to
+  declare, and without it that record cannot be read or written: every reply from a contact would be
+  treated as a brand-new conversation and restart the flow from the top, forever. Declaring the
+  permission changes nothing on the hosts you run today — an unrecognized permission is ignored — so
+  0.2.2 behaves exactly like 0.2.1.
+
 ## [0.2.1] — 2026-07-31
 
 ### Fixed
