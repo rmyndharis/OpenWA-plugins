@@ -47,6 +47,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   }
 
   const failures = [];
+  let handles = process.getActiveResourcesInfo().length;
   for (const id of dirs) {
     const bundle = join(ROOT, id, 'dist', 'index.js');
     if (!existsSync(bundle)) {
@@ -67,6 +68,16 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     } catch (err) {
       failures.push(err.message);
     }
+
+    // A bundle that opens a timer or socket while loading keeps this process alive after the last
+    // check, which in CI is a job hanging until the six-hour timeout with "OK" already in the log —
+    // the worst failure mode a gate can have. It is also a contract violation worth naming: a plugin
+    // starts its timers in onEnable, not at construction.
+    const now = process.getActiveResourcesInfo().length;
+    if (now > handles) {
+      failures.push(`${id}: loading left ${now - handles} handle(s) open — start timers and sockets in onEnable, not at load`);
+    }
+    handles = now;
   }
 
   if (failures.length) {
@@ -74,4 +85,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.exit(1);
   }
   console.log(`Loader contract OK (${dirs.length} plugin(s)).`);
+  // Explicit: a bundle that slipped a handle past the check above would otherwise hold the event loop.
+  process.exit(0);
 }
