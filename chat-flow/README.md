@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chat-flow` |
-| **Version** | 1.1.1 |
-| **Released** | 2026-08-01 |
+| **Version** | 1.1.2 |
+| **Released** | 2026-08-12 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -37,7 +37,8 @@
   numbers it runs for. Edits apply live via `onConfigChange`.
 - **Safe under config drift** — if the saved config changes while a user is mid-flow, the stale path is
   reset with bounded re-processing (never an unbounded loop).
-- **Least privilege** — declares only `messages:send`; direct chats only unless `respondInGroups` is on.
+- **Least privilege** — declares `messages:send` and `storage:use` (flow position only); direct chats
+  only unless `respondInGroups` is on. No network access at all.
 
 ## Flow configuration
 
@@ -126,9 +127,10 @@ interfere.
 ## Security
 
 Flow state lives in `ctx.storage`, keyed per `(session, chat)` and expiring after 15 minutes — no
-cross-chat leakage. The plugin makes no outbound network calls and declares only `messages:send`. A stale
-stored path (after a config edit) is reset with bounded re-processing, so a hostile or looping config can
-never cause unbounded recursion.
+cross-chat leakage. The plugin makes no outbound network calls and declares only `messages:send` and
+`storage:use` — the latter covering that flow state, which holds a menu path and a timestamp, never
+message content. A stale stored path (after a config edit) is reset with bounded re-processing, so a
+hostile or looping config can never cause unbounded recursion.
 
 ## Changelog
 
