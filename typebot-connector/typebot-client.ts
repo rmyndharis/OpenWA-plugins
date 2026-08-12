@@ -79,9 +79,11 @@ export class TypebotClient {
 
 // ── normalization ─────────────────────────────────────────────────────────────────────
 function normalize(raw: any): NormalizedResponse {
-  const bubbles = (raw?.messages ?? []).map(normalizeBubble).filter((b: Bubble | null): b is Bubble => b !== null);
+  // Array-check, not just nullish: the upstream is a third-party server and `messages` arriving as an
+  // object or a string would otherwise throw TypeError out of a hook rather than degrade to no bubbles.
+  const bubbles = (Array.isArray(raw?.messages) ? raw.messages : []).map(normalizeBubble).filter((b: Bubble | null): b is Bubble => b !== null);
   const input = raw?.input ? normalizeInput(raw.input) : undefined;
-  const redirect = (raw?.clientSideActions ?? []).find((a: any) => a?.redirect)?.redirect;
+  const redirect = (Array.isArray(raw?.clientSideActions) ? raw.clientSideActions : []).find((a: any) => a?.redirect)?.redirect;
   return { sessionId: raw?.sessionId, bubbles, input, redirectUrl: redirect?.url };
 }
 

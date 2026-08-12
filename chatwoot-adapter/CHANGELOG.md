@@ -8,6 +8,10 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ### Fixed
 
+- **An empty chat list no longer retires bulk backfill permanently.** The engine returns an empty list
+  while it is still warming up, and the completion marker is durable — so a sweep that ran at the wrong
+  moment disabled bulk backfill for that session forever. The marker is left unset so a later enable
+  tries again.
 - **Chatwoot request errors no longer carry the customer's phone number.** These errors surface in
   `healthCheck`, which the dashboard renders, and the contact-search URL carries the number in its query
   string. The query is dropped and the response body is no longer appended; the path still says which
