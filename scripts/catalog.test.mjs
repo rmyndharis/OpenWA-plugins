@@ -30,13 +30,15 @@ test('the catalog supplies what the checks below need', () => {
     'no entry is stable — the full-i18n check would iterate an empty list',
   );
   // The config-translation check skips a plugin with no config fields or no i18n. That skip is correct
-  // per plugin and fatal across all of them, so assert at least one plugin actually reaches the loop.
+  // per plugin and fatal across all of them, so assert at least one plugin actually reaches the loop —
+  // and reaches its INNER loop too: that one iterates the locales, so a manifest carrying `"i18n": {}`
+  // satisfies a truthy check while the check itself still examines zero locales.
   assert.ok(
     dirs.some((d) => {
       const m = JSON.parse(readFileSync(new URL(`${d}/manifest.json`, root), 'utf8'));
-      return Object.keys(m.configSchema?.properties ?? {}).length > 0 && m.i18n;
+      return Object.keys(m.configSchema?.properties ?? {}).length > 0 && Object.keys(m.i18n ?? {}).length > 0;
     }),
-    'no plugin has both configSchema fields and an i18n block — the config-translation check would examine nothing',
+    'no plugin has both configSchema fields and a non-empty i18n block — the config-translation check would examine nothing',
   );
 });
 

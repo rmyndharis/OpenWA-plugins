@@ -121,6 +121,44 @@ test('every gateway URL in a README carries the /api prefix', () => {
   assert.deepEqual(offenders, []);
 });
 
+// The commands a README shows that PUT a plugin's config.
+//
+// Two parsing traps this went through, both of which left the check green while reading less than it
+// appeared to. Joining backslash continuations first is required: matching a command and its
+// continuations in one pattern does not work, because the leading `[^\n]*` eats the trailing backslash
+// and the continuation group may repeat zero times, so the match succeeds and never backtracks —
+// every command silently truncates to its first line. Splitting the result per line is wrong too:
+// chat-flow's `-d` payload spans three lines inside one pair of single quotes, which the shell accepts.
+//
+// Method detection is deliberately loose. `-X PUT`, `-XPUT` and `--request PUT` are the same request,
+// and a command this reader fails to RECOGNISE is one it silently stops checking — which is worse than
+// a false positive, because the file-level precondition below is satisfied by any OTHER command in the
+// same README. A bare curl with no method is a GET and genuinely none of this check's business.
+function configPutCommands(text) {
+  return text
+    .replace(/\\\n\s*/g, ' ')
+    .split(/\n(?=\s*[$#]?\s*curl\b)/)
+    .filter((chunk) => /^\s*[$#]?\s*curl\b/.test(chunk))
+    .map((chunk) => chunk.split('```')[0])
+    .filter((cmd) => /\/plugins\/[^/\s"']+\/config\b/.test(cmd) && /(?:-X\s*|--request\s+)PUT\b/.test(cmd));
+}
+
+test('the config-curl reader recognises every spelling of the same request', () => {
+  const url = '"https://your-openwa-host/api/plugins/p/config"';
+  for (const cmd of [
+    `curl -X PUT ${url} -d '{}'`,
+    `curl -XPUT ${url} -d '{}'`,
+    `curl --request PUT ${url} -d '{}'`,
+    `$ curl -X PUT ${url} -d '{}'`,
+  ]) {
+    assert.equal(configPutCommands(cmd).length, 1, `not recognised: ${cmd}`);
+  }
+  // Reading the config back is a GET, and not this check's business.
+  assert.equal(configPutCommands(`curl ${url}`).length, 0);
+  // Both commands in one fence must be read, not just the first.
+  assert.equal(configPutCommands(`curl -X PUT ${url} -d '{}'\ncurl -XPUT ${url} -d '{}'`).length, 2);
+});
+
 test('every copy-pasteable config curl wraps its body in {"config": …}', () => {
   // `PUT /api/plugins/:id/config` takes `{ "config": { … } }`. A body with the fields at the root is
   // still well-formed JSON, so nothing rejects it locally — it just configures nothing. Sibling to the
@@ -129,22 +167,14 @@ test('every copy-pasteable config curl wraps its body in {"config": …}', () =>
   const offenders = [];
   for (const file of readmes) {
     const name = file.replace(root + '/', '');
-    // Join backslash continuations first, so each curl command lands on one line. Matching the command
-    // and its continuations in a single pattern does not work: the leading `[^\n]*` eats the trailing
-    // backslash, and because the continuation group may repeat zero times the match still succeeds — so
-    // the engine never backtracks and every command silently truncates to its first line.
-    // Splitting on newlines is not enough either: chat-flow's `-d` payload spans three lines inside one
-    // pair of single quotes, which the shell accepts and a per-line scan would truncate. Split on the
-    // start of the NEXT curl instead, then stop at the end of the code fence.
-    const joined = readFileSync(file, 'utf8').replace(/\\\n\s*/g, ' ');
-    for (const chunk of joined.split(/\n(?=\s*curl\b)/)) {
-      if (!/^\s*curl\b/.test(chunk)) continue;
-      const cmd = chunk.split('```')[0];
-      if (!/-X\s+PUT/.test(cmd) || !/\/plugins\/[^/\s"']+\/config\b/.test(cmd)) continue;
+    for (const cmd of configPutCommands(readFileSync(file, 'utf8'))) {
       withExample.add(file);
-      const body = /-d\s+'([^']*)'/.exec(cmd);
+      // `--data` is curl's own synonym for `-d`. Single quotes only: every command in the corpus uses
+      // them, and they are what keeps a JSON body free of shell escaping — so say that outright rather
+      // than reporting "no body" at a command that plainly has one.
+      const body = /(?:-d|--data(?:-raw)?)\s+'([^']*)'/.exec(cmd);
       if (!body) {
-        offenders.push(`${name}: PUT …/config carries no -d body`);
+        offenders.push(`${name}: PUT …/config has no single-quoted -d body for this check to read`);
         continue;
       }
       let parsed;
@@ -152,6 +182,11 @@ test('every copy-pasteable config curl wraps its body in {"config": …}', () =>
         parsed = JSON.parse(body[1]);
       } catch {
         offenders.push(`${name}: the -d body is not valid JSON`);
+        continue;
+      }
+      // A non-object body (a bare array or string) has no keys to inspect and cannot carry `config`.
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        offenders.push(`${name}: the -d body is ${Array.isArray(parsed) ? 'an array' : typeof parsed}, not a {"config": …} object`);
         continue;
       }
       if (!('config' in parsed)) offenders.push(`${name}: fields sit at the root (${Object.keys(parsed).join(', ')}) instead of under "config"`);
