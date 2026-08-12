@@ -53,7 +53,22 @@ test("each plugin README's stated OpenWA floor matches its manifest", () => {
 
 // The five permissions the host enforces at the capability boundary, plus `storage:use` — the sixth,
 // added when OpenWA moved ctx.storage behind a declaration gate.
-const PERMISSIONS = ['messages:send', 'engine:read', 'net:fetch', 'conversation:send', 'webhook:ingress', 'storage:use'];
+const KNOWN_PERMISSIONS = ['messages:send', 'engine:read', 'net:fetch', 'conversation:send', 'webhook:ingress', 'storage:use'];
+
+// The vocabulary must include anything a manifest actually declares, not just the names known when this
+// was written. Hardcoding the list alone fails in both directions the moment a plugin adopts a newer
+// permission — `search:provide` is the one waiting to happen, required by core since 0.12.2. A README
+// claiming an unlisted permission would go unseen, and worse, declaring one would report "README's
+// permission list omits it" even when the README lists it plainly, because the scan could not see the
+// name it was looking for. That failure has no fix except deleting the documentation, which is the
+// opposite of the point. Keep the known names as a floor so a permission NOBODY declares can still be
+// recognised when a README negates it.
+const PERMISSIONS = [
+  ...new Set([
+    ...KNOWN_PERMISSIONS,
+    ...pluginDirs.flatMap((d) => JSON.parse(readFileSync(join(root, d, 'manifest.json'), 'utf8')).permissions ?? []),
+  ]),
+];
 
 // Prose wraps, so a claim and the permissions it names routinely straddle a newline: group-translate
 // ends a line on "Declares" and opens the next with the list, and chat-flow splits `messages:send` from
@@ -63,12 +78,14 @@ const flatten = (text) => text.replace(/\s+/g, ' ');
 // Classify every `permission` occurrence. A negation sitting directly in front of one ("…so no
 // `engine:read`") is a claim too — the opposite one — so it is checked in the opposite direction rather
 // than skipped. The adjacency is deliberately one word: widening it to a phrase would swallow the "no"
-// in "makes no outbound network calls and declares only `messages:send`" and invert a true claim.
+// in "makes no outbound network calls and declares only `messages:send`" and invert a true claim. The
+// preceding token may not carry sentence-ending punctuation, so a question answered "No." before a
+// positive mention is not read as negating it.
 function mentionsOf(flat) {
   const positive = new Set();
   const negative = new Set();
   for (const p of PERMISSIONS) {
-    for (const m of flat.matchAll(new RegExp('(\\S+ )?`' + p + '`', 'g'))) {
+    for (const m of flat.matchAll(new RegExp('([^\\s.!?;:]+ )?`' + p + '`', 'g'))) {
       const prev = (m[1] ?? '').toLowerCase().replace(/[^a-z]/g, '');
       (prev === 'no' || prev === 'not' || prev === 'never' ? negative : positive).add(p);
     }
@@ -81,8 +98,14 @@ function mentionsOf(flat) {
 // hook that exists but never fires, and an allowlist host — so it counts only when a real permission
 // follows close behind. http-action names `conversation:send` while explaining which release introduced
 // the capabilities it uses; that is not an enumeration and must not be read as one.
+//
+// The `permissions:` marker must NOT carry a trailing \b. A word boundary after the colon needs a word
+// character next, and every real heading writes "Permissions: `webhook:ingress`" with a space — so the
+// alternative matched nothing but the impossible "permissions:x". supabase-otp-hook is the only plugin
+// that heads its list this way and uses no form of "declare", so it was the one README silently exempt
+// from the completeness check this function exists to apply.
 function enumeratesPermissions(flat) {
-  for (const m of flat.matchAll(/\b(declares?|declared|permissions:)\b/gi)) {
+  for (const m of flat.matchAll(/\b(?:declares?|declared)\b|\bpermissions?\s*:/gi)) {
     const window = flat.slice(m.index, m.index + 120);
     if (PERMISSIONS.some((p) => window.includes('`' + p + '`'))) return true;
   }
@@ -90,13 +113,22 @@ function enumeratesPermissions(flat) {
 }
 
 test("a README's permission claims match its manifest", () => {
-  // Six plugin READMEs state the declared permissions in prose, and that sentence is the only place an
+  // Seven plugin READMEs state the declared permissions in prose, and that sentence is the only place an
   // operator reads the list — plugins.json publishes the manifest array, but nobody browses it, and the
   // catalog gate never opens a README's prose. Adding `storage:use` to seven manifests falsified four of
   // those sentences at once. gsheets-logger's said "declares only `net:fetch`", which the new permission
   // turned from stale into false; chat-flow's Security section had been contradicting itself for longer
   // than that, claiming `messages:send` alone one sentence after describing flow state living in
   // ctx.storage. Nothing in the toolchain would have caught any of it.
+  //
+  // Known limits, so the next reader knows where the edge is rather than trusting past it. This matches
+  // prose, and only prose that names a permission in backticks: an enumeration written as a table, or
+  // one whose permissions sit more than ~120 characters from the word that introduces them, is not
+  // recognised as an enumeration and escapes the completeness direction. Completeness is also measured
+  // against the whole file, so a closed "declares only X" sentence can go stale while passing, if the
+  // missing permission happens to be named elsewhere in the same README. Widening any of these means
+  // parsing English, which costs more than the drift it would catch — but none of them is a reason to
+  // read a green run as "every sentence in this README is true".
   const problems = [];
   for (const dir of pluginDirs) {
     const readme = join(root, dir, 'README.md');
@@ -106,8 +138,17 @@ test("a README's permission claims match its manifest", () => {
     const { positive, negative } = mentionsOf(flat);
 
     // Both directions, for every README — a stale claim is wrong whether or not the doc enumerates.
+    // The message names the second possible cause on purpose: an unrecognised negation surfaces here,
+    // and "README claims X" alone would read as an instruction to add X to the manifest, which is the
+    // one repair that turns a documentation slip into a real over-declaration.
     for (const p of positive) {
-      if (!declared.has(p)) problems.push(`${dir}: README claims \`${p}\`, manifest does not declare it`);
+      if (!declared.has(p)) {
+        problems.push(
+          `${dir}: README names \`${p}\` as a permission this plugin has, but the manifest does not ` +
+            `declare it — either the claim is stale, or it is a denial phrased in a way this check does ` +
+            `not recognise (it reads only "no"/"not"/"never" immediately before the name)`,
+        );
+      }
     }
     for (const p of negative) {
       if (!positive.has(p) && declared.has(p)) {
