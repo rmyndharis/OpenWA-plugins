@@ -31,6 +31,10 @@ const SUPPORTED_LOCALES = ['en', 'es', 'fr', 'it', 'ar', 'he', 'te', 'zh-CN', 'z
 //
 // A closed list makes adopting a genuinely new permission a deliberate one-line edit here — which is the
 // point. `storage:use` reached seven manifests without anything in this repo ever checking the name.
+// The GitHub owners whose Releases this catalogue is allowed to point at. A plugin may credit any
+// author; the ARTIFACT must come from a repo this project publishes.
+const RELEASE_OWNERS = new Set(['rmyndharis']);
+
 const HOST_PERMISSIONS = new Set([
   'messages:send',
   'engine:read',
@@ -43,6 +47,22 @@ const HOST_PERMISSIONS = new Set([
 
 // Manifest hygiene gates (hard failures) and soft warnings. Keep these aligned with PLUGIN-STANDARD.md.
 function validateManifest(id, manifest) {
+  // `id` here is the DIRECTORY name, and it is what every path in this repo is built from — the plugin
+  // folder, the zip name, the release tag. `manifest.id` is what the host installs under and what the
+  // catalogue publishes. If the two disagree, the download URL points at one plugin and the installed
+  // plugin calls itself another.
+  if (manifest.id !== id) {
+    throw new Error(`${id}: manifest.id is "${manifest.id}" — it must match the directory name`);
+  }
+  // The download URL is derived from `repository`, so a foreign host there would have the catalogue
+  // hand users an archive nobody in this repo built or checksummed.
+  const owner = /^https:\/\/github\.com\/([\w.-]+)\//.exec(manifest.repository ?? '');
+  if (!owner || !RELEASE_OWNERS.has(owner[1])) {
+    throw new Error(
+      `${id}: repository must be a github.com URL under ${[...RELEASE_OWNERS].join(' or ')} — ` +
+        `the catalogue builds its download URLs from it (got ${manifest.repository ?? 'nothing'})`,
+    );
+  }
   if (manifest.sessionScoped === undefined) {
     throw new Error(`${id}: manifest.json must declare "sessionScoped" explicitly (true or false)`);
   }
