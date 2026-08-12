@@ -1,8 +1,10 @@
 # OpenWA Plugin Standard
 
 The conventions every plugin in this repository follows, so the catalog stays consistent and
-management/automation stays easy. Verified against OpenWA's plugin runtime (sandboxed worker model,
-v0.7.x).
+management/automation stays easy. Verified against OpenWA's plugin runtime (sandboxed worker model) at
+the same baseline as [`types/openwa.d.ts`](./types/openwa.d.ts) — re-check both together, since this
+document describes host behaviour that has moved repeatedly (per-session config in 0.7, boot re-enable
+and the storage quota in 0.12, the `storage:use` gate after 0.16).
 
 ## Principles
 
@@ -292,7 +294,9 @@ correct plugins and were each learned the hard way. Re-verify against OpenWA cor
    `require('fs')`/`('net')`/`('child_process')`; what the worker actually buys you is a 256 MB heap
    ceiling and a crash that doesn't take the gateway down. Review submitted plugins accordingly.
 
-**Permissions** — the five values the host enforces, and what each unlocks:
+**Permissions** — the seven values the host enforces, and what each unlocks. `scripts/catalog.mjs`
+rejects a manifest declaring anything outside this set, so adopting a new one is a deliberate edit
+there rather than a silent publish into `plugins.json`:
 
 | Permission | Unlocks |
 |---|---|
@@ -301,6 +305,8 @@ correct plugins and were each learned the hard way. Re-verify against OpenWA cor
 | `net:fetch` | `ctx.net.fetch`, further scoped by manifest `net.allow` / `net.allowConfigHosts` |
 | `conversation:send` | `ctx.conversations.send` **and** `ctx.handover.set` **and** `ctx.mappings.*` |
 | `webhook:ingress` | `ctx.registerWebhook`; **required** whenever the manifest declares `ingress`, or the whole plugin fails to load |
+| `storage:use` | `ctx.storage.get` / `.set` / `.delete` / `.list`. Ungated until OpenWA gated it, so declare it as soon as a plugin persists anything: an older host ignores the unrecognized name, a newer one denies the call — and the denial lands mid-run, because permissions are checked at the call and not at load |
+| `search:provide` | `ctx.registerSearchProvider`. Not vendored in `types/openwa.d.ts` and used by no plugin here; under the default `SEARCH_PROVIDER=auto` a plugin that registers becomes the gateway's active search backend |
 
 An ingress route with `signature.scheme: "none"` is a hard load failure for the entire plugin unless the
 operator sets `ALLOW_UNSIGNED_INGRESS=true`. `mode: "sync-reply"` is inert dead code — declare
@@ -364,8 +370,9 @@ One entry per plugin, written by `scripts/catalog.mjs` from each manifest + chan
   // What the plugin DECLARES it binds — see the caveat below before treating any of it as a guarantee.
   "permissions",          // the capability permissions from the manifest
   "net",                  // the manifest `net` block, or null
-  "ingress",              // [{ route, methods, signature }] per declared ingress route, or null
-  "sessionScoped"         // whether activation is per-session
+  "ingress",              // [{ route, signature }] per declared ingress route, or null
+  "sessionScoped",        // whether activation is per-session
+  "i18n"                  // the manifest `i18n` block — emitted only when the manifest has one
 }
 ```
 

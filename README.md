@@ -113,14 +113,16 @@ All routes require an ADMIN role.
 
 | Method & path | Purpose |
 | ------------- | ------- |
-| `GET /plugins` | List installed plugins and their status |
-| `GET /plugins/:id` | Inspect one plugin (config secrets redacted) |
-| `POST /plugins/install` | Upload and install a `.zip` (multipart field `file`) |
-| `POST /plugins/:id/enable` | Run the plugin (`onLoad` → `onEnable`) |
-| `POST /plugins/:id/disable` | Stop the plugin and unregister its hooks |
-| `PUT /plugins/:id/config` | Update config (`{ "config": { ... } }`); fires `onConfigChange` if enabled |
-| `DELETE /plugins/:id` | Uninstall and remove files (built-ins are protected) |
-| `GET /plugins/:id/health` | Plugin-reported health check |
+| `GET /api/plugins` | List installed plugins and their status |
+| `GET /api/plugins/:id` | Inspect one plugin (config secrets redacted) |
+| `POST /api/plugins/install` | Upload and install a `.zip` (multipart field `file`) |
+| `POST /api/plugins/:id/enable` | Run the plugin (`onLoad` → `onEnable`) |
+| `POST /api/plugins/:id/disable` | Stop the plugin and unregister its hooks |
+| `PUT /api/plugins/:id/config` | Update config (`{ "config": { ... } }`); fires `onConfigChange` if enabled |
+| `DELETE /api/plugins/:id` | Uninstall and remove files (built-ins are protected) |
+| `GET /api/plugins/:id/health` | Plugin-reported health check |
+
+The gateway mounts every route under a global `/api` prefix, so the paths above are the complete ones — dropping it answers 404.
 
 ## Plugin contract
 
@@ -190,7 +192,7 @@ export default class MyPlugin implements IPlugin {
 | `onDisable(ctx)` | When disabled — tear down; hooks auto-unregister |
 | `onUnload(ctx)` | Before removal from memory |
 | `onConfigChange(ctx, newConfig)` | When config is updated (only while enabled) |
-| `healthCheck()` | On `GET /plugins/:id/health` |
+| `healthCheck()` | On `GET /api/plugins/:id/health` |
 
 ### Hooks
 
@@ -199,8 +201,9 @@ React to activity with `ctx.registerHook(event, handler, priority?)`. Handlers a
 | Group | Events |
 | ----- | ------ |
 | **Session** | `session:created` · `session:starting` · `session:ready` · `session:qr` · `session:disconnected` · `session:error` · `session:deleted` |
-| **Message** | `message:received` · `message:sending` · `message:sent` · `message:failed` · `message:ack` |
+| **Message** | `message:received` · `message:sending` · `message:sent` · `message:failed` · `message:ack` · `message:persisted` · `message:deleted` |
 | **Webhook** | `webhook:before` · `webhook:queued` · `webhook:delivered` · `webhook:after` · `webhook:error` |
+| **Ingress** | `ingress:error` |
 
 ### Capabilities
 
