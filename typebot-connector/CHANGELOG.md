@@ -6,6 +6,13 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+### Fixed
+
+- **A malformed upstream response no longer throws out of the hook.** `messages` and `clientSideActions`
+  were only checked for null, so a Typebot server returning either as an object or a string raised a
+  TypeError inside the message handler. They are array-checked now and degrade to no bubbles.
+
+
 ## [0.2.2] — 2026-08-12
 
 ### Changed

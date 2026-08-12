@@ -85,6 +85,13 @@ export async function backfillAllChats(deps: InboundDeps, sessionId: string): Pr
   try {
     if (await deps.store.isBulkBackfilled(sessionId)) return;
     const chats = (await deps.engine.getChats(sessionId)) as ChatSummary[];
+    // An empty list is what the engine returns while it is still warming up, and marking the sweep done
+    // on it retires bulk backfill permanently for this session — the marker is durable. Leave it unset
+    // so the next enable tries again.
+    if (!Array.isArray(chats) || chats.length === 0) {
+      deps.log('chatwoot-adapter: no chats returned; leaving bulk backfill unmarked for a later attempt');
+      return;
+    }
     for (const chat of chats) {
       if (chat.isGroup && !deps.relayGroups) continue;
       await deps.lock.run(`${sessionId}:${chat.id}`, async () => {
