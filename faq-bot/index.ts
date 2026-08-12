@@ -75,7 +75,10 @@ export default class FaqBot implements IPlugin {
   private async onMessage(ctx: PluginContext, hook: HookContext): Promise<boolean> {
     if (hook.source !== 'Engine' || !hook.sessionId) return false;
     const m = (hook.data ?? {}) as Partial<IncomingMessage>;
-    if (m.fromMe || typeof m.body !== 'string' || !m.chatId || !m.id) return false;
+    // A sticker, image or voice note arrives with an empty body. No rule can match it, so the fallback
+    // would answer a picture with "I did not understand" and claim the event away from a plugin that
+    // could actually handle media. chat-flow guards the same way.
+    if (m.fromMe || typeof m.body !== 'string' || !m.body.trim() || !m.chatId || !m.id) return false;
 
     // Re-parse per event so a per-session config override (resolved by the host for this hook fire) is
     // honored — a snapshot cached at enable would ignore overrides set via the dashboard after enable.
@@ -100,7 +103,15 @@ export default class FaqBot implements IPlugin {
         const key = `${sessionId}:${m.chatId}`;
         const cooldownMs = Math.max(0, cfg.config.fallbackCooldownSec) * 1000;
         if (allowCooldown(this.fallbackAt, key, Date.now(), cooldownMs)) {
-          await ctx.messages.reply(sessionId, m.chatId, m.id, cfg.config.fallbackReply);
+          try {
+            await ctx.messages.reply(sessionId, m.chatId, m.id, cfg.config.fallbackReply);
+          } catch (err) {
+            // The slot is claimed before the send, so a failed send would otherwise silence the chat for
+            // a whole cooldown window over a reply that never arrived. Release it: a message that matched
+            // a rule is retried on the next message too, and this costs at most one send attempt each.
+            this.fallbackAt.delete(key);
+            throw err;
+          }
           return true;
         }
       }

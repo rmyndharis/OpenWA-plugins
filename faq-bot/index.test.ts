@@ -180,3 +180,45 @@ test('onMessage re-reads ctx.config per event (per-session config is not cached 
     data: { id: 'm1', chatId: 'c@x', body: 'hi', fromMe: false, isGroup: false } });
   assert.ok(warnings.some(w => /config invalid/.test(w)), 'corrupted post-enable config was re-read and warned');
 });
+
+test('a message with no text is left alone', async () => {
+  // A sticker, image or voice note arrives with an empty body — no rule matches, so the fallback fired
+  // and answered a picture with "sorry, I did not understand". Returning true also claims the event, so
+  // a later plugin that could handle media never saw it.
+  const replied: string[] = [];
+  const res = await runHook(
+    { rules: [{ mode: 'contains', pattern: 'hi', reply: 'hello' }], fallbackReply: 'tidak paham' },
+    '   ',
+    (t) => replied.push(t),
+  );
+  assert.deepEqual(replied, [], 'a message with no text must not draw a fallback');
+  assert.equal(res.continue, true, 'and must not be claimed');
+});
+
+test('a failed fallback send releases the cooldown slot instead of silencing the chat', async () => {
+  // The slot is claimed before the send. When the send throws, the window was spent anyway, so the chat
+  // stayed silent for the whole cooldown over a reply that never arrived.
+  const { default: FaqBot } = await import('./index.ts');
+  let failNext = true;
+  let delivered = 0;
+  let handler: ((h: unknown) => Promise<{ continue: boolean }>) | undefined;
+  const ctx = makeCtx({
+    config: { rules: JSON.stringify([{ mode: 'contains', pattern: 'hi', reply: 'hello' }]), fallbackReply: 'tidak paham', fallbackCooldownSec: 600 },
+    registerHook: (_e, h) => { handler = h as (h2: unknown) => Promise<{ continue: boolean }>; },
+    reply: async () => {
+      if (failNext) throw new Error('send failed');
+      delivered++;
+      return { messageId: 'x', timestamp: 0 };
+    },
+  });
+  await new FaqBot().onEnable(ctx as never);
+  const fire = (id: string) => handler!({
+    source: 'Engine', sessionId: 's1', timestamp: new Date(),
+    data: { id, chatId: 'c@x', body: 'apa kabar', fromMe: false, isGroup: false },
+  });
+
+  await fire('m1');           // send throws; the slot must not stay burnt
+  failNext = false;
+  await fire('m2');
+  assert.equal(delivered, 1, 'the next message must be able to retry the fallback');
+});
