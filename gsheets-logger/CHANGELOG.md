@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this plugin adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The version here always matches `manifest.json`'s `version`.
 
+## [Unreleased]
+
+### Fixed
+
+- **The buffer is now bounded by size, not only by row count.** The 5,000-row cap allowed cells of up
+  to 50,000 characters across 14 columns, so the row count alone permitted a buffer far larger than the
+  worker heap — reachable whenever Sheets is unreachable and the retain-on-failure path holds rows.
+  A total-character cap now applies alongside it, dropping oldest first.
+- **A restored buffer is filtered and capped as it loads, and says what it dropped.** Rows that are not
+  rows of strings are discarded rather than carried into the size accounting and the Sheets append, and
+  a buffer persisted before this cap existed no longer stays oversized until the next message arrives.
+- **A rejected `storage.set` on disable no longer escapes the lifecycle call.** Storage rejects at the
+  quota; the number of rows that failed to persist is now reported instead of lost without a trace.
+
 ## [0.3.3] — 2026-08-12
 
 ### Changed

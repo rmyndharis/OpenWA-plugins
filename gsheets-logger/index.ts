@@ -108,8 +108,22 @@ export default class GSheetsLogger implements IPlugin {
     this.client = new SheetsClient(ctx.net.fetch.bind(ctx.net), sa, config.spreadsheetId, config.sheetTab);
     this.batchSize = config.flushBatchSize;
 
+    // The only place untrusted data enters the buffer. Everything downstream assumes rows of strings —
+    // the size accounting reads each cell's length, and appendRows sends them verbatim — so filter here
+    // rather than defending in both. Cap on load too: a buffer persisted before the cap existed, or by
+    // an older version, would otherwise stay oversized until the next message arrived.
     const restored = await ctx.storage.get<string[][]>(BUFFER_KEY);
-    if (Array.isArray(restored)) this.buffer = restored;
+    if (Array.isArray(restored)) {
+      this.buffer = restored.filter((row) => Array.isArray(row) && row.every((cell) => typeof cell === 'string'));
+      const malformed = restored.length - this.buffer.length;
+      const capped = capBuffer(this.buffer, MAX_BUFFER, MAX_BUFFER_CHARS);
+      // Once, on enable, and only when something was actually lost. This plugin exists to produce a
+      // complete audit trail, so a hole in the sheet the operator never hears about is the worst
+      // shape the loss can take.
+      if (malformed > 0 || capped > 0) {
+        ctx.logger.warn(`gsheets-logger: restored buffer dropped ${malformed} malformed and ${capped} oldest rows`);
+      }
+    }
 
     for (const event of LOGGED_EVENTS) {
       ctx.registerHook(
