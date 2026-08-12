@@ -10,6 +10,7 @@
     "build": "set -e; for d in */; do if [ -f \"${d}manifest.json\" ]; then node package.mjs \"${d%/}\"; fi; done",
     "catalog": "node scripts/catalog.mjs",
     "catalog:check": "node scripts/catalog.mjs --check",
+    "loader:check": "node scripts/loader-check.mjs",
     "test": "node scripts/run-tests.mjs",
     "test:coverage": "node scripts/run-tests.mjs --experimental-test-coverage",
     "typecheck": "tsc --noEmit"
