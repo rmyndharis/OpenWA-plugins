@@ -10,6 +10,9 @@ The version here always matches `manifest.json`'s `version`.
 
 ### Fixed
 
+- **healthCheck now reports unhealthy while a flush is failing.** The plugin was green whenever a client
+  existed, so a spreadsheet that had stopped accepting appends looked fine while rows piled up. The last
+  flush error is surfaced alongside the buffered-row count.
 - **Undelivered rows no longer follow a spreadsheet rotation.** `onConfigChange` drains before swapping
   the client, but a drain that cannot reach Sheets leaves every row in place — and those rows carry
   message content captured under the previous spreadsheet and credentials. They are now parked under

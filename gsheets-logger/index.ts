@@ -103,6 +103,9 @@ export default class GSheetsLogger implements IPlugin {
   private flushingPromise: Promise<void> | null = null;
   private ctx: PluginContext | null = null;
   private batchSize = 20;
+  // Last flush failure, surfaced on healthCheck. Green while every append fails is the one state an
+  // operator must not see: the rows are piling up and nothing says so.
+  private lastFlushError: string | null = null;
 
   async onEnable(ctx: PluginContext): Promise<void> {
     this.ctx = ctx;
@@ -190,7 +193,11 @@ export default class GSheetsLogger implements IPlugin {
   }
 
   async healthCheck(): Promise<{ healthy: boolean; message?: string }> {
-    return { healthy: this.client !== null, message: `v${PLUGIN_VERSION} — ${this.buffer.length} rows buffered` };
+    const parts = [`v${PLUGIN_VERSION}`, `${this.buffer.length} rows buffered`];
+    if (this.lastFlushError) parts.push(`last flush failed: ${this.lastFlushError.slice(0, 200)}`);
+    // Unhealthy while a flush is failing: the plugin is running, but nothing it was installed to do is
+    // reaching the sheet, and a green tile is what let that go unnoticed.
+    return { healthy: this.client !== null && this.lastFlushError === null, message: parts.join(' — ') };
   }
 
   private startTimer(intervalSec: number): void {
@@ -226,8 +233,10 @@ export default class GSheetsLogger implements IPlugin {
     this.flushingPromise = (async () => {
       try {
         await flushBuffer(this.buffer, (rows) => client.appendRows(rows));
+        this.lastFlushError = null;
         await this.ctx?.storage.set(BUFFER_KEY, this.buffer);
       } catch (err) {
+        this.lastFlushError = err instanceof Error ? err.message : String(err);
         this.ctx?.logger.error('gsheets-logger: flush failed, will retry next tick', err);
       } finally {
         this.flushingPromise = null;

@@ -15,7 +15,6 @@ test('parseSchedule rejects bad input', () => {
   assert.throws(() => parseSchedule('[]'), /object/i);
   assert.throws(() => parseSchedule(JSON.stringify({ xyz: '09:00-17:00' })), /unknown day/i);
   assert.throws(() => parseSchedule(JSON.stringify({ mon: '9:00-17:00' })), /HH:MM/i);
-  assert.throws(() => parseSchedule(JSON.stringify({ mon: '17:00-09:00' })), /before close/i);
   assert.throws(() => parseSchedule(JSON.stringify({ mon: null, sun: null })), /no open days/i);
   assert.throws(() => parseSchedule(JSON.stringify({ mon: '09:00-17:00-junk' })), /HH:MM/i);
 });
@@ -51,4 +50,17 @@ test('isAfterHours: closed day and the local-midnight edge', () => {
   // 2026-06-21T17:00Z = Mon 00:00 in Jakarta → local day Monday, 00:00 < 09:00 → after-hours
   // (also exercises the hour '24' → %24 normalization).
   assert.equal(isAfterHours(new Date('2026-06-21T17:00:00Z'), sched, 'Asia/Jakarta'), true);
+});
+
+test('an overnight window and an all-day window are accepted and honoured', () => {
+  // "22:00-06:00" and "00:00-00:00" are ordinary business hours. The parser rejected both, which made
+  // the whole schedule unparseable rather than just that day, and the comparison only understood a
+  // window that opens and closes on the same date.
+  const sch = parseSchedule(JSON.stringify({ mon: '22:00-06:00', wed: '00:00-00:00' }));
+  const at = (d: number, h: number, m: number) => isAfterHours(new Date(Date.UTC(2026, 7, d, h, m)), sch, 'UTC');
+  assert.equal(at(10, 23, 20), false, 'late evening is inside an overnight window');
+  assert.equal(at(10, 5, 0), false, 'early morning is inside an overnight window');
+  assert.equal(at(10, 10, 0), true, 'mid-morning is outside it');
+  assert.equal(at(12, 3, 0), false, '00:00-00:00 is open all day');
+  assert.throws(() => parseSchedule(JSON.stringify({ mon: '09:00-09:00' })), /use 00:00-00:00/);
 });

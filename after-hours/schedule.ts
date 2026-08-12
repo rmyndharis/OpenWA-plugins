@@ -43,7 +43,12 @@ export function parseSchedule(json: string): Schedule {
     if (openMin === null || closeMin === null) {
       throw new Error(`schedule: ${day} window "${value}" is not "HH:MM-HH:MM"`);
     }
-    if (openMin >= closeMin) throw new Error(`schedule: ${day} open must be before close ("${value}")`);
+    // An overnight window ("22:00-06:00") and a 24-hour one ("00:00-00:00") are both ordinary business
+    // hours; rejecting them made the whole schedule unparseable rather than just that day. They are
+    // stored as-is and interpreted by the comparison, which already handles a wrapped window.
+    if (openMin === closeMin && value.trim() !== '00:00-00:00') {
+      throw new Error(`schedule: ${day} open and close are the same ("${value}") — use 00:00-00:00 for all day`);
+    }
     schedule[day] = { openMin, closeMin };
   }
 
@@ -74,5 +79,10 @@ export function isAfterHours(date: Date, schedule: Schedule, timezone: string): 
   const minutes = (Number(get('hour')) % 24) * 60 + Number(get('minute'));
   const window = day ? schedule[day] : undefined;
   if (!window) return true; // closed day (or an unmapped weekday — treat as closed)
-  return minutes < window.openMin || minutes >= window.closeMin;
+  // "00:00-00:00" means open all day.
+  if (window.openMin === window.closeMin) return false;
+  // A normal window opens and closes on the same day; a wrapped one ("22:00-06:00") opens in the
+  // evening and closes the next morning, so "inside" is late OR early rather than between.
+  if (window.openMin < window.closeMin) return minutes < window.openMin || minutes >= window.closeMin;
+  return minutes < window.openMin && minutes >= window.closeMin;
 }
