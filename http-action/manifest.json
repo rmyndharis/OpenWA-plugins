@@ -1,7 +1,7 @@
 {
   "id": "http-action",
   "name": "HTTP Action Bot",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Triggers safe REST API requests from WhatsApp commands and renders JSON responses back to chat.",
@@ -28,7 +28,8 @@
   ],
   "permissions": [
     "net:fetch",
-    "conversation:send"
+    "conversation:send",
+    "storage:use"
   ],
   "net": {
     "allow": [],
