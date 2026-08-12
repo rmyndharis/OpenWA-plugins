@@ -36,8 +36,10 @@ export interface ChatLink {
 // (shared across every session/instance), and Chatwoot conversation + message ids are per-account
 // autoincrement, so anything keyed by id alone collides across tenants. The reverse map and dedup markers
 // are therefore scoped by the WA sessionId (the one identity both the inbound hook and the outbound
-// ingress delivery share). A session-scoped legacy reverse key is ALSO written so a delivery that arrives
-// without a session scope (or a pre-scope row) still resolves — unscoped, so single-tenant is unaffected.
+// ingress delivery share). An UNSCOPED reverse key is kept for deliveries that arrive without a session
+// scope and for rows written before scoping existed. It is claimed only while unclaimed: once a second
+// session links the same conversation id it is marked ambiguous, because whichever session wrote it last
+// would otherwise receive the other one's agent replies. Single-tenant hosts are unaffected.
 // Retention window for `seen:` de-dup markers, and how often expired ones are pruned. Hardcoded (mirroring
 // the retry-timer constants in retry.ts) — a generous default that outlasts any realistic WhatsApp message
 // re-delivery, so pruning never re-posts a duplicate. Bumping the TTL is a one-line change.
@@ -72,6 +74,9 @@ export function shardOf(logicalId: string): number {
 
 // One bucket: logical marker id -> first-seen wall-clock ms.
 type SeenBucket = Record<string, number>;
+
+/** The unscoped reverse mapping: a session's chat, or a marker that two sessions claim this id. */
+type LegacyRev = { sessionId: string; chatId: string } | { ambiguous: true };
 
 export class MappingStore {
 
@@ -134,14 +139,28 @@ export class MappingStore {
       const scoped = await this.storage.get<{ sessionId: string; chatId: string }>(this.revKey(sessionId, conversationId));
       if (scoped) return scoped;
     }
-    return this.storage.get<{ sessionId: string; chatId: string }>(this.legacyRevKey(conversationId));
+    const legacy = await this.storage.get<LegacyRev>(this.legacyRevKey(conversationId));
+    // Marked once a second session claimed the same conversation id. A scope-less delivery carries
+    // nothing that says which tenant it belongs to, so there is no right answer to pick here.
+    if (!legacy || 'ambiguous' in legacy) return null;
+    return legacy;
   }
 
   async link(sessionId: string, chatId: string, instanceId: string, link: ChatLink): Promise<void> {
     await this.storage.set(this.fwdKey(sessionId, chatId), link);
     const rev = { sessionId, chatId };
     await this.storage.set(this.revKey(sessionId, link.conversationId), rev); // tenant-scoped lookup
-    await this.storage.set(this.legacyRevKey(link.conversationId), rev); // back-compat for scope-less deliveries
+    // The unscoped key exists only so mappings written before scoping keep resolving. A Chatwoot
+    // conversation id is unique per ACCOUNT, not per gateway, so two relayed accounts collide on it as
+    // a matter of course — and whoever linked last used to win the key. Claim it only while it is
+    // unclaimed, and mark it unusable once a second session claims the same id.
+    const legacyKey = this.legacyRevKey(link.conversationId);
+    const legacy = await this.storage.get<LegacyRev>(legacyKey);
+    if (!legacy) {
+      await this.storage.set(legacyKey, rev);
+    } else if (!('ambiguous' in legacy) && legacy.sessionId !== sessionId) {
+      await this.storage.set(legacyKey, { ambiguous: true });
+    }
     await this.mappings.upsert({ sessionId, chatId, instanceId }, String(link.conversationId));
   }
 
@@ -309,6 +328,11 @@ export class MappingStore {
 
   async unlinkByConversationId(sessionId: string, conversationId: number) {
     await this.storage.delete(this.revKey(sessionId, conversationId));
-    await this.storage.delete(this.legacyRevKey(conversationId));
+    // Only if it is ours. Deleting it unconditionally removed another tenant's fallback along with
+    // our own, silently dropping their agent replies until their next inbound message rebuilt it.
+    const legacy = await this.storage.get<LegacyRev>(this.legacyRevKey(conversationId));
+    if (legacy && !('ambiguous' in legacy) && legacy.sessionId === sessionId) {
+      await this.storage.delete(this.legacyRevKey(conversationId));
+    }
   }
 }

@@ -237,3 +237,53 @@ test('a failed prune listing does not stop pre-0.6.0 markers being honoured', as
   assert.equal(await store.hasSeen('cw', '4242', 'sess'), true,
     'the legacy marker must still be found after a prune that saw an empty listing');
 });
+
+test('two sessions sharing a conversation id resolve to their own chat', async () => {
+  // Chatwoot conversation ids are per-account autoincrement, so two accounts relayed by one gateway
+  // collide as a matter of course. The unscoped reverse key was written on every link, so the last
+  // writer won it — and a delivery resolving through it sent one customer's agent reply to another
+  // customer's number.
+  const store = new MappingStore(fakeStorage(), fakeMappings());
+  await store.link('sess-A', '628111@c.us', 'inst', { conversationId: 42, contactId: 1, sourceId: 'a' });
+  await store.link('sess-B', '628222@c.us', 'inst', { conversationId: 42, contactId: 2, sourceId: 'b' });
+
+  assert.deepEqual(await store.getByConversation(42, 'sess-A'), { sessionId: 'sess-A', chatId: '628111@c.us' });
+  assert.deepEqual(await store.getByConversation(42, 'sess-B'), { sessionId: 'sess-B', chatId: '628222@c.us' });
+});
+
+test('unlinking one session leaves another session mapping intact', async () => {
+  // The 404 recovery path unlinks by conversation id. It deleted the shared unscoped key too, so
+  // recovering tenant A silently dropped tenant B's agent replies until B's next inbound message.
+  const store = new MappingStore(fakeStorage(), fakeMappings());
+  await store.link('sess-A', '628111@c.us', 'inst', { conversationId: 42, contactId: 1, sourceId: 'a' });
+  await store.link('sess-B', '628222@c.us', 'inst', { conversationId: 42, contactId: 2, sourceId: 'b' });
+
+  await store.unlinkByConversationId('sess-A', 42);
+
+  assert.equal(await store.getByConversation(42, 'sess-A'), null);
+  assert.deepEqual(await store.getByConversation(42, 'sess-B'), { sessionId: 'sess-B', chatId: '628222@c.us' });
+});
+
+test('a reverse mapping written before scoping still resolves', async () => {
+  // Back-compat: data already on disk uses the unscoped key. It must keep resolving, otherwise an
+  // upgrade silently breaks every existing conversation.
+  const storage = fakeStorage();
+  await storage.set('wa:77', { sessionId: 'sess-old', chatId: '628999@c.us' });
+  const store = new MappingStore(storage, fakeMappings());
+
+  assert.deepEqual(await store.getByConversation(77, 'sess-old'), { sessionId: 'sess-old', chatId: '628999@c.us' });
+  assert.deepEqual(await store.getByConversation(77), { sessionId: 'sess-old', chatId: '628999@c.us' });
+});
+
+test('a conversation id claimed by two sessions never resolves without a scope', async () => {
+  // A delivery that carries no session scope carries no information about which tenant it belongs to.
+  // The unscoped reverse key was written on every link, so it held whichever session linked last and a
+  // scope-less delivery resolved to that one — sending an agent reply for one customer to a different
+  // customer's number. When two sessions claim the same conversation id there is no right answer to
+  // guess, and dropping the delivery is the only safe one.
+  const store = new MappingStore(fakeStorage(), fakeMappings());
+  await store.link('sess-A', '628111@c.us', 'inst', { conversationId: 42, contactId: 1, sourceId: 'a' });
+  await store.link('sess-B', '628222@c.us', 'inst', { conversationId: 42, contactId: 2, sourceId: 'b' });
+
+  assert.equal(await store.getByConversation(42), null);
+});

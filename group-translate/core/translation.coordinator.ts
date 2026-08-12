@@ -24,7 +24,27 @@ export interface CoordinatorOptions {
   announceInGroups: boolean;
 }
 
-const URL_OR_EMOJI_ONLY = /^(?:\s|\p{Emoji}|https?:\/\/\S+)+$/u;
+// One token that is nothing but picture characters — pictographic base, skin-tone modifier, variation
+// selector, or the zero-width joiner that binds a composite emoji together.
+const EMOJI_RUN = /^[\p{Extended_Pictographic}\p{Emoji_Modifier}️‍]+$/u;
+
+/**
+ * True when a message carries nothing worth translating: whitespace, links, emoji, or a mix.
+ *
+ * Scanned token by token rather than matched as one pattern. The previous form,
+ * `/^(?:\s|\p{Emoji}|https?:\/\/\S+)+$/u`, backtracked catastrophically — `\p{Emoji}` matches ASCII
+ * digits, `#` and `*` (they are keycap-sequence components), so it overlapped `\S+` in the URL branch
+ * and every additional token multiplied the search space. 145 characters took seconds, and `maxLength`
+ * allows 2000. `\p{Extended_Pictographic}` is the property that actually means "picture character",
+ * which also stops a message of "1" from being classed as emoji and silently left untranslated.
+ */
+export function isUrlOrEmojiOnly(text: string): boolean {
+  const tokens = text.split(/\s+/).filter((token) => token !== '');
+  if (tokens.length === 0) return true;
+  return tokens.every(
+    (token) => token.startsWith('http://') || token.startsWith('https://') || EMOJI_RUN.test(token),
+  );
+}
 
 /** Object keys that index the prototype chain rather than an own property; never valid as a wid. */
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
@@ -103,7 +123,7 @@ export class TranslationCoordinator {
 
   private async translateMessage(sessionId: string, msg: InboundMessage, state: GroupState): Promise<void> {
     const text = msg.body.trim();
-    if (text.length < this.opts.minLength || text.length > this.opts.maxLength || URL_OR_EMOJI_ONLY.test(text)) {
+    if (text.length < this.opts.minLength || text.length > this.opts.maxLength || isUrlOrEmojiOnly(text)) {
       return;
     }
 
