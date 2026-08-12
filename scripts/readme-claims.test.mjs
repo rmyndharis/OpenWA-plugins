@@ -17,6 +17,17 @@ const pluginDirs = readdirSync(root, { withFileTypes: true })
 
 const readmes = [join(root, 'README.md'), ...pluginDirs.map(d => join(root, d, 'README.md'))].filter(existsSync);
 
+// Prose wraps, so a claim and the value it states routinely straddle a newline: group-translate ends a
+// line on "Declares" and opens the next with the list, and gsheets-logger splits "Requires OpenWA" from
+// "**≥ 0.7.0**" the same way. Anything matched across a claim has to be matched on flattened text.
+const flatten = (text) => text.replace(/\s+/g, ' ');
+
+// The placeholder hosts a README uses for the gateway itself. Anything else in these documents is a
+// third-party backend — LibreTranslate, an ERP, a Speaches STT, an n8n webhook — and must not be held to
+// the gateway's `/api` prefix. That is why loopback is listed WITH the gateway port: a bare 127.0.0.1
+// would sweep in `http://127.0.0.1:8000` (STT) and `http://127.0.0.1:5678/webhook/transcript` (n8n).
+const GATEWAY_HOSTS = /your-openwa-host|localhost:2785|127\.0\.0\.1:2785|<host>/;
+
 test('every gateway URL in a README carries the /api prefix', () => {
   // The gateway mounts a global `/api` prefix, so `<host>/plugins/...` answers 404. 27 copy-pasteable
   // curl commands addressed it without the prefix.
@@ -25,7 +36,7 @@ test('every gateway URL in a README carries the /api prefix', () => {
     const text = readFileSync(file, 'utf8');
     for (const m of text.matchAll(/https?:\/\/[^\s'"`)]+/g)) {
       const url = m[0];
-      if (!/your-openwa-host|localhost:2785/.test(url)) continue;
+      if (!GATEWAY_HOSTS.test(url)) continue;
       const path = url.replace(/^https?:\/\/[^/]+/, '');
       if (path && path !== '/' && !path.startsWith('/api/')) offenders.push(`${file.replace(root + '/', '')}: ${url}`);
     }
@@ -43,9 +54,26 @@ test("each plugin README's stated OpenWA floor matches its manifest", () => {
     const declared = JSON.parse(readFileSync(join(root, dir, 'manifest.json'), 'utf8')).minOpenWAVersion;
     if (!declared) continue;
     const text = readFileSync(readme, 'utf8');
+    const flat = flatten(text);
     const stated = new Set();
     for (const m of text.matchAll(/badge\/OpenWA-%E2%89%A5%20([0-9.]+)-/g)) stated.add(m[1]);
-    for (const m of text.matchAll(/OpenWA\s*\*\*≥\s*([0-9.]+)\*\*/g)) stated.add(m[1]);
+    // Only PLUGIN-level floors. These READMEs also state per-feature floors — gsheets-logger's ack rows
+    // need 0.6.1, chatwoot-adapter's attachment backfill needs 0.8.6 — and those are legitimately
+    // different numbers from the manifest, so comparing them would fail correct documentation.
+    //
+    // The corpus separates the two by capitalisation, and it does so consistently: a plugin-level claim
+    // opens a sentence ("Targets OpenWA…", "Requires OpenWA…", "Have OpenWA…") or heads a Compatibility
+    // bullet as bold **OpenWA**, while a per-feature floor sits mid-sentence behind a lowercase verb
+    // ("…rows** require OpenWA ≥ v0.6.1", "Needs OpenWA 0.8.6+"). So the lead-ins are matched
+    // case-SENSITIVELY on purpose — the capital is the signal, not an accident of style.
+    //
+    // Until now only the `OpenWA **≥ x**` shape was matched at all, and it escaped the ack-row sentence
+    // purely because that one writes `v0.6.1` with a v. Dropping the v would have turned correct prose
+    // into a failure; the two plugins with the HIGHEST floors, chatwoot-adapter and supabase-otp-hook,
+    // meanwhile stated theirs in shapes nothing looked at.
+    for (const m of flat.matchAll(/(?:Targets|Requires|Have) OpenWA\s*\*\*≥\s*v?([0-9.]+)\*\*/g)) stated.add(m[1]);
+    for (const m of flat.matchAll(/(?:Targets|Requires|Have) OpenWA\s+v?([0-9.]+)\+/g)) stated.add(m[1]);
+    for (const m of flat.matchAll(/\*\*OpenWA\*\*\s*≥\s*v?([0-9.]+)/g)) stated.add(m[1]);
     for (const v of stated) if (v !== declared) mismatches.push(`${dir}: README says ${v}, manifest says ${declared}`);
   }
   assert.deepEqual(mismatches, []);
@@ -69,11 +97,6 @@ const PERMISSIONS = [
     ...pluginDirs.flatMap((d) => JSON.parse(readFileSync(join(root, d, 'manifest.json'), 'utf8')).permissions ?? []),
   ]),
 ];
-
-// Prose wraps, so a claim and the permissions it names routinely straddle a newline: group-translate
-// ends a line on "Declares" and opens the next with the list, and chat-flow splits `messages:send` from
-// `storage:use` the same way. Anything matched across a claim has to be matched on flattened text.
-const flatten = (text) => text.replace(/\s+/g, ' ');
 
 // Classify every `permission` occurrence. A negation sitting directly in front of one ("…so no
 // `engine:read`") is a claim too — the opposite one — so it is checked in the opposite direction rather
