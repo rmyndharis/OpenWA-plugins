@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this plugin adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The version here always matches `manifest.json`'s `version`.
 
+## [0.3.3] — 2026-08-12
+
+### Changed
+
+- **Declared the `storage:use` permission.** Rows are batched in memory and the pending batch is kept
+  in plugin storage — restored when the plugin starts and written back when it stops — so a restart
+  between flushes does not lose what has not reached the sheet yet. OpenWA is moving `ctx.storage`
+  behind a permission the manifest has to declare, and without it that restore and that save are
+  refused: the plugin would keep logging happily and lose the pending batch on every restart, which
+  is exactly the failure the buffer exists to prevent. Declaring it changes nothing on the hosts you
+  run today — an unrecognized permission is ignored — so 0.3.3 behaves exactly like 0.3.2.
+
 ## [0.3.2] — 2026-07-31
 
 ### Fixed
