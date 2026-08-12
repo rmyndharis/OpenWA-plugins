@@ -8,6 +8,18 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.1.2] — 2026-08-12
+
+### Changed
+
+- **Declared the `storage:use` permission.** This plugin is a state machine, and its entire state —
+  where each conversation currently sits in the menu tree — lives in plugin storage. OpenWA is moving
+  `ctx.storage` behind a permission the manifest has to declare, and without it there is nothing left
+  to run on: a contact would get the greeting and the top-level menu, then have their answer read as
+  another first message and be sent the same greeting again. This is the one plugin in the catalog for
+  which the missing declaration is total rather than partial. Declaring it changes nothing on the
+  hosts you run today — an unrecognized permission is ignored — so 1.1.2 behaves exactly like 1.1.1.
+
 ## [1.1.1] — 2026-08-01
 
 No behaviour change. 1.1.0 has now been smoke-tested against a newer host, so the tested-version field
