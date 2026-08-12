@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { TranslationCoordinator, CoordinatorOptions } from './translation.coordinator';
+import { TranslationCoordinator, CoordinatorOptions, isUrlOrEmojiOnly } from './translation.coordinator';
 import { ChatGateway, ConfigStore, GroupState, InboundMessage, Translator, TranslationLogger } from './ports';
 
 // The shipped defaults, so every test below runs against what an operator actually gets.
@@ -630,4 +630,29 @@ describe('TranslationCoordinator', () => {
     ]);
     assert.equal(sends.length, 1, 'the help announcement must be sent once, not duplicated by a load/save race');
   });
+});
+
+test('the skip filter stays linear on adversarial input', () => {
+  // The filter was /^(?:\s|\p{Emoji}|https?:\/\/\S+)+$/u. `\p{Emoji}` matches ASCII digits, `#` and `*`
+  // — they are keycap-sequence components — so it overlapped `\S+` in the URL branch and every extra
+  // token multiplied the backtracking space. Measured on the real pattern: nine tokens over 145
+  // characters took 5.5 s, while the same payload with letters took 0.0 ms. maxLength defaults to 2000,
+  // and any member of a group with /tr on could send it. JS regex execution cannot be interrupted, so
+  // this held the worker's event loop outright.
+  const payload = `${Array(9).fill('http://11111111').join(' ')} a`;
+  const started = performance.now();
+  const skip = isUrlOrEmojiOnly(payload);
+  const elapsed = performance.now() - started;
+
+  assert.equal(skip, false, 'the trailing word makes this translatable, not skippable');
+  assert.ok(elapsed < 100, `filter took ${elapsed.toFixed(1)} ms on ${payload.length} characters`);
+});
+
+test('the skip filter still recognises what it is meant to skip', () => {
+  for (const skippable of ['https://example.com', 'http://a.co https://b.co', '👍', '👍 🎉', '   ', 'https://a.co 👍']) {
+    assert.equal(isUrlOrEmojiOnly(skippable), true, `should skip: ${JSON.stringify(skippable)}`);
+  }
+  for (const translatable of ['hello', 'https://a.co and text', 'lihat https://a.co ya', '1', 'halo 👍']) {
+    assert.equal(isUrlOrEmojiOnly(translatable), false, `should translate: ${JSON.stringify(translatable)}`);
+  }
 });

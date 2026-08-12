@@ -8,6 +8,18 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A group message can no longer stall the plugin worker.** The filter that skips messages with
+  nothing to translate was a single regular expression whose emoji branch overlapped its URL branch —
+  `\p{Emoji}` matches ASCII digits, `#` and `*`, because those are keycap-sequence components. Each
+  additional link-shaped token multiplied the backtracking space, so a 145-character message took
+  several seconds of uninterruptible CPU and `maxLength` allows 2000. The filter now scans token by
+  token, which is linear regardless of input.
+- **A message of only digits or punctuation is translated again.** The same emoji property classified
+  `1` and `#5` as emoji, so those messages were skipped silently. The filter now uses
+  `\p{Extended_Pictographic}`, which is the property that actually means "picture character".
+
 ## [1.3.1] — 2026-08-12
 
 ### Changed
