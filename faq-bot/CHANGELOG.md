@@ -8,6 +8,15 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Two rule patterns that could freeze the plugin are now rejected.** The safety analyser reasoned that
+  a small bounded repeat is bounded by its constant, which holds for a variable-width body but not for an
+  unbounded one: `(a+){3}` expands to `a+a+a+` and backtracks exponentially. It also treated any group as
+  breaking a run of adjacent unbounded quantifiers, but a group that can match empty does not — so
+  `.*(x?).*(x?).*` was `.*.*.*` in disguise. Both are refused now. Patterns of the shape `(ab?){2}` and
+  `.*(x).*(y).*`, which really are bounded, are still accepted.
+
 ## [0.2.1] — 2026-08-01
 
 No behaviour change. 0.2.0 has now been smoke-tested against a newer host, so the tested-version field

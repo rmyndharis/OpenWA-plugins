@@ -76,13 +76,14 @@ const REPEAT_THRESHOLD = 10;
  *     `.*.*.*`, `\w*\w*\w*` (O(n^3)+); TWO adjacent (`.*.*`, `.*\d+`) is only O(n^2), safe under the
  *     1000-char input cap, so it is allowed; a mandatory atom or a group boundary breaks the chain;
  *  3. an unbounded or ≥REPEAT_THRESHOLD repeat of a group whose body has a variable-width quantifier —
- *     `(a?){40}`, `(a?)+` (exponential); a small bounded repeat like `(ab?){2}` is allowed.
+ *     `(a?){40}`, `(a?)+` (exponential); a small bounded repeat of a VARIABLE body like `(ab?){2}` is
+ *     allowed, but any repeat of an UNBOUNDED body is not — see (1).
  * Character classes follow JS semantics (`[]` empty, `[^]` any). Accepted patterns run on the native engine
  * unchanged. Overlapping-alternation (`(a|a)*`) is still not modelled — a documented residual. Fails closed.
  */
 export function isSafeRegexPattern(p: string): boolean {
   if (p.length > MAX_PATTERN_LENGTH) return false;
-  const stack: { hasUnbounded: boolean; hasVariable: boolean }[] = [];
+  const stack: { hasUnbounded: boolean; hasVariable: boolean; savedPrev: string | null; savedRun: number }[] = [];
   // Rule 2 state: the key of the previous unbounded-quantified atom in the current flat concatenation,
   // or null after a mandatory atom / `|` / group boundary (which break adjacency).
   let prevUnbounded: string | null = null;
@@ -93,22 +94,30 @@ export function isSafeRegexPattern(p: string): boolean {
 
     if (c === '|') { prevUnbounded = null; adjacentRun = 0; i++; continue; }
     if (c === '(') {
-      stack.push({ hasUnbounded: false, hasVariable: false });
+      // The run so far is parked, not discarded: whether this group breaks it depends on whether it can
+      // match empty, which is only known at the closing paren.
+      stack.push({ hasUnbounded: false, hasVariable: false, savedPrev: prevUnbounded, savedRun: adjacentRun });
       prevUnbounded = null; adjacentRun = 0;
       i++;
       if (p[i] === '?') { i++; if (p[i] === '<') i++; if (p[i] === ':' || p[i] === '=' || p[i] === '!') i++; }
       continue;
     }
     if (c === ')') {
-      const frame = stack.pop() ?? { hasUnbounded: false, hasVariable: false };
+      const frame = stack.pop() ?? { hasUnbounded: false, hasVariable: false, savedPrev: null, savedRun: 0 };
       const q = quantifierAt(p, i + 1);
-      if (q.unbounded && frame.hasUnbounded) return false; // (1) nested unbounded
+      // (1) nested unbounded. A BOUNDED repeat counts too once it repeats at all: `(a+){3}` expands to
+      // `a+a+a+`, which backtracks exponentially — the constant bounds the repeat, not the search.
+      if ((q.unbounded || q.count >= 2) && frame.hasUnbounded) return false;
       if (q.count >= REPEAT_THRESHOLD && frame.hasVariable) return false; // (3) large/unbounded repeat of a variable body
       if (stack.length) {
         if (q.unbounded || frame.hasUnbounded) stack[stack.length - 1].hasUnbounded = true;
         if (q.variable || frame.hasVariable) stack[stack.length - 1].hasVariable = true;
       }
-      prevUnbounded = null; adjacentRun = 0; // a group boundary breaks flat adjacency (Rule 2)
+      // A group breaks flat adjacency only if it MUST consume something. `(x?)` can match empty, so
+      // `.*(x?).*` is `.*.*` in disguise; resume the parked run rather than pretending it ended.
+      const nullable = frame.hasVariable || q.unbounded || (q.present && q.min === 0);
+      if (nullable) { prevUnbounded = frame.savedPrev; adjacentRun = frame.savedRun; }
+      else { prevUnbounded = null; adjacentRun = 0; }
       i += 1 + q.len;
       continue;
     }

@@ -57,6 +57,15 @@ function validateManifest(id, manifest) {
       );
     }
   }
+  // An ingress route is a public endpoint once the host provisions it, and the host refuses to load a
+  // plugin that declares one without the permission — but only at install, on the operator's gateway,
+  // after the release is published. Catch it where the catalogue is built instead.
+  if (Array.isArray(manifest.ingress) && manifest.ingress.length && !(manifest.permissions ?? []).includes('webhook:ingress')) {
+    throw new Error(
+      `${id}: declares ${manifest.ingress.length} ingress route(s) but not the "webhook:ingress" permission — ` +
+        `the host refuses to load such a plugin`,
+    );
+  }
   if (!manifest.i18n || Object.keys(manifest.i18n).length === 0) {
     console.warn(`⚠ ${id}: no i18n block — dashboard shows English only`);
   } else {

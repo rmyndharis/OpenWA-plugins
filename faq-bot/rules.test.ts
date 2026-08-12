@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRules, matchRule } from './rules.ts';
+import { parseRules, matchRule, isSafeRegexPattern } from './rules.ts';
 
 const ok = JSON.stringify([
   { mode: 'contains', pattern: 'harga', reply: 'Harga mulai 100rb' },
@@ -194,4 +194,27 @@ test('matchRule: exact trims + case-insensitive; regex uses the i flag', () => {
   assert.equal(matchRule(rules, '  MENU ')?.reply, 'Menu: 1) Harga 2) Jam');
   assert.equal(matchRule(rules, '/START now')?.reply, 'Selamat datang');
   assert.equal(matchRule(rules, 'nothing here'), null);
+});
+
+test('a bounded repeat of an unbounded body is rejected', () => {
+  // The doc reasoned that a small bounded repeat is "bounded by the constant and safe". That holds for a
+  // variable-width body, not for an unbounded one: `(a+){3}` expands to `a+a+a+`, which backtracks
+  // exponentially. Measured before this case was closed: 200 characters took 1.4 s, 1000 took over 6 s.
+  for (const pattern of ['(a+){3}b', '(a+){2}b', '(\\w+){4}!', '(a*){3}b']) {
+    assert.equal(isSafeRegexPattern(pattern), false, `should reject: ${pattern}`);
+  }
+  // A bounded repeat of a VARIABLE body stays allowed — that is the case the constant really does bound.
+  assert.equal(isSafeRegexPattern('(ab?){2}'), true);
+  assert.equal(isSafeRegexPattern('(abc){5}'), true);
+});
+
+test('a nullable group does not break a run of adjacent unbounded quantifiers', () => {
+  // Rule 2 treats a group boundary as breaking adjacency, which is true only when the group must consume
+  // something. `(x?)` can match empty, so `.*(x?).*(x?).*` is `.*.*.*` wearing a disguise — three
+  // adjacent unbounded quantifiers over overlapping atoms. Measured: 1000 characters took over 6 s.
+  for (const pattern of ['.*(x?).*(x?).*!', '.*(x*).*(x*).*!', '\\w*(a?)\\w*(a?)\\w*!']) {
+    assert.equal(isSafeRegexPattern(pattern), false, `should reject: ${pattern}`);
+  }
+  // A group that must consume still breaks the run, which is what makes these patterns safe.
+  assert.equal(isSafeRegexPattern('.*(x).*(y).*!'), true);
 });

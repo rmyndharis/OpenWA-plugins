@@ -154,6 +154,20 @@ test('debug mode logs the inbound delivery and send details without skipping the
   assert.ok(logs.some(l => l.message.includes('sending OTP')));
 });
 
+test('debug mode never writes the OTP or the destination number into a log', async () => {
+  // Debug is switched on precisely when a delivery is misbehaving, so its output is what gets pasted
+  // into a support thread or shipped to a log collector. A verification code is a live credential and
+  // the number beside it names its owner; neither belongs in a line written for diagnostics.
+  const { logs, deps } = makeDeps({ fallbackSessionId: 's', debug: true });
+  await handleSendSms(deps, makeReq({ user: { phone: '+15551234567' }, sms: { otp: '481932' } }, { sessionId: 'sess' }));
+
+  const written = JSON.stringify(logs);
+  assert.ok(!written.includes('481932'), `the OTP reached a log: ${written}`);
+  assert.ok(!written.includes('15551234567'), `the phone number reached a log: ${written}`);
+  // The diagnostic value has to survive: an operator still needs to see that a send was attempted.
+  assert.ok(logs.some((l) => l.message.includes('sending OTP')));
+});
+
 // ── pure helpers ────────────────────────────────────────────────────────────
 
 test('phoneToChatId strips non-digits and appends @c.us', () => {
