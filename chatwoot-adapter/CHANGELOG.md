@@ -8,6 +8,10 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ### Fixed
 
+- **Chatwoot request errors no longer carry the customer's phone number.** These errors surface in
+  `healthCheck`, which the dashboard renders, and the contact-search URL carries the number in its query
+  string. The query is dropped and the response body is no longer appended; the path still says which
+  endpoint failed, which is what the diagnostic is for.
 - **An agent reply can no longer reach the wrong customer.** Chatwoot conversation ids are per-account
   autoincrement, so two relayed accounts share one routinely. Alongside the tenant-scoped reverse
   mapping, an unscoped one was rewritten on every link, leaving it pointing at whichever session linked

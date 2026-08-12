@@ -8,6 +8,13 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The debug log no longer records the text of every incoming message.** The line runs for each inbound
+  message and the dashboard renders plugin logs. It now records the body length, which is what the
+  diagnostic actually uses.
+
+
 ## [1.1.2] — 2026-08-12
 
 ### Changed
