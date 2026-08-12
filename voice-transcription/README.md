@@ -129,7 +129,7 @@ curl -X POST http://localhost:2785/api/plugins/voice-transcription/enable \
 | `deliveryWebhookUrl` | cond. | — | Endpoint receiving the `message.transcription` event. Must be https, and is then allowed automatically. Optional if you only use `chatDelivery`. |
 | `deliverySecret` | no | — | Optional. HMAC-SHA256 signs the body in `X-OpenWA-Signature: sha256=<hex>` (same as core webhooks). Stored redacted. |
 | `deliveryTimeoutMs` | no | `5000` | Delivery POST timeout. |
-| `chatDelivery` | no | `off` | Also post the transcript into WhatsApp: `off` (webhook only) · `self` (note to your own number) · `reply` (quote-reply to the sender — visible to them). |
+| `chatDelivery` | no | `off` | Also post the transcript into WhatsApp: `off` (webhook only) · `self` (note to your own number) · `reply` (quote-reply to the sender — visible to them). **In a group, `reply` posts to the whole group**, so every member reads the contents of the voice note. |
 
 ## Compatibility
 

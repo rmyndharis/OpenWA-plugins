@@ -6,6 +6,13 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+### Changed
+
+- **`chatDelivery: reply` now says what it does in a group.** The option posts a quote-reply to the
+  sender, which in a group is visible to every member — the transcript of a voice note read out to the
+  whole chat. The behaviour is unchanged and still defaults to `off`; the config description and the
+  README table now state the group consequence before an operator turns it on.
+
 ## [1.2.3] — 2026-08-12
 
 ### Changed
