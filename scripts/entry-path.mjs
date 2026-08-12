@@ -45,3 +45,15 @@ export function collectEntryFiles(base, rel) {
   }
   return [{ name: rel, data: readFileSync(abs) }];
 }
+
+// Collect every entry into one member list, keyed by archive path so overlapping entries contribute
+// each file once. They do overlap: configUiMember returns the TOP-LEVEL name, so a configUi entry of
+// 'dist/ui.html' adds 'dist' to a list that already names 'dist/index.js' and 'dist/package.json'.
+// A member's name determines its content, so collapsing by name cannot lose anything.
+export function collectMembers(base, entries) {
+  const byName = new Map();
+  for (const entry of entries) {
+    for (const file of collectEntryFiles(base, entry)) byName.set(file.name, file);
+  }
+  return [...byName.values()];
+}

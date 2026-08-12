@@ -4,7 +4,7 @@ import { rm, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { zipStore } from './scripts/zip-store.mjs';
-import { configUiMember, collectEntryFiles } from './scripts/entry-path.mjs';
+import { configUiMember, collectMembers } from './scripts/entry-path.mjs';
 
 const plugin = process.argv[2];
 if (!plugin) {
@@ -78,7 +78,7 @@ if (manifest.configUi?.entry) {
 
 let result;
 try {
-  result = entries.flatMap((entry) => collectEntryFiles(dir, entry));
+  result = collectMembers(dir, entries);
 } catch (e) {
   fail(e.message);
 }
