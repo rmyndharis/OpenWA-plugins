@@ -13,7 +13,7 @@
   "status": "stable",
   "minOpenWAVersion": "0.8.2",
   "testedOpenWAVersion": "0.14.0",
-  "sdkVersion": "1",
+  "sdkVersion": 1,
   "permissions": ["net:fetch", "conversation:send",
     "storage:use"],
   "net": { "allow": [], "allowConfigHosts": ["apiHost", "mediaHost"] },

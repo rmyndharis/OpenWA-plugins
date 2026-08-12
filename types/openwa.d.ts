@@ -1,7 +1,9 @@
 // Vendored OpenWA plugin contract. There is no published @openwa SDK package; keep this in sync
 // with the OpenWA version you target. All imports of this module must be `import type`.
 //
-// Last aligned against OpenWA core v0.14.5 (tag), verified field-by-field against
+// Last aligned against OpenWA core v0.14.5 (tag). Where a comment below mentions later host
+// behaviour, it is describing a change this file has NOT been re-verified against — treat it as a
+// note about the host's direction, not as something checked here., verified field-by-field against
 // src/core/plugins/plugin.interfaces.ts, src/core/hooks/hook.interfaces.ts, plugin-net.ts,
 // sandbox/{worker-bootstrap,worker-capability,worker-hooks,worker-webhooks}.ts and
 // src/engine/interfaces/whatsapp-engine.interface.ts. Where this file narrows the host on purpose it
@@ -144,7 +146,7 @@ export interface PluginEngineReadCapability {
 }
 
 // ── v0.7: host-proxied, SSRF-guarded outbound HTTP ──────────────────────────────────────────────
-// Gated by the "net:fetch" permission + manifest `net.allow` (host:port allowlist; deny by default).
+// Gated by the "net:fetch" permission + manifest `net.allow` (host allowlist, port optional; deny by default).
 // Use this for ALL outbound HTTP — the raw worker `fetch` is unguarded and discouraged.
 export interface PluginNetRequestInit {
   method?: string;
@@ -186,7 +188,8 @@ export interface PluginManifest {
   hooks?: HookEvent[];
   /** v0.7: per-session activation (default true). The platform owns which sessions a plugin runs for. */
   sessionScoped?: boolean;
-  /** v0.7: outbound HTTP host allowlist for ctx.net.fetch — "host:port" entries; deny by default.
+  /** v0.7: outbound HTTP host allowlist for ctx.net.fetch — "host" or "host:port"; deny by default.
+   *  The catalogue uses both forms: a bare host matches any port, which is what most entries rely on.
    *  v1: `allowConfigHosts` additionally admits the host of each named config key (e.g. "baseUrl"). */
   net?: { allow: string[]; allowConfigHosts?: string[] };
   /** v0.7: a sandboxed-iframe config editor served by the host. */

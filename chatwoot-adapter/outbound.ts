@@ -22,8 +22,13 @@ export interface OutboundDeps {
 }
 
 // Chatwoot → WhatsApp. `conversation_updated` drives handover; a relayable `message_created` is sent to
-// WhatsApp under the per-chat lock (deduped on the Chatwoot message id). Throwing surfaces to the ingress
-// pipeline for retry/DLReturn; a parse error is a 400 (never retried).
+// WhatsApp under the per-chat lock (deduped on the Chatwoot message id).
+//
+// The returned status is NOT what the provider sees: the host computes that from
+// `manifest.ingress[].response.ack` and reads only whether this handler resolved or threw
+// (types/openwa.d.ts:296). What the number does control is retry — resolving means "accepted, do not
+// retry", throwing means "retry". The values below are kept because they read as intent at each exit,
+// not because a 400 reaches Chatwoot.
 export async function handleOutbound(deps: OutboundDeps, req: WebhookRequest): Promise<{ status: number }> {
   let evt: ChatwootWebhookMessage;
   try {

@@ -10,6 +10,10 @@ The version here always matches `manifest.json`'s `version`.
 
 ### Fixed
 
+- **Overnight and all-day windows are accepted.** `22:00-06:00` and `00:00-00:00` are ordinary business
+  hours, but the parser rejected any window whose open was not before its close — which made the whole
+  schedule unparseable rather than just that day. The comparison understands a wrapped window now, so an
+  overnight one is open late and early and closed in between.
 - **The send-retry backoff map is now bounded.** An entry is added when a send fails and removed on the
   next delivery, so a chat that never messages again left one behind. Every other piece of state in this
   plugin was already capped; this was the exception.

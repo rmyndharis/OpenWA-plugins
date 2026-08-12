@@ -20,7 +20,7 @@
   "status": "stable",
   "testedOpenWAVersion": "0.14.0",
   "minOpenWAVersion": "0.8.0",
-  "sdkVersion": "1",
+  "sdkVersion": 1,
   "provides": [
     "api-automation",
     "rest-connector",

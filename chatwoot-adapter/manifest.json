@@ -13,7 +13,7 @@
   "status": "stable",
   "minOpenWAVersion": "0.8.7",
   "testedOpenWAVersion": "0.14.0",
-  "sdkVersion": "1",
+  "sdkVersion": 1,
   "permissions": ["net:fetch", "conversation:send", "webhook:ingress", "engine:read",
     "storage:use"],
   "net": { "allow": [], "allowConfigHosts": ["baseUrl"] },

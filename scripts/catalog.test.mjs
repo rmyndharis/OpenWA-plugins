@@ -65,6 +65,9 @@ test('every stable plugin ships a full i18n block', () => {
 // a plugin whose name and description translate while all of its config-field titles stay English —
 // voice-transcription's `es` did exactly that, and being `beta` also put it outside the stable-only
 // test above.
+// Scope note: this compares config-field KEYS, which carry `title`. No plugin translates a field's
+// `description`, so requiring it here would fail every locale in the catalogue at once. What is
+// guaranteed is that a translated locale covers every field's title; the descriptions stay English.
 test('a locale that translates a plugin translates all of its config fields', () => {
   const root = new URL('../', import.meta.url);
   const dirs = readdirSync(root, { withFileTypes: true })

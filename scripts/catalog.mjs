@@ -35,6 +35,12 @@ const SUPPORTED_LOCALES = ['en', 'es', 'fr', 'it', 'ar', 'he', 'te', 'zh-CN', 'z
 // author; the ARTIFACT must come from a repo this project publishes.
 const RELEASE_OWNERS = new Set(['rmyndharis']);
 
+// Both taken verbatim from PLUGIN-STANDARD.md — the shape at its manifest example and the reserved
+// list at its "Reserved ids" line. Neither was checked anywhere, so a plugin could take an id the
+// standard forbids and the catalogue would publish it.
+const ID_SHAPE = /^[a-z0-9][a-z0-9._-]*$/i;
+const RESERVED_IDS = new Set(['whatsapp-web.js', 'baileys', 'auto-reply', 'translation']);
+
 const HOST_PERMISSIONS = new Set([
   'messages:send',
   'engine:read',
@@ -51,6 +57,14 @@ function validateManifest(id, manifest) {
   // folder, the zip name, the release tag. `manifest.id` is what the host installs under and what the
   // catalogue publishes. If the two disagree, the download URL points at one plugin and the installed
   // plugin calls itself another.
+  // PLUGIN-STANDARD states an id shape and a reserved list; nothing checked either, so both could be
+  // violated by a plugin that then took a path or a catalogue slot it should not have.
+  if (!ID_SHAPE.test(manifest.id ?? '')) {
+    throw new Error(`${id}: manifest.id "${manifest.id}" does not match ${ID_SHAPE} (PLUGIN-STANDARD.md)`);
+  }
+  if (RESERVED_IDS.has(manifest.id)) {
+    throw new Error(`${id}: "${manifest.id}" is a reserved id`);
+  }
   if (manifest.id !== id) {
     throw new Error(`${id}: manifest.id is "${manifest.id}" — it must match the directory name`);
   }
