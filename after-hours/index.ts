@@ -43,6 +43,11 @@ export function parseConfig(raw: Record<string, unknown>): { config: AfterHoursC
 // cannot turn every inbound message into another send attempt.
 const RETRY_BACKOFF_MS = 60_000;
 
+// The backoff map holds one entry per chat that failed a send. Entries are removed on the next
+// delivery, but a chat that never messages again leaves one behind — so cap it. Every other piece of
+// state in this plugin is already bounded; this was the exception.
+const MAX_RETRY_ENTRIES = 5_000;
+
 // Responder band, last: the away message is the catch-all that speaks only when nothing more specific
 // answered.
 const HOOK_PRIORITY = 95;
@@ -113,6 +118,15 @@ export default class AfterHours implements IPlugin {
       // `message:sending` fan-outs across every installed plugin.
       this.repliedAt.delete(key);
       this.retryNotBefore.set(key, Date.now() + RETRY_BACKOFF_MS);
+      // Drop the entries whose backoff has already elapsed; if that is not enough, drop oldest-first.
+      if (this.retryNotBefore.size > MAX_RETRY_ENTRIES) {
+        const now = Date.now();
+        for (const [k, until] of this.retryNotBefore) if (until <= now) this.retryNotBefore.delete(k);
+        for (const k of this.retryNotBefore.keys()) {
+          if (this.retryNotBefore.size <= MAX_RETRY_ENTRIES) break;
+          this.retryNotBefore.delete(k);
+        }
+      }
       ctx.logger.error('after-hours: reply failed', err);
       return false; // nothing was delivered, so nothing is claimed
     }

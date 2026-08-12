@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { PluginNetCapability } from '../types/openwa';
 import { buildMultipartBody, MultipartField } from './multipart.ts';
 
@@ -78,7 +79,9 @@ export class OpenAiSttClient implements SttProvider {
   }
 
   private async doTranscribe(audio: Uint8Array, mimetype: string): Promise<SttResult> {
-    const boundary = `----openwaFormBoundary${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+    // Random from the CSPRNG, not Math.random: the audio bytes come from a sender, and a boundary that
+    // can be predicted is one that can be embedded to forge extra parts. Matches the other two producers.
+    const boundary = `----openwaFormBoundary${randomBytes(16).toString('hex')}`;
     const fields: MultipartField[] = [
       { name: 'model', value: this.opts.model },
       { name: 'response_format', value: 'json' },

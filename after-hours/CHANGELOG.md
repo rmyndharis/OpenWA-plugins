@@ -8,6 +8,13 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The send-retry backoff map is now bounded.** An entry is added when a send fails and removed on the
+  next delivery, so a chat that never messages again left one behind. Every other piece of state in this
+  plugin was already capped; this was the exception.
+
+
 ## [0.2.1] — 2026-08-01
 
 No behaviour change. 0.2.0 has now been smoke-tested against a newer host, so the tested-version field
