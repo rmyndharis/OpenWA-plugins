@@ -8,6 +8,10 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ### Fixed
 
+- **The manifest's `sdkVersion` is a string again, so the plugin loads.** It had been changed to the
+  number `1`, but the host's ingress validation reads it as a string (`sdkVersion.split('.')`), so a
+  manifest carrying the number throws at load and the plugin comes up ERROR — on any host since
+  0.7.18. No released zip carried the number; nothing was broken in the wild.
 - **An empty chat list no longer retires bulk backfill permanently.** The engine returns an empty list
   while it is still warming up, and the completion marker is durable — so a sweep that ran at the wrong
   moment disabled bulk backfill for that session forever. The marker is left unset so a later enable
@@ -32,6 +36,15 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
   send — so an attachment crafted to contain that exact boundary could close the part early and append
   parts of its own to the request reaching Chatwoot. The boundary is now 16 random bytes, which removes
   the possibility rather than filtering for it.
+
+
+### Changed
+
+- **Compatibility re-verified against OpenWA v0.19.0** (testedOpenWAVersion 0.14.0 → 0.19.0). The
+  manifest passes the v0.19.0 host's load-time validation (manifest, ingress and main-entry
+  checks) and the built bundle loads under the loader contract. No capability surface this plugin
+  uses changed between 0.14 and 0.19; the v0.19 breaking changes are host-side (API key length,
+  removed REST endpoints, the plain-http install pin) and do not touch this plugin.
 
 ## [0.9.1] — 2026-08-12
 

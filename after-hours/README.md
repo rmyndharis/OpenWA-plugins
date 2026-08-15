@@ -19,7 +19,7 @@
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.14.0) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.19.0) |
 | **Keywords** | after-hours, business-hours, away, auto-reply, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/after-hours](https://github.com/rmyndharis/OpenWA-plugins/tree/main/after-hours) |
 <!-- END DETAILS -->

@@ -8,10 +8,24 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ### Fixed
 
+- **The manifest's `sdkVersion` is a string again.** It had been changed to the number `1`, while the
+  host types it as a string (`sdkVersion.split('.')` on hosts that read it). Harmless here only
+  because this plugin declares no ingress route, so the host never reads the field today — but it was
+  the same regression that broke loading for the ingress plugins, and a future host that reads
+  `sdkVersion` unconditionally would fail this plugin at load too.
 - **A malformed upstream response no longer throws out of the hook.** `messages` and `clientSideActions`
   were only checked for null, so a Typebot server returning either as an object or a string raised a
   TypeError inside the message handler. They are array-checked now and degrade to no bubbles.
 
+
+
+### Changed
+
+- **Compatibility re-verified against OpenWA v0.19.0** (testedOpenWAVersion 0.14.0 → 0.19.0). The
+  manifest passes the v0.19.0 host's load-time validation (manifest, ingress and main-entry
+  checks) and the built bundle loads under the loader contract. No capability surface this plugin
+  uses changed between 0.14 and 0.19; the v0.19 breaking changes are host-side (API key length,
+  removed REST endpoints, the plain-http install pin) and do not touch this plugin.
 
 ## [0.2.2] — 2026-08-12
 

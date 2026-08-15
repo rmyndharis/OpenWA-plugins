@@ -314,7 +314,8 @@ synchronous behavior via `ingress[].response` instead. A `WebhookResponse` retur
 ignored; the provider's reply comes from `ingress[].response.ack` (default 202).
 
 `minOpenWAVersion` is advisory (never enforced by the host). Still bump it when a plugin *requires* a
-newer capability: `canonicalChatId` → 0.8.7, Integration SDK v1 (`sdkVersion: 1`) → 0.8.x,
+newer capability: `canonicalChatId` → 0.8.7, Integration SDK v1 (`sdkVersion: "1"` — a STRING; the
+host's ingress validation runs `sdkVersion.split('.')`, so a JSON number throws at load) → 0.8.x,
 `getChatHistory` → 0.8.5. Keep `testedOpenWAVersion` honest: it is the newest host the plugin was
 actually smoke-tested against.
 

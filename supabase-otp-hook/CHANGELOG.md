@@ -9,6 +9,10 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The manifest's `sdkVersion` is a string again, so the plugin loads.** It had been changed to the
+  number `1`, but the host's ingress validation reads it as a string (`sdkVersion.split('.')`), so a
+  manifest carrying the number throws at load and the plugin comes up ERROR — on any host since
+  0.7.18. No released zip carried the number; nothing was broken in the wild.
 - **Debug mode no longer writes the verification code or the destination number to the log.** Debug is
   switched on precisely when a delivery is misbehaving, so its output is what gets pasted into a support
   thread or shipped to a log collector — and an OTP is a live credential with the number beside it
@@ -22,6 +26,15 @@ to [Semantic Versioning](https://semver.org/).
   preflight probes the instance's `sessionScope`, so a blank scope skips the check and a delivery whose
   fallback session is down is acked `200` and lost with no provider retry. Both the provisioning list
   and the Security section now scope that guarantee to Option A.
+
+
+### Changed
+
+- **Compatibility re-verified against OpenWA v0.19.0** (testedOpenWAVersion 0.14.0 → 0.19.0). The
+  manifest passes the v0.19.0 host's load-time validation (manifest, ingress and main-entry
+  checks) and the built bundle loads under the loader contract. No capability surface this plugin
+  uses changed between 0.14 and 0.19; the v0.19 breaking changes are host-side (API key length,
+  removed REST endpoints, the plain-http install pin) and do not touch this plugin.
 
 ## [0.3.0] — 2026-07-30
 

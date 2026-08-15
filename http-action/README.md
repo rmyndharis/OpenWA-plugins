@@ -20,7 +20,7 @@
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.0 (tested 0.14.0) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.19.0) |
 | **Keywords** | api, rest, automation, connector, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/http-action](https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action) |
 <!-- END DETAILS -->
