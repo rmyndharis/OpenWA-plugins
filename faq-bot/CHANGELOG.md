@@ -8,6 +8,8 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-08-15
+
 ### Fixed
 
 - **A message with no text no longer draws a fallback reply.** A sticker, image or voice note arrives

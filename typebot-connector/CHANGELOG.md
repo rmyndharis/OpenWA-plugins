@@ -6,6 +6,8 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-08-15
+
 ### Fixed
 
 - **The manifest's `sdkVersion` is a string again.** It had been changed to the number `1`, while the

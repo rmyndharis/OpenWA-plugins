@@ -15,8 +15,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `supabase-otp-hook` |
-| **Version** | 0.3.0 |
-| **Released** | 2026-07-30 |
+| **Version** | 0.3.1 |
+| **Released** | 2026-08-15 |
 | **Status** | beta |
 | **Author** | maplerichie |
 | **License** | MIT |

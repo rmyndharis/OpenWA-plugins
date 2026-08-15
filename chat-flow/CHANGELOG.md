@@ -8,6 +8,8 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.1.3] — 2026-08-15
+
 ### Fixed
 
 - **The debug log no longer records the text of every incoming message.** The line runs for each inbound

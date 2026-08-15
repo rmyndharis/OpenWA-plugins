@@ -1,7 +1,7 @@
 {
   "id": "supabase-otp-hook",
   "name": "Supabase Auth OTP",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Deliver Supabase Auth phone OTPs over WhatsApp.",
