@@ -6,6 +6,8 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.2] — 2026-08-15
+
 ### Fixed
 
 - **The manifest's `sdkVersion` is a string again, so the plugin loads.** It had been changed to the

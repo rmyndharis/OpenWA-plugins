@@ -8,6 +8,8 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.3.4] — 2026-08-15
+
 ### Fixed
 
 - **healthCheck now reports unhealthy while a flush is failing.** The plugin was green whenever a client

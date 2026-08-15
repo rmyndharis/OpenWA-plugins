@@ -8,6 +8,8 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-08-15
+
 ### Fixed
 
 - **Overnight and all-day windows are accepted.** `22:00-06:00` and `00:00-00:00` are ordinary business

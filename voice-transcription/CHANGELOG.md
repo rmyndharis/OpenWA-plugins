@@ -6,6 +6,8 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+## [1.2.4] — 2026-08-15
+
 ### Fixed
 
 - **The multipart boundary for an upload is now drawn from the CSPRNG.** It was built from two

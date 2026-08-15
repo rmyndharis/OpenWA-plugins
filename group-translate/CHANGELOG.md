@@ -8,6 +8,8 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.3.2] — 2026-08-15
+
 ### Fixed
 
 - **A group message can no longer stall the plugin worker.** The filter that skips messages with

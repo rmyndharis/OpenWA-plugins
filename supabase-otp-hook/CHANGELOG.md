@@ -7,6 +7,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-08-15
+
 ### Fixed
 
 - **The manifest's `sdkVersion` is a string again, so the plugin loads.** It had been changed to the

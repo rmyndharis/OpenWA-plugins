@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `typebot-connector` |
-| **Version** | 0.2.2 |
-| **Released** | 2026-08-12 |
+| **Version** | 0.2.3 |
+| **Released** | 2026-08-15 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
