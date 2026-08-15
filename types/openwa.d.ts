@@ -1,13 +1,17 @@
 // Vendored OpenWA plugin contract. There is no published @openwa SDK package; keep this in sync
 // with the OpenWA version you target. All imports of this module must be `import type`.
 //
-// Last aligned against OpenWA core v0.14.5 (tag). Where a comment below mentions later host
-// behaviour, it is describing a change this file has NOT been re-verified against — treat it as a
-// note about the host's direction, not as something checked here., verified field-by-field against
+// Last aligned against OpenWA core v0.19.0 (tag), verified field-by-field against
 // src/core/plugins/plugin.interfaces.ts, src/core/hooks/hook.interfaces.ts, plugin-net.ts,
 // sandbox/{worker-bootstrap,worker-capability,worker-hooks,worker-webhooks}.ts and
 // src/engine/interfaces/whatsapp-engine.interface.ts. Where this file narrows the host on purpose it
 // says so; where the host is stricter than this file, the comment names the runtime consequence.
+// The 0.14.5 → 0.19.0 diff over those files changes no member this file tracks: the one behavioral
+// addition in that range — the "storage:use" gate on ctx.storage — was already vendored above. That
+// alignment also fixed two SILENT OMISSIONS that had survived every earlier pass: `manifest.sdkVersion`
+// and the typed `manifest.ingress` route (with IngressSignatureSpec / IngressResponseContract), both
+// shipped by the host since 0.7.18. A manifest field this file doesn't type is a field nothing checks —
+// which is how a numeric sdkVersion ("1" → 1) reached main and crashed the host's load-time validation.
 //
 // ⚠️ "verified field-by-field" is a HAND check, and nothing enforces it — this repo ships separately
 // and cannot import from core. It has been wrong before: the v0.14.0 alignment silently omitted six
@@ -186,6 +190,14 @@ export interface PluginManifest {
   permissions?: string[];
   sessions?: string[];
   hooks?: HookEvent[];
+  /** Integration SDK major.minor the plugin was authored against (e.g. '1' or '1.2'). STRING — the
+   *  host's ingress validation calls sdkVersion.split('.'), so a JSON number (1, not "1") throws at
+   *  load and the whole plugin comes up ERROR. Only the major is enforced; absent = treated as '1'. */
+  sdkVersion?: string;
+  /** Inbound webhook routes this plugin claims (needs the "webhook:ingress" permission). Validated by
+   *  the host at load: SDK-major match, the permission, unique non-empty routes, toleranceSec > 0, and
+   *  no scheme:'none' route unless the operator opted in (ALLOW_UNSIGNED_INGRESS). */
+  ingress?: PluginIngressRoute[];
   /** v0.7: per-session activation (default true). The platform owns which sessions a plugin runs for. */
   sessionScoped?: boolean;
   /** v0.7: outbound HTTP host allowlist for ctx.net.fetch — "host" or "host:port"; deny by default.
@@ -245,6 +257,56 @@ export interface PluginI18nLocale {
 
 /** Map of BCP-47 locale tag → locale translations. Set as `manifest.i18n`. */
 export type PluginI18n = Record<string, PluginI18nLocale>;
+
+// ── Integration SDK v1: inbound webhook ingress (manifest side) ────────────────────────────────
+export interface IngressSignatureSpec {
+  /**
+   * - `hmac-sha256`: HMAC over `contentTemplate` (tokens `{rawBody}`/`{timestamp}`/`{id}`).
+   * - `shared-secret`: constant-time compare of a header value against `instance.secret`.
+   * - `standard-webhooks`: host-side Standard Webhooks verify (headers `webhook-id`/`webhook-timestamp`/
+   *   `webhook-signature`, signed content `${webhook-id}.${webhook-timestamp}.${rawBody}`, base64
+   *   HMAC-SHA256 with the base64-decoded Svix key, `v1,` prefix). The wire format is fixed by the
+   *   spec, so `header`/`contentTemplate`/`encoding`/`prefix`/`timestampHeader` are IGNORED — only
+   *   `toleranceSec` and `dedupHeader` apply. The operator pastes the Svix secret as `instance.secret`.
+   * - `none`: fully unauthenticated public endpoint — rejected at load unless the operator set
+   *   ALLOW_UNSIGNED_INGRESS=true.
+   */
+  scheme: 'hmac-sha256' | 'shared-secret' | 'standard-webhooks' | 'none';
+  header?: string;
+  contentTemplate?: string;
+  encoding?: 'hex' | 'base64';
+  prefix?: string;
+  timestampHeader?: string;
+  /** Replay window for timestampHeader; must be > 0 when present (host default 300 applies when absent). */
+  toleranceSec?: number;
+  dedupHeader?: string;
+}
+
+export interface IngressResponseContract {
+  /** Host-side preflight gates run before the delivery is accepted. */
+  preflight?: Array<{ type: 'session-alive' }>;
+  /** The synchronous reply the host sends instead of default-202. `body` may template
+   *  `{rawBody}`/`{timestamp}`/`{id}`. A WebhookResponse returned from the handler is ignored —
+   *  this ack is the only synchronous reply. */
+  ack?: { status?: number; body?: string; headers?: Record<string, string> };
+  deadlineMs?: number; // documented provider ack budget (advisory; not enforced)
+}
+
+export interface PluginIngressRoute {
+  route: string; // host prefixes it; the plugin never binds a port
+  /** 'sync-reply' is inert dead code — the pipeline is always async + fast-ack; declare synchronous
+   *  behavior via `response` instead. Kept in the union for SDK v1 additive-only compatibility. */
+  mode: 'async' | 'sync-reply';
+  signature: IngressSignatureSpec;
+  challenge?: { method: 'GET'; tokenParam: string; echoParam: string };
+  /** Authenticity is verified by the host per `signature`; the worker does no extra 'self' pass. */
+  verify: 'core' | 'self';
+  maxBodyBytes: number;
+  /** Where the provider's conversation id lives, so the host can compute a per-conversation ordering
+   *  key. Absent ⇒ per-instance serialization. */
+  conversationId?: { header?: string; jsonPointer?: string };
+  response?: IngressResponseContract;
+}
 
 /**
  * What a SANDBOXED plugin receives. There is no `manifest` and no `hookManager` on the sandbox context

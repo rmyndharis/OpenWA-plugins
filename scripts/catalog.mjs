@@ -100,6 +100,18 @@ function validateManifest(id, manifest) {
         `the host refuses to load such a plugin`,
     );
   }
+  // The host reads sdkVersion as a STRING: its ingress validation runs sdkVersion.split('.'), so a JSON
+  // number throws at load and the whole plugin comes up ERROR. JSON makes string-vs-number invisible and
+  // the host's validator only runs on the gateway, after the release is published — catch it here.
+  if (
+    manifest.sdkVersion !== undefined &&
+    (typeof manifest.sdkVersion !== 'string' || !/^\d+(\.\d+)?$/.test(manifest.sdkVersion))
+  ) {
+    throw new Error(
+      `${id}: manifest.json "sdkVersion" must be a string like "1" or "1.2" (got ${JSON.stringify(manifest.sdkVersion)}) — ` +
+        `the host's load-time validation treats it as a string; a number throws and fails the whole plugin`,
+    );
+  }
   if (!manifest.i18n || Object.keys(manifest.i18n).length === 0) {
     console.warn(`⚠ ${id}: no i18n block — dashboard shows English only`);
   } else {

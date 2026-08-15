@@ -23,6 +23,15 @@ The version here always matches `manifest.json`'s `version`.
   `.*(x?).*(x?).*` was `.*.*.*` in disguise. Both are refused now. Patterns of the shape `(ab?){2}` and
   `.*(x).*(y).*`, which really are bounded, are still accepted.
 
+
+### Changed
+
+- **Compatibility re-verified against OpenWA v0.19.0** (testedOpenWAVersion 0.14.0 → 0.19.0). The
+  manifest passes the v0.19.0 host's load-time validation (manifest, ingress and main-entry
+  checks) and the built bundle loads under the loader contract. No capability surface this plugin
+  uses changed between 0.14 and 0.19; the v0.19 breaking changes are host-side (API key length,
+  removed REST endpoints, the plain-http install pin) and do not touch this plugin.
+
 ## [0.2.1] — 2026-08-01
 
 No behaviour change. 0.2.0 has now been smoke-tested against a newer host, so the tested-version field

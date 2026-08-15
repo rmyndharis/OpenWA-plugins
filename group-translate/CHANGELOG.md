@@ -20,6 +20,15 @@ The version here always matches `manifest.json`'s `version`.
   `1` and `#5` as emoji, so those messages were skipped silently. The filter now uses
   `\p{Extended_Pictographic}`, which is the property that actually means "picture character".
 
+
+### Changed
+
+- **Compatibility re-verified against OpenWA v0.19.0** (testedOpenWAVersion 0.14.0 → 0.19.0). The
+  manifest passes the v0.19.0 host's load-time validation (manifest, ingress and main-entry
+  checks) and the built bundle loads under the loader contract. No capability surface this plugin
+  uses changed between 0.14 and 0.19; the v0.19 breaking changes are host-side (API key length,
+  removed REST endpoints, the plain-http install pin) and do not touch this plugin.
+
 ## [1.3.1] — 2026-08-12
 
 ### Changed
