@@ -55,6 +55,18 @@ jobs:
       - name: Build & package (validates version↔changelog and size)
         run: node package.mjs "$PLUGIN_ID"
 
+      # The catalog's download URL pins the digest of the artifact this Release attaches, computed from
+      # the same tree by the same deterministic build. If CI ever produces bytes that differ from the
+      # tree that generated plugins.json, every pinned install of this release fails verification on the
+      # host, so fail here instead, before anything is published.
+      - name: The catalog pin matches the artifact
+        run: |
+          PIN=$(node -p "new URL(require('./plugins.json').find(e => e.id === process.env.PLUGIN_ID).download).hash.slice('#sha256='.length)")
+          ACTUAL=$(sha256sum "$PLUGIN_ID.zip" | cut -d' ' -f1)
+          if [ "$PIN" != "$ACTUAL" ]; then
+            echo "catalog pins $PIN but the built artifact is $ACTUAL; regenerate the catalog from this tree"; exit 1
+          fi
+
       # The last point at which a bundle the host cannot load is still cheap to fix. After this step the
       # Release is created and the zip is installable.
       - name: The built bundle loads as a plugin
@@ -70,7 +82,7 @@ jobs:
           ' "$PLUGIN_ID/CHANGELOG.md" > notes.md
           {
             echo ""
-            echo "**Install:** download \`$PLUGIN_ID.zip\` below and upload it in the OpenWA dashboard (Plugins → Install)."
+            echo "**Install:** download \`$PLUGIN_ID.zip\` below and upload it in the OpenWA dashboard (Plugins → Install). For install-from-URL on a production host (OpenWA ≥ 0.20.0), append \`#sha256=<digest below>\` to the asset URL."
             echo ""
             echo "SHA-256: \`$(cut -d' ' -f1 "$PLUGIN_ID.zip.sha256")\`"
           } >> notes.md

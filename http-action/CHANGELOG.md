@@ -5,6 +5,12 @@ and the top entry's version must match `manifest.json`.
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-08-16
+
+### Changed
+
+- **Verified against OpenWA v0.20.0** (testedOpenWAVersion 0.19.0 → 0.20.0); the catalog download URL now pins #sha256= for production installs.
+
 ## [0.2.3] — 2026-08-15
 
 ### Fixed

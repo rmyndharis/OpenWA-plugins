@@ -1,7 +1,7 @@
 {
   "id": "supabase-otp-hook",
   "name": "Supabase Auth OTP",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Deliver Supabase Auth phone OTPs over WhatsApp.",
@@ -12,7 +12,7 @@
   "keywords": ["supabase", "auth", "otp", "sms", "whatsapp", "verification", "standard-webhooks", "openwa"],
   "status": "beta",
   "minOpenWAVersion": "0.8.16",
-  "testedOpenWAVersion": "0.19.0",
+  "testedOpenWAVersion": "0.20.0",
   "sdkVersion": "1",
   "permissions": ["webhook:ingress", "messages:send"],
   "sessionScoped": true,
