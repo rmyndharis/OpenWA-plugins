@@ -4,6 +4,8 @@
 //
 // Usage: node scripts/catalog.mjs [--check]
 import { readdirSync, statSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -129,6 +131,18 @@ function readChangelogTop(id) {
   return { version: m[1], date: m[2] };
 }
 
+// The digest pinned to each catalog download URL. OpenWA ≥ 0.20.0 refuses an install from an unpinned
+// URL in production (fail-closed integrity for third-party code), so the catalog itself must carry the
+// `#sha256=` fragment: the dashboard passes this URL verbatim to install-url. The digest is computed
+// from a fresh package.mjs build (byte-deterministic: verified that a local build equals the GitHub
+// Release asset for the same tree), and the release workflow re-checks the published artifact against
+// this pin before creating the Release, so a diverging build fails loudly instead of shipping a
+// catalog whose pin can never verify.
+function packagedSha256(id) {
+  execFileSync(process.execPath, ['package.mjs', id], { cwd: ROOT, stdio: ['ignore', 'inherit', 'inherit'] });
+  return createHash('sha256').update(readFileSync(join(ROOT, `${id}.zip`))).digest('hex');
+}
+
 function buildEntry(id) {
   const manifest = JSON.parse(readFileSync(join(ROOT, id, 'manifest.json'), 'utf8'));
   const changelog = readChangelogTop(id);
@@ -155,7 +169,7 @@ function buildEntry(id) {
     repoUrl: manifest.repository ?? null,
     homepage: manifest.homepage ?? null,
     download: manifest.repository
-      ? `${manifest.repository}/releases/download/${manifest.id}-v${manifest.version}/${manifest.id}.zip`
+      ? `${manifest.repository}/releases/download/${manifest.id}-v${manifest.version}/${manifest.id}.zip#sha256=${packagedSha256(id)}`
       : null,
     // What the plugin DECLARES it binds. Published so a reader can compare a plugin's stated purpose
     // against the host capabilities it asks for — a mismatch there is a real signal.

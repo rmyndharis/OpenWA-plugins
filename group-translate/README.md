@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `group-translate` |
-| **Version** | 1.3.2 |
-| **Released** | 2026-08-15 |
+| **Version** | 1.3.3 |
+| **Released** | 2026-08-16 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.19.0) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.20.0) |
 | **Keywords** | translation, libretranslate, i18n, groups, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/group-translate](https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate) |
 <!-- END DETAILS -->

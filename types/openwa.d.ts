@@ -1,12 +1,15 @@
 // Vendored OpenWA plugin contract. There is no published @openwa SDK package; keep this in sync
 // with the OpenWA version you target. All imports of this module must be `import type`.
 //
-// Last aligned against OpenWA core v0.19.0 (tag), verified field-by-field against
+// Last aligned against OpenWA core v0.20.0 (tag), verified field-by-field against
 // src/core/plugins/plugin.interfaces.ts, src/core/hooks/hook.interfaces.ts, plugin-net.ts,
 // sandbox/{worker-bootstrap,worker-capability,worker-hooks,worker-webhooks}.ts and
 // src/engine/interfaces/whatsapp-engine.interface.ts. Where this file narrows the host on purpose it
 // says so; where the host is stricter than this file, the comment names the runtime consequence.
-// The 0.14.5 → 0.19.0 diff over those files changes no member this file tracks: the one behavioral
+// The 0.19.0 → 0.20.0 diff over those files is empty; 0.20.0's plugin-facing changes live elsewhere
+// (the production #sha256 pin on URL installs in plugin-download.ts, ingress text/plain reflections,
+// credential-dir modes) and none of them alter a member this file tracks. The 0.14.5 → 0.19.0 diff
+// over those files changes no member this file tracks either: the one behavioral
 // addition in that range — the "storage:use" gate on ctx.storage — was already vendored above. That
 // alignment also fixed two SILENT OMISSIONS that had survived every earlier pass: `manifest.sdkVersion`
 // and the typed `manifest.ingress` route (with IngressSignatureSpec / IngressResponseContract), both

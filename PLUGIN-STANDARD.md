@@ -13,7 +13,7 @@ and the storage quota in 0.12, the `storage:use` gate after 0.16).
 | Machine-readable metadata | `manifest.json` | Single source of truth. OpenWA reads required fields and ignores unknown ones. |
 | Human-readable docs | `README.md` | Standard section order (below). |
 | Dated version history | `CHANGELOG.md` | Keep a Changelog + SemVer. The release date lives here. |
-| Computed artifacts (size, sha256) | release time | GitHub Release notes + assets — never hand-written. |
+| Computed artifacts (size, sha256) | release time | GitHub Release notes + assets, plus the `#sha256=` pin on each catalog `download` URL; never hand-written. |
 | Cross-plugin index | `plugins.json` (repo root) | **Generated** from manifests + changelogs. Don't edit by hand. |
 
 ## Repository layout
@@ -366,7 +366,7 @@ One entry per plugin, written by `scripts/catalog.mjs` from each manifest + chan
   "keywords", "minOpenWAVersion", "testedOpenWAVersion",
   "releasedAt",           // from the top CHANGELOG heading
   "repoPath", "repoUrl", "homepage",
-  "download",             // predictable GitHub Release asset URL: <repo>/releases/download/<id>-v<version>/<id>.zip
+  "download",             // predictable GitHub Release asset URL: <repo>/releases/download/<id>-v<version>/<id>.zip#sha256=<digest of the deterministic build; OpenWA ≥ 0.20.0 requires the pin for URL installs in production>
 
   // What the plugin DECLARES it binds — see the caveat below before treating any of it as a guarantee.
   "permissions",          // the capability permissions from the manifest

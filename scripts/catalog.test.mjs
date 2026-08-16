@@ -134,3 +134,24 @@ test('the ingress-declaring plugins publish their route shapes', () => {
     }
   }
 });
+
+// OpenWA ≥ 0.20.0 refuses an install from an unpinned URL in production (NODE_ENV there), fail-closed
+// for third-party code. The dashboard hands `entry.download` to install-url verbatim, so a catalog
+// entry whose URL lost its `#sha256=` fragment ships a link that cannot be installed at all on a
+// production host. Shape only: the digest's equality with the built artifact is enforced by
+// `catalog:check` (which regenerates from a fresh build) and by the release workflow's pin-vs-artifact
+// gate.
+test('every catalog download URL pins the artifact digest', () => {
+  const catalog = JSON.parse(readFileSync(new URL('../plugins.json', import.meta.url), 'utf8'));
+  const entries = catalog.plugins ?? catalog;
+
+  assert.ok(entries.length > 0, 'plugins.json lists no entries, so the pin check would examine nothing');
+  for (const e of entries) {
+    if (!e.download) continue; // a repository-less development plugin has nothing to pin
+    assert.match(
+      e.download,
+      /#sha256=[0-9a-f]{64}$/,
+      `${e.id}: download URL must end in #sha256=<64 hex> (unpinned URLs fail production installs)`,
+    );
+  }
+});

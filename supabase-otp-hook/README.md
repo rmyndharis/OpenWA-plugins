@@ -15,13 +15,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `supabase-otp-hook` |
-| **Version** | 0.3.1 |
-| **Released** | 2026-08-15 |
+| **Version** | 0.3.2 |
+| **Released** | 2026-08-16 |
 | **Status** | beta |
 | **Author** | maplerichie |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.16 (tested 0.19.0) |
+| **Requires OpenWA** | ≥ 0.8.16 (tested 0.20.0) |
 | **Keywords** | supabase, auth, otp, sms, whatsapp, verification, standard-webhooks, openwa |
 | **Repository** | [OpenWA-plugins/supabase-otp-hook](https://github.com/rmyndharis/OpenWA-plugins/tree/main/supabase-otp-hook) |
 <!-- END DETAILS -->
