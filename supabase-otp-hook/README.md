@@ -15,13 +15,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `supabase-otp-hook` |
-| **Version** | 0.3.2 |
-| **Released** | 2026-08-16 |
+| **Version** | 0.3.3 |
+| **Released** | 2026-08-19 |
 | **Status** | beta |
 | **Author** | maplerichie |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.16 (tested 0.20.0) |
+| **Requires OpenWA** | ≥ 0.8.16 (tested 0.22.0) |
 | **Keywords** | supabase, auth, otp, sms, whatsapp, verification, standard-webhooks, openwa |
 | **Repository** | [OpenWA-plugins/supabase-otp-hook](https://github.com/rmyndharis/OpenWA-plugins/tree/main/supabase-otp-hook) |
 <!-- END DETAILS -->
@@ -71,9 +71,10 @@ curl -X PUT "$OPENWA/api/plugins/supabase-otp-hook/config" \
 
 Then wire the connection:
 
-Wiring order: OpenWA mints the **ingress URL** → paste into Supabase → Supabase generates the
-**webhook secret** → paste it back into OpenWA **as the instance secret** (the host uses it to verify
-the Standard Webhooks signature).
+Wiring order: OpenWA mints the **ingress URL** and the **instance secret** together → paste the URL
+into Supabase → paste the secret into the Supabase hook form (the host uses it to verify the Standard
+Webhooks signature). The reverse order works too: generate the secret in Supabase first and pass it
+to the mint call.
 
 **1. Mint an OpenWA instance.** Creates the ingress URL and binds the sending session.
 
@@ -94,27 +95,25 @@ curl -X POST "$OPENWA/api/integration/plugins/supabase-otp-hook/instances" \
   -d '{
     "instanceId": "default",
     "sessionScope": "<whatsapp-session-id>",
+    "secret": "v1,whsec_<base64>",
     "config": { "appName": "Acme" }
   }'
 ```
 
-Copy the **ingress URL** from the response: `https://<host>/api/ingress/supabase-otp-hook/default/send-sms`.
+`secret` is optional: omit it and OpenWA auto-generates one, revealing the plaintext once in the
+create response. Either way, copy the **ingress URL** and the **plaintext secret** from the response:
+`https://<host>/api/ingress/supabase-otp-hook/default/send-sms`.
 
-**2. Create the Supabase Send SMS hook.** Dashboard → Authentication → Auth Hooks → Add hook → Send SMS hook → HTTPS. Paste the ingress URL.
+> The secret can only be set here or through `POST .../instances/:id/regenerate-secret` (which also
+> reveals the new plaintext once). The instance PATCH endpoint accepts `enabled`, `sessionScope` and
+> `config` only; it rejects a `secret` field with a 400. The secret is re-read per delivery, so a
+> regenerate needs no restart (paste the new value into Supabase).
 
-**3. Generate the webhook secret.** On the Supabase hook form, click Generate secret. Copy the full `v1,whsec_<base64>` (include the prefix). Save the hook.
+**2. Create the Supabase Send SMS hook.** Dashboard → Authentication → Auth Hooks → Add hook → Send SMS hook → HTTPS. Paste the ingress URL, and set the hook's secret to the instance secret from step 1 (Supabase's form accepts a pasted secret; its Generate secret button is the alternative, used before minting the instance).
 
-**4. Set the secret as the OpenWA instance secret.** This is what the host verifies the signature against — it is *not* plugin config. Paste `v1,whsec_...` into the instance `secret`. The secret is re-read per delivery — no restart.
+**3. Enable phone auth.** Supabase → Authentication → Providers → Phone → enable, set SMS provider to the hook.
 
-```bash
-curl -X PATCH "$OPENWA/api/integration/plugins/supabase-otp-hook/instances/default" \
-  -H "Authorization: Bearer $ADMIN_KEY" -H "Content-Type: application/json" \
-  -d '{"secret":"v1,whsec_..."}'
-```
-
-**5. Enable phone auth.** Supabase → Authentication → Providers → Phone → enable, set SMS provider to the hook.
-
-**6. Test.** Trigger a phone-OTP sign-in. Supabase receives 200 and the OTP arrives in WhatsApp. A dead WhatsApp session yields 503 (visible to Supabase); a bad signature yields 401.
+**4. Test.** Trigger a phone-OTP sign-in. Supabase receives 200 and the OTP arrives in WhatsApp. A dead WhatsApp session yields 503 (visible to Supabase); a bad signature yields 401.
 
 ## Install
 
@@ -144,7 +143,8 @@ curl -X POST "$OPENWA/api/plugins/supabase-otp-hook/enable" \
 | `fallbackSessionId` | string | yes if `sessionScope` blank | Sending session when the instance isn't bound. Ignored when `sessionScope` is set. |
 | `debug` | boolean | no (default `false`) | Log inbound deliveries (resolved session/chatId), sends, and send failures. |
 
-The Supabase webhook secret is set as the **instance `secret`** (at mint time or via PATCH), not in
+The Supabase webhook secret is set as the **instance `secret`** (at mint time or via
+`regenerate-secret`; the PATCH endpoint does not accept it), not in
 this config — the host uses it to verify the Standard Webhooks signature before the handler runs.
 Session scope (which session sends) is also set at instance mint time, not in this config.
 
