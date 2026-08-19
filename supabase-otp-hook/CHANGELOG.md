@@ -7,6 +7,16 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-08-19
+
+### Fixed
+
+- **Setup step 4 no longer tells you to PATCH the instance secret.** The host instance API accepts `secret` only at create time (or via `regenerate-secret`); the PATCH endpoint rejects the field with a 400, so the documented wiring dead-ended. The guide now wires the secret at mint time.
+
+### Changed
+
+- **Verified against OpenWA v0.22.0** (testedOpenWAVersion 0.20.0 → 0.22.0).
+
 ## [0.3.2] - 2026-08-16
 
 ### Changed

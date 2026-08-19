@@ -1,7 +1,7 @@
 {
   "id": "typebot-connector",
   "name": "Typebot Connector",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Runs a Typebot flow as the brain of a WhatsApp bot: inbound messages drive a Typebot chat session via the live Chat API, and the bot's replies — text, media, and numbered-choice inputs — are sent back to WhatsApp. Auto-starts every chat, handles file-upload steps, and resets when the flow ends or after an idle timeout. Runs sandboxed in the plugin worker; no public URL or webhook required.",
@@ -12,7 +12,7 @@
   "keywords": ["typebot", "chatbot", "flow", "bot", "no-code", "two-way", "whatsapp", "openwa"],
   "status": "stable",
   "minOpenWAVersion": "0.8.2",
-  "testedOpenWAVersion": "0.20.0",
+  "testedOpenWAVersion": "0.22.0",
   "sdkVersion": "1",
   "permissions": ["net:fetch", "conversation:send",
     "storage:use"],

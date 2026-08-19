@@ -6,6 +6,12 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-08-19
+
+### Changed
+
+- **Verified against OpenWA v0.22.0** (testedOpenWAVersion 0.20.0 → 0.22.0).
+
 ## [0.9.3] - 2026-08-16
 
 ### Changed
