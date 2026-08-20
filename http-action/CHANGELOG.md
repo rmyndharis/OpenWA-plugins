@@ -5,6 +5,12 @@ and the top entry's version must match `manifest.json`.
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-08-20
+
+### Changed
+
+- **Verified against OpenWA v0.23.0** (testedOpenWAVersion 0.22.0 → 0.23.0).
+
 ## [0.2.5] - 2026-08-19
 
 ### Changed
