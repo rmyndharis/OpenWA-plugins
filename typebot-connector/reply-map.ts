@@ -17,6 +17,15 @@ export function mapReply(awaiting: Awaiting, msg: IncomingMessage): ReplyIntent 
     return { kind: 'fallback', text: 'Please send a file or photo to continue.' };
   }
 
+  // Since host 0.23.2 a shared contact card arrives with its full vCard as the body and a poll with its
+  // question, so `text` is no longer proof the contact typed an answer. Submitting either advances the
+  // flow with garbage, and a vCard holding a bare in-range digit (a street number, an extension) would
+  // silently select a numbered choice. Prompt instead and leave the step where it is. Deliberately after
+  // the file branch above, so sharing a card at a file step still gets that step's own wording.
+  if (msg.type === 'contact' || msg.type === 'poll') {
+    return { kind: 'fallback', text: 'Please type your answer to continue.' };
+  }
+
   if (awaiting.kind === 'choice') {
     if (awaiting.multiple) {
       const picks = text

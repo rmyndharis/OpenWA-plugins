@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `faq-bot` |
-| **Version** | 0.2.5 |
-| **Released** | 2026-08-20 |
+| **Version** | 0.2.6 |
+| **Released** | 2026-08-25 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.6.1 (tested 0.23.0) |
+| **Requires OpenWA** | ≥ 0.6.1 (tested 0.23.3) |
 | **Keywords** | faq, auto-reply, chatbot, support, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/faq-bot](https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot) |
 <!-- END DETAILS -->
@@ -88,6 +88,10 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 Targets OpenWA **≥ 0.6.1** (sandboxed plugin runtime). Live config edits (`PUT …/config`) apply
 immediately on builds that forward `onConfigChange` to sandboxed plugins (the #430 follow-ups);
 on v0.6.0/v0.6.1 a disable + re-enable is needed after changing rules.
+
+Shared contact cards and polls never match a rule and never draw `fallbackReply`: from OpenWA 0.23.2
+both carry text in the message body, and a vCard is free text that matches ordinary `contains` and
+`regex` rules by accident. Tapped business buttons and list replies are still answered.
 
 ### Per-session config
 

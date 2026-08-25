@@ -117,13 +117,54 @@ test('a body-less message never reaches the flow engine', async () => {
 
   const plugin = new ChatFlow();
   await plugin.onEnable(ctx);
-  const fire = (body: string, id: string) =>
-    handler!({ source: 'Engine', sessionId: 's1', data: { id, chatId: 'c@wa', body, fromMe: false, isGroup: false } });
+  const fire = (body: string, id: string, type = 'text') =>
+    handler!({ source: 'Engine', sessionId: 's1', data: { id, chatId: 'c@wa', body, type, fromMe: false, isGroup: false } });
 
   await fire('', 'm1');      // sticker / voice note / caption-less image
   await fire('   ', 'm2');
   assert.deepEqual(sent, [], 'a body-less message must not start the flow');
   await fire('apa saja', 'm3'); // real text: the empty trigger means anything starts it
   assert.ok(sent.length > 0, 'a real message still starts the flow');
+  await plugin.onDisable();
+});
+
+// From host 0.23.2 a contact card and a poll DO carry text, so the body guard above no longer covers
+// them. With the documented empty trigger either would start the flow; mid-flow either would draw an
+// "Invalid option" and claim the message from a sibling auto-replier.
+test('a contact card or a poll never reaches the flow engine, but a tapped button does', async () => {
+  const ChatFlow = (await import('./index.ts')).default;
+  const sent: string[] = [];
+  let handler: ((h: unknown) => Promise<{ continue: boolean }>) | undefined;
+  const store = new Map<string, unknown>();
+  const ctx = {
+    config: { greeting: 'halo', trigger: '', options: [{ key: '1', text: 'satu' }] },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    messages: { sendText: async (_s: string, _c: string, t: string) => { sent.push(t); return { messageId: 'x', timestamp: 0 }; },
+                reply: async (_s: string, _c: string, _q: string, t: string) => { sent.push(t); return { messageId: 'x', timestamp: 0 }; } },
+    storage: {
+      get: async (k: string) => store.get(k) ?? null,
+      set: async (k: string, v: unknown) => void store.set(k, v),
+      delete: async (k: string) => void store.delete(k),
+      list: async () => [...store.keys()],
+    },
+    registerHook: (_e: string, h: (x: unknown) => Promise<{ continue: boolean }>) => { handler = h; },
+  } as never;
+
+  const plugin = new ChatFlow();
+  await plugin.onEnable(ctx);
+  const fire = (body: string, id: string, type = 'text') =>
+    handler!({ source: 'Engine', sessionId: 's1', data: { id, chatId: 'c@wa', body, type, fromMe: false, isGroup: false } });
+
+  const vcard = 'BEGIN:VCARD\nVERSION:3.0\nFN:Budi Santoso\nTEL;TYPE=CELL:+628123456789\nEND:VCARD';
+  const card = await fire(vcard, 'm1', 'contact');
+  assert.equal(card.continue, true, 'a contact card must pass down the chain');
+  const poll = await fire('Makan di mana hari Jumat?', 'm2', 'poll');
+  assert.equal(poll.continue, true, 'a poll must pass down the chain');
+  assert.deepEqual(sent, [], 'neither may start the flow');
+
+  // 'unknown' carries business button and list replies. A tapped menu button is the single most
+  // desirable input a menu bot can get, so it must NOT be denied along with the two above.
+  await fire('1', 'm3', 'unknown');
+  assert.ok(sent.length > 0, 'a tapped button still drives the flow');
   await plugin.onDisable();
 });

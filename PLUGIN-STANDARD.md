@@ -293,6 +293,18 @@ correct plugins and were each learned the hard way. Re-verify against OpenWA cor
 10. **The worker is crash containment, not a security boundary** (core says so itself). Plugin code can
    `require('fs')`/`('net')`/`('child_process')`; what the worker actually buys you is a 256 MB heap
    ceiling and a crash that doesn't take the gateway down. Review submitted plugins accordingly.
+11. **A non-empty `body` does not mean a human typed it.** A poll carries its question, a shared event
+   its name, a tapped business button its label, and a shared contact card its vCard. whatsapp-web.js
+   has always populated these; Baileys matched it in host 0.23.2, so it is now true on both engines.
+   A plugin that treats `body` as a command, a menu key, or prose to forward **must also gate on
+   `type`**, denying `contact` and `poll`. Two rules on that gate, both easy to get backwards:
+   - **Never deny `type === 'unknown'`.** Business button and list replies land there on both engines.
+     A tapped menu button is the most desirable input a menu bot can receive.
+   - **Never allowlist `type === 'text'`.** Media captions arrive in `body` under their own media
+     type (`image`, `video`, `document`), and reaching a matcher is intended behavior.
+
+   `!body.trim()` is still the right guard for what carries no text at all: a sticker, a voice note, an
+   image sent without a caption.
 
 **Permissions** — the seven values the host enforces, and what each unlocks. `scripts/catalog.mjs`
 rejects a manifest declaring anything outside this set, so adopting a new one is a deliberate edit

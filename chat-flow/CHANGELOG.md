@@ -8,6 +8,19 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.1.7] - 2026-08-25
+
+### Fixed
+
+- A shared contact card or a poll no longer starts the flow or draws "Invalid option". OpenWA 0.23.2
+  fills the message body for both (a card carries its vCard, a poll its question), so a non-empty body
+  is no longer proof that someone typed at the menu. Business button and list replies are still
+  accepted, and a captioned image still reaches the menu as before.
+
+### Changed
+
+- **Verified against OpenWA v0.23.3** (testedOpenWAVersion 0.23.0 → 0.23.3).
+
 ## [1.1.6] - 2026-08-20
 
 ### Changed

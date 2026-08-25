@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `http-action` |
-| **Version** | 0.2.6 |
-| **Released** | 2026-08-20 |
+| **Version** | 0.2.7 |
+| **Released** | 2026-08-25 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.0 (tested 0.23.0) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.23.3) |
 | **Keywords** | api, rest, automation, connector, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/http-action](https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action) |
 <!-- END DETAILS -->
@@ -109,6 +109,10 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 Targets OpenWA **≥ 0.8.0**, the release that introduced both capabilities it relies on
 (`net.allowConfigHosts` and `conversation:send`). Live config edits apply on the next inbound message
 (config is re-read per event).
+
+Shared contact cards and polls never trigger an action: from OpenWA 0.23.2 both carry text in the
+message body, so a poll titled with one of your prefixes would otherwise fire a real request against
+your backend. Tapped business buttons and list replies still trigger actions.
 
 ### Per-session config
 

@@ -1,14 +1,22 @@
 // Vendored OpenWA plugin contract. There is no published @openwa SDK package; keep this in sync
 // with the OpenWA version you target. All imports of this module must be `import type`.
 //
-// Last aligned against OpenWA core v0.20.0 (tag), verified field-by-field against
+// Last aligned against OpenWA core v0.23.3 (tag), verified field-by-field against
 // src/core/plugins/plugin.interfaces.ts, src/core/hooks/hook.interfaces.ts, plugin-net.ts,
 // sandbox/{worker-bootstrap,worker-capability,worker-hooks,worker-webhooks}.ts and
 // src/engine/interfaces/whatsapp-engine.interface.ts. Where this file narrows the host on purpose it
 // says so; where the host is stricter than this file, the comment names the runtime consequence.
-// The 0.19.0 → 0.20.0 diff over those files is empty; 0.20.0's plugin-facing changes live elsewhere
-// (the production #sha256 pin on URL installs in plugin-download.ts, ingress text/plain reflections,
-// credential-dir modes) and none of them alter a member this file tracks. The 0.14.5 → 0.19.0 diff
+// The 0.20.0 → 0.23.3 diff over the four plugin-runtime sources is EMPTY. The engine interface gained
+// only optional trailing parameters (mentions on replyToMessage/editMessage, messageIds on sendSeen),
+// none of them reachable from a plugin: the sandbox capability router is a 19-verb allowlist carrying
+// neither verb. The one plugin-visible change in that range is BEHAVIORAL and lives in the engine
+// adapter rather than the contract. 0.23.2 made the Baileys body extractor fill `body` for polls,
+// shared events, business button replies and contact cards, matching what whatsapp-web.js has always
+// returned. See the `IncomingMessage.body` note below: it invalidated the guard this file used to
+// recommend, and five shipped plugins had followed that recommendation.
+// The 0.19.0 → 0.20.0 diff over those files was empty too; 0.20.0's plugin-facing changes lived
+// elsewhere (the production #sha256 pin on URL installs in plugin-download.ts, ingress text/plain
+// reflections, credential-dir modes) and none of them altered a member this file tracks. The 0.14.5 → 0.19.0 diff
 // over those files changes no member this file tracks either: the one behavioral
 // addition in that range — the "storage:use" gate on ctx.storage — was already vendored above. That
 // alignment also fixed two SILENT OMISSIONS that had survived every earlier pass: `manifest.sdkVersion`
@@ -433,8 +441,17 @@ export interface IncomingMessage {
   from: string;
   to: string;
   chatId: string;
-  /** Empty string for every non-text type (sticker, voice, image without caption, …) — guard on
-   *  `!body.trim()`, not just on `typeof body`, before treating it as a command or menu key. */
+  /**
+   * Empty for sticker, voice, image/video/document without a caption, call, revoked and masked.
+   * NOT empty for every other non-text type: a poll carries its question, a shared event its name, a
+   * tapped business button its label, and a shared contact card its vCard (several cards arrive
+   * newline-joined). whatsapp-web.js has always populated these; Baileys matched it in host 0.23.2.
+   *
+   * So `!body.trim()` is NOT a test for "a human typed this". A matcher that treats the body as a
+   * command, a menu key or prose to forward must gate on `type` too, denying 'contact' and 'poll'.
+   * Do NOT deny 'unknown': business button and list replies land there and are real user input.
+   * Do NOT allowlist 'text': media captions arrive in `body` under their own media type.
+   */
   body: string;
   /** Host `MessageType`: text|image|video|audio|voice|document|sticker|location|contact|poll|call|
    *  revoked|masked|unknown. Kept as `string` here so a new host type never breaks a typecheck. */
@@ -485,6 +502,8 @@ export interface IncomingMessage {
   };
   // The message this one replies to (swipe-to-reply / quote), when present. `id` is the quoted WhatsApp
   // message id; `body` is its text. Carried on the inbound hook payload for reply-threading relays.
+  // Since host 0.23.2 the quote runs through the SAME extractor as the live message, so a quoted poll
+  // or contact card carries its text here rather than an empty string. Same caveat as `body` above.
   quotedMessage?: { id: string; body: string };
   // Shared location (`type: 'location'`), when present.
   location?: { latitude: number; longitude: number; description?: string; address?: string; url?: string };

@@ -7,6 +7,12 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-08-25
+
+### Changed
+
+- **Verified against OpenWA v0.23.3** (testedOpenWAVersion 0.23.0 → 0.23.3).
+
 ## [0.3.4] - 2026-08-20
 
 ### Changed

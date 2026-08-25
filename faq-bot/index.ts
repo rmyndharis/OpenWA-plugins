@@ -79,6 +79,12 @@ export default class FaqBot implements IPlugin {
     // would answer a picture with "I did not understand" and claim the event away from a plugin that
     // could actually handle media. chat-flow guards the same way.
     if (m.fromMe || typeof m.body !== 'string' || !m.body.trim() || !m.chatId || !m.id) return false;
+    // Since host 0.23.2 a shared contact card arrives with its full vCard as the body and a poll with
+    // its question, so a non-empty body no longer means a human typed it. A vCard is free text (name,
+    // org, notes, numbers) and readily matches a `contains` or `regex` rule; with `fallbackReply` set,
+    // an unmatched card would answer and claim the event. 'unknown' stays admitted: business button and
+    // list replies land there and are real answers to a question this bot asked.
+    if (m.type === 'contact' || m.type === 'poll') return false;
 
     // Re-parse per event so a per-session config override (resolved by the host for this hook fire) is
     // honored — a snapshot cached at enable would ignore overrides set via the dashboard after enable.

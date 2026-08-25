@@ -178,6 +178,66 @@ test("does NOT claim a translated conversational message — a co-installed resp
   assert.equal(result.continue, true, "conversational content is passed on, translated or not");
 });
 
+// From host 0.23.2 a shared contact card carries its full vCard as the body. Translating one would POST
+// a stranger's name and number to the backend, post the machine-translated card back into the group,
+// and feed the vCard to language detection, which pins the sender's language on their very first card.
+// A poll is deliberately still translated: its question is human-typed prose.
+test("a shared contact card is never translated; a poll question still is", async () => {
+  const seed = {
+    [GROUP_KEY]: {
+      sessionId: "s1",
+      chatId: "group@g.us",
+      active: true,
+      participants: {
+        [AUTHOR]: { lang: "en", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+        "z@s.whatsapp.net": { lang: "id", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+      },
+      delegatedControllers: [],
+      announced: true,
+    },
+  };
+  const urls: string[] = [];
+  const replies: string[] = [];
+  const { ctx, getHook } = fakeContext(
+    {},
+    {
+      seed,
+      net: {
+        fetch: async (url: string) => {
+          urls.push(url);
+          return {
+            ok: true,
+            status: 200,
+            statusText: "",
+            headers: {},
+            body: url.endsWith("/detect")
+              ? '[{"language":"en","confidence":0.99}]'
+              : '{"translatedText":"halo dunia"}',
+          } as PluginNetResponse;
+        },
+      },
+      messages: {
+        sendText: async () => {},
+        reply: async (_s: string, _c: string, _q: string, t: string) => void replies.push(t),
+      },
+    },
+  );
+  const plugin = new TranslationPlugin();
+  await plugin.onEnable(ctx);
+
+  const vcard =
+    "BEGIN:VCARD\nVERSION:3.0\nFN:Budi Santoso\nORG:Toko Berkah\nTEL;TYPE=CELL:+628123456789\nEND:VCARD";
+  const card = await getHook()!(engineCtx({ body: vcard, type: "contact" }));
+  assert.equal(card.continue, true, "a contact card is passed on untouched");
+  assert.deepEqual(urls, [], "no vCard may reach the translation backend");
+  assert.deepEqual(replies, [], "and no translated card may be posted into the group");
+
+  const poll = await getHook()!(engineCtx({ body: "hello world", type: "poll" }));
+  assert.equal(poll.continue, true);
+  assert.ok(urls.length > 0, "a poll question is prose and is still translated");
+  assert.equal(replies.length, 1);
+});
+
 // Regression: the message hook must rebuild the coordinator when a coordinator-affecting config field
 // changes (per-session override), and must NOT rebuild it when the config is unchanged (preserving the
 // LibreTranslate client's circuit-breaker state across messages for the same backend).

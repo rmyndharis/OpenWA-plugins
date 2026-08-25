@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `group-translate` |
-| **Version** | 1.3.5 |
-| **Released** | 2026-08-20 |
+| **Version** | 1.3.6 |
+| **Released** | 2026-08-25 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.23.0) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.23.3) |
 | **Keywords** | translation, libretranslate, i18n, groups, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/group-translate](https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate) |
 <!-- END DETAILS -->
@@ -113,6 +113,11 @@ Then, in the group, an admin runs `/tr on`. Or install the packaged `.zip` from
 Targets OpenWA **≥ 0.7.0** — outbound HTTP uses the v0.7 `ctx.net.fetch` capability. Declares
 `messages:send`, `engine:read` (for admin checks), `net:fetch`, and `storage:use` (each group's
 settings and learned participant languages).
+
+Shared contact cards are never translated: from OpenWA 0.23.2 a card carries its vCard in the message
+body, which would otherwise send a third party's name and number to your translation backend, post a
+machine-translated card into the group, and let language detection pin the sender's language from
+vCard field names. Poll questions are translated normally.
 
 ### Per-session config
 

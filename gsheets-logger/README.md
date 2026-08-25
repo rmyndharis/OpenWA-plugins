@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `gsheets-logger` |
-| **Version** | 0.3.7 |
-| **Released** | 2026-08-20 |
+| **Version** | 0.3.8 |
+| **Released** | 2026-08-25 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.23.0) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.23.3) |
 | **Keywords** | google-sheets, logging, audit, crm, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/gsheets-logger](https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger) |
 <!-- END DETAILS -->
@@ -209,6 +209,10 @@ External plugins run **sandboxed in a worker thread** (since OpenWA **v0.6.0**).
 SSRF-guarded `ctx.net.fetch` introduced in v0.7, allowlisted to the two fixed Google hosts. Two further
 capabilities are version-dependent:
 
+- **Richer `body` values from OpenWA ≥ 0.23.2 on the Baileys engine.** Poll questions, shared contact
+  vCards, event names and tapped button labels now fill the `body` column where they previously logged
+  an empty string, matching what the whatsapp-web.js engine has always logged. A poll logs `type` as
+  `poll` and a contact card as `contact`; shared events and button replies log as `unknown`.
 - **`message:ack` rows** require OpenWA **≥ v0.6.1** (#427). On v0.6.0 the hook was declared but never
   fired, so ack rows are absent.
 - **Live config updates** (a `PUT …/config` reaching the running plugin) and **graceful-shutdown buffer

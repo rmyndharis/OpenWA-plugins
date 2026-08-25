@@ -6,6 +6,19 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-08-25
+
+### Fixed
+
+- A shared contact card or a poll no longer answers the current step. OpenWA 0.23.2 fills the message
+  body for both, so a vCard holding a bare in-range digit (a street number, an extension) could silently
+  select a numbered choice. The contact is asked to type instead and the flow stays where it is; sharing
+  a card at a file-upload step still gets that step's own wording.
+
+### Changed
+
+- **Verified against OpenWA v0.23.3** (testedOpenWAVersion 0.23.0 → 0.23.3).
+
 ## [0.2.6] - 2026-08-20
 
 ### Changed

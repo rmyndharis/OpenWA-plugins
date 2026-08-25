@@ -33,6 +33,28 @@ test('file input: media uploads; omitted media falls back; no media prompts', ()
   assert.equal(mapReply(file, msg({ body: 'skip' })).kind, 'fallback');
 });
 
+// From host 0.23.2 a shared contact card carries its vCard as the body and a poll its question, so
+// `body` alone no longer means the contact typed an answer. A vCard holding a bare in-range digit (a
+// street number, an extension) would silently select a numbered choice.
+test('a contact card or a poll prompts instead of answering the step', () => {
+  const vcard = 'BEGIN:VCARD\nVERSION:3.0\nFN:Budi\nADR:;;2;Jakarta\nEND:VCARD';
+  assert.deepEqual(
+    mapReply(choice, msg({ body: '2', type: 'text' })),
+    { kind: 'text', message: 'Support' },
+    'guard rail: as text, a bare 2 does select the second option',
+  );
+  const card = mapReply(choice, msg({ body: vcard, type: 'contact' }));
+  assert.equal(card.kind, 'fallback', 'a contact card must not advance the flow');
+  const poll = mapReply(choice, msg({ body: 'Sales', type: 'poll' }));
+  assert.equal(poll.kind, 'fallback', 'a poll must not advance the flow');
+});
+
+test('a contact card at a file step keeps that step\'s own wording', () => {
+  const file: Awaiting = { kind: 'file', blockId: 'b' };
+  const r = mapReply(file, msg({ body: 'BEGIN:VCARD\nEND:VCARD', type: 'contact' }));
+  assert.deepEqual(r, { kind: 'fallback', text: 'Please send a file or photo to continue.' });
+});
+
 test('typed/free-text and rating pass the raw text through', () => {
   const text: Awaiting = { kind: 'text', blockId: 'b', attachmentsEnabled: false };
   assert.deepEqual(mapReply(text, msg({ body: 'me@x.io' })), { kind: 'text', message: 'me@x.io' });

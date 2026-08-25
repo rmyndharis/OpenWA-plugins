@@ -15,13 +15,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chatwoot-adapter` |
-| **Version** | 0.9.5 |
-| **Released** | 2026-08-20 |
+| **Version** | 0.9.6 |
+| **Released** | 2026-08-25 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.7 (tested 0.23.0) |
+| **Requires OpenWA** | ≥ 0.8.7 (tested 0.23.3) |
 | **Keywords** | chatwoot, helpdesk, inbox, handover, two-way, agent, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/chatwoot-adapter](https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter) |
 <!-- END DETAILS -->
@@ -156,6 +156,11 @@ instance id or route — so re-copy the ingress URL from the mint response.
   gate, `net.allowConfigHosts`), the `conversation.send` media/voice types for outbound attachments, the
   sandbox-bridged `engine.getChatHistory` for the history backfill, and `engine.canonicalChatId` for `@lid`
   resolution.
+- **Polls, contact cards, shared events and button taps carry their text from OpenWA 0.23.2 on the
+  Baileys engine.** A poll's question, a shared contact's vCard, an event name and a tapped button's
+  label now appear as the Chatwoot message text instead of the `📊 Poll` / `👤 Contact` marker, which
+  is what the whatsapp-web.js engine has always relayed. The markers still appear when the shape
+  carries no text. In a group these messages now also carry the `*Sender:*` prefix.
 - **Agent replies containing a link look plainer from OpenWA 0.14.0 on the Baileys engine.** WhatsApp used
   to draw a preview card for a URL in an agent's reply. From 0.14.0 Baileys only generates that card when
   the sender asks for it, and a plugin has no way to ask, so those replies arrive as plain links. Delivery

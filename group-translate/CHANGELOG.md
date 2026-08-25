@@ -8,6 +8,20 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-08-25
+
+### Fixed
+
+- A shared contact card is no longer translated. OpenWA 0.23.2 fills the message body with the card's
+  vCard, which sent a third party's name and number to the translation backend, posted a
+  machine-translated card back into the group, and let language detection pin the sender's language
+  from vCard field names on their first shared card. Poll questions are still translated: a poll
+  question is ordinary prose.
+
+### Changed
+
+- **Verified against OpenWA v0.23.3** (testedOpenWAVersion 0.23.0 → 0.23.3).
+
 ## [1.3.5] - 2026-08-20
 
 ### Changed

@@ -6,6 +6,12 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+## [1.2.8] - 2026-08-25
+
+### Changed
+
+- **Verified against OpenWA v0.23.3** (testedOpenWAVersion 0.23.0 → 0.23.3).
+
 ## [1.2.7] - 2026-08-20
 
 ### Changed

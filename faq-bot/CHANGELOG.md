@@ -8,6 +8,18 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-08-25
+
+### Fixed
+
+- A shared contact card or a poll no longer matches a rule or draws `fallbackReply`. OpenWA 0.23.2 fills
+  the message body for both, and a vCard is free text (name, organization, notes, numbers) that readily
+  matches a `contains` or `regex` rule. Business button and list replies are still answered.
+
+### Changed
+
+- **Verified against OpenWA v0.23.3** (testedOpenWAVersion 0.23.0 → 0.23.3).
+
 ## [0.2.5] - 2026-08-20
 
 ### Changed

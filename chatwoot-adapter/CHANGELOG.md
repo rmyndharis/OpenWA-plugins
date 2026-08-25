@@ -6,6 +6,17 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-08-25
+
+### Changed
+
+- On the Baileys engine a poll question, a shared event name, a tapped button label and a shared
+  contact's vCard now appear as the Chatwoot message text instead of the type marker, matching what the
+  whatsapp-web.js engine has always relayed. OpenWA 0.23.2 fills the message body for these shapes. The
+  markers still appear when the shape carries no text. In a group these messages now also carry the
+  sender prefix that the marker never had.
+- **Verified against OpenWA v0.23.3** (testedOpenWAVersion 0.23.0 → 0.23.3).
+
 ## [0.9.5] - 2026-08-20
 
 ### Changed

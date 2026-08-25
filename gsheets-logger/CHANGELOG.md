@@ -8,6 +8,16 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-08-25
+
+### Changed
+
+- On the Baileys engine the `body` column is now populated for poll, contact card and button-reply rows
+  that previously logged an empty body, matching what the whatsapp-web.js engine has always logged.
+  OpenWA 0.23.2 fills the message body for these shapes. Shared events and button replies are logged
+  with `type` `unknown`; a poll is `poll` and a contact card is `contact`.
+- **Verified against OpenWA v0.23.3** (testedOpenWAVersion 0.23.0 → 0.23.3).
+
 ## [0.3.7] - 2026-08-20
 
 ### Changed

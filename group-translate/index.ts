@@ -164,6 +164,14 @@ export class TranslationPlugin implements IPlugin {
     if (ctx.source !== "Engine" || !ctx.sessionId) {
       return { continue: true };
     }
+    // Since host 0.23.2 a shared contact card arrives with its full vCard as the body. Translating one
+    // POSTs a stranger's name and number to the translation backend, posts the machine-translated card
+    // back into the group, and feeds the vCard to language detection, which pins the sender's learned
+    // language on their first card. A poll is deliberately NOT denied here: its question is human-typed
+    // prose and squarely inside what this plugin exists to translate.
+    if (msg.type === "contact") {
+      return { continue: true };
+    }
     // Re-check the config signature against the firing session's resolved config — if a per-session
     // override changed a coordinator-affecting field, rebuild now. Cheap (a JSON.stringify of a handful
     // of primitives) and runs only the equality check on the hot path; the rebuild is rare. The swap is

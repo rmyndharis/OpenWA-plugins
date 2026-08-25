@@ -5,6 +5,19 @@ and the top entry's version must match `manifest.json`.
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-08-25
+
+### Fixed
+
+- A poll or a shared contact card no longer triggers an action. OpenWA 0.23.2 fills the message body for
+  both, so a poll titled with a configured prefix could fire a real request against the configured
+  backend and claim the message. Business button and list replies still trigger actions.
+- A whitespace-only body is ignored, matching the guard the other command plugins use.
+
+### Changed
+
+- **Verified against OpenWA v0.23.3** (testedOpenWAVersion 0.23.0 → 0.23.3).
+
 ## [0.2.6] - 2026-08-20
 
 ### Changed

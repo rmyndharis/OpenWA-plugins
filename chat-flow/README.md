@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chat-flow` |
-| **Version** | 1.1.6 |
-| **Released** | 2026-08-20 |
+| **Version** | 1.1.7 |
+| **Released** | 2026-08-25 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.23.0) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.23.3) |
 | **Keywords** | menu, flow, interactive, auto-reply, chatbot, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/chat-flow](https://github.com/rmyndharis/OpenWA-plugins/tree/main/chat-flow) |
 <!-- END DETAILS -->
@@ -108,6 +108,11 @@ plugin's **Flow editor**.
 Targets OpenWA **≥ 0.7.0** — relies on per-session config resolution (`sessionScoped`), live
 `onConfigChange`, and the `configUi` sandboxed config editor. Uses only `ctx.messages.reply`,
 `ctx.storage`, `ctx.logger`, and `ctx.config`.
+
+Shared contact cards and polls are ignored: from OpenWA 0.23.2 both carry text in the message body
+(a card its vCard, a poll its question), which would otherwise start the flow or draw an "Invalid
+option". Tapped business buttons and list replies still drive the menu, and a captioned image still
+reaches it.
 
 ### Per-session config
 
