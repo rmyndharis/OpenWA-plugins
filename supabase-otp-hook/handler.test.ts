@@ -134,13 +134,45 @@ test('does not send when no session is available', async () => {
 
 // ── send behavior ────────────────────────────────────────────────────────────
 
-test('backgrounds the sendText failure (logs the error, does not throw)', async () => {
+test('a send that fails immediately fails the delivery, so the host retries it', async () => {
+  // Supabase was acked 200 before this handler ran and never retries such a delivery itself, so
+  // backgrounding an instant rejection lost the OTP outright with one warn line to show for it. The
+  // capability layer rejects instantly when the plugin is not activated for the session, when the
+  // session has no live engine, and at the concurrent-capability limit. Throwing hands the delivery
+  // back to the host, which retries it with backoff and dead-letters it for redrive.
   const { logs, deps } = makeDeps({ fallbackSessionId: 's' });
   const messages = { sendText: async () => { throw new Error('session down'); } };
-  await handleSendSms({ ...deps, messages }, makeReq({ user: { phone: '+15551234567' }, sms: { otp: '123456' } }));
-  // Flush the background .then rejection (microtask) before asserting on logs.
+  const reported: (string | null)[] = [];
+  await assert.rejects(
+    handleSendSms(
+      { ...deps, messages, onSendResult: e => void reported.push(e) },
+      makeReq({ user: { phone: '+15551234567' }, sms: { otp: '123456' } }),
+    ),
+    /WhatsApp send failed: session down/,
+  );
+  assert.ok(logs.some(l => l.message.includes('sendText failed') && /session down/.test(String(l.meta?.error))));
+  assert.deepEqual(reported, ['session down'], 'the outcome is reported for healthCheck');
+});
+
+test('a send that is merely slow is left running and does not fail the delivery', async () => {
+  // The opposite failure mode, and the reason the send is not simply awaited: the worker dispatch is
+  // bounded to 5 s, and an overrun reaches the host as a failed delivery, which retries the job and
+  // sends the contact a DUPLICATE OTP.
+  const { deps } = makeDeps({ fallbackSessionId: 's' });
+  let settle: (() => void) | undefined;
+  const messages = { sendText: () => new Promise<never>((_res, _rej) => { settle = () => _rej(new Error('late failure')); }) as never };
+  const reported: (string | null)[] = [];
+  // failFastMs shortened so the test does not wait the real window.
+  await handleSendSms(
+    { ...deps, messages, failFastMs: 5, onSendResult: e => void reported.push(e) },
+    makeReq({ user: { phone: '+15551234567' }, sms: { otp: '123456' } }),
+  );
+  assert.deepEqual(reported, [], 'nothing is known yet when the handler returns');
+
+  // The send outliving the handler still reports, which is what healthCheck surfaces.
+  settle?.();
   await new Promise<void>(resolve => setImmediate(resolve));
-  assert.ok(logs.some(l => l.message.includes('sendText failed (background)') && /session down/.test(String(l.meta?.error))));
+  assert.deepEqual(reported, ['late failure']);
 });
 
 // ── debug logging ────────────────────────────────────────────────────────────

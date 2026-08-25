@@ -55,6 +55,13 @@ const NOOP_LOGGER: TranslationLogger = { debug: () => {}, info: () => {}, warn: 
  *  needed resolving, so this only fills up in a deployment with many groups and many commanders. */
 const MAX_CANONICAL_WIDS = 500;
 
+/** Minimum gap between two `/tr help` answers in the same group. */
+const HELP_COOLDOWN_MS = 60_000;
+
+/** Cap on the per-group `/tr help` timestamps, mirroring MAX_CANONICAL_WIDS: one entry per group that
+ *  has asked, evicted oldest-first rather than growing without limit. */
+const MAX_HELP_ENTRIES = 500;
+
 /**
  * Compare two WhatsApp IDs tolerantly: exact match, or same user part ignoring
  * an `@domain` and any `:device` suffix (e.g. `123@c.us` === `123:7@c.us`).
@@ -72,6 +79,10 @@ export class TranslationCoordinator {
   private readonly locks = new Map<string, Promise<unknown>>();
   /** `${sessionId}:${wid}` -> canonical `@c.us` wid, or null when the host could not resolve it. */
   private readonly canonicalWids = new Map<string, string | null>();
+  /** `${sessionId}:${chatId}` -> epoch ms of the last `/tr help` answer posted there. In memory and per
+   *  coordinator, like the LibreTranslate circuit breaker: a rebuild or a disable/enable clears it,
+   *  which at worst allows one extra answer. */
+  private readonly helpAt = new Map<string, number>();
 
   constructor(
     private readonly translator: Translator,
@@ -139,8 +150,16 @@ export class TranslationCoordinator {
     let detected: string;
     try {
       detected = (await this.translator.detect(text)).lang;
-    } catch {
-      return; // translator down — silent skip
+    } catch (err) {
+      // Every backend failure lands here: an unreachable instance, a host that refused the fetch
+      // because libretranslateUrl names something the allowlist does not admit, the SSRF guard blocking
+      // a loopback address without SSRF_ALLOWED_HOSTS. This used to return with nothing recorded at
+      // all, so a group that had simply stopped being translated left no trace of why.
+      this.logger.warn('detect failed; message left untranslated', {
+        action: 'translation_detect_failed',
+        error: String(err),
+      });
+      return;
     }
     this.applyLearning(sender, detected);
 
@@ -307,11 +326,14 @@ export class TranslationCoordinator {
     cmd: ParsedCommand,
   ): Promise<void> {
     if (cmd.name === 'help') {
-      await this.gateway.sendText(sessionId, msg.chatId, buildHelpText(this.opts.prefix));
-      return;
-    }
-    if (cmd.name === 'status') {
-      await this.gateway.sendText(sessionId, msg.chatId, formatStatus(state, this.translator.isHealthy()));
+      // The only reply this plugin gives a user it has not authorized, so it is also the only command a
+      // stranger can repeat to make the bot post into the group on every attempt: exactly the
+      // amplification the denial reply below is opt-in (denyReply) in order to withhold. Answer once
+      // per group per window. The command stays discoverable, which is all it is for, and repeating it
+      // adds nothing the first answer did not already say.
+      if (this.helpDue(`${sessionId}:${msg.chatId}`)) {
+        await this.gateway.sendText(sessionId, msg.chatId, buildHelpText(this.opts.prefix));
+      }
       return;
     }
 
@@ -340,6 +362,13 @@ export class TranslationCoordinator {
     const targetWid = this.resolveTarget(msg, cmd.target);
 
     switch (cmd.name) {
+      case 'status':
+        // Behind the same gate as every other command. The participant table is this plugin's own
+        // access-control state (who is ignored, who holds delegated control, the language learned for
+        // each member), and answering any member on every attempt both published that roster and gave
+        // back the amplification `/tr help` is bounded against above.
+        await this.gateway.sendText(sessionId, msg.chatId, formatStatus(state, this.translator.isHealthy()));
+        return;
       case 'on':
         state.active = true;
         await this.confirm(sessionId, msg, '✅ Translation activated.', state);
@@ -479,6 +508,21 @@ export class TranslationCoordinator {
       });
     }
     return resolved;
+  }
+
+  /** True when a `/tr help` answer is due in `key` (`${sessionId}:${chatId}`), recording the send.
+   *  Bounded the same way as {@link canonicalWid}: oldest-first eviction, never unbounded growth. */
+  private helpDue(key: string): boolean {
+    const now = Date.now();
+    const last = this.helpAt.get(key);
+    if (last !== undefined && now - last < HELP_COOLDOWN_MS) return false;
+    this.helpAt.delete(key); // re-insert so iteration order tracks recency
+    this.helpAt.set(key, now);
+    if (this.helpAt.size > MAX_HELP_ENTRIES) {
+      const oldest = this.helpAt.keys().next().value;
+      if (oldest !== undefined) this.helpAt.delete(oldest);
+    }
+    return true;
   }
 
   /** Memoized {@link ChatGateway.resolveCanonicalWid}. A null (unresolvable) answer is cached too —

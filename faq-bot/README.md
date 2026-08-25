@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `faq-bot` |
-| **Version** | 0.2.5 |
-| **Released** | 2026-08-20 |
+| **Version** | 0.2.6 |
+| **Released** | 2026-08-25 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.6.1 (tested 0.23.0) |
+| **Requires OpenWA** | ≥ 0.6.1 (tested 0.23.3) |
 | **Keywords** | faq, auto-reply, chatbot, support, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/faq-bot](https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot) |
 <!-- END DETAILS -->
@@ -89,6 +89,10 @@ Targets OpenWA **≥ 0.6.1** (sandboxed plugin runtime). Live config edits (`PUT
 immediately on builds that forward `onConfigChange` to sandboxed plugins (the #430 follow-ups);
 on v0.6.0/v0.6.1 a disable + re-enable is needed after changing rules.
 
+Shared contact cards and polls never match a rule and never draw `fallbackReply`: from OpenWA 0.23.2
+both carry text in the message body, and a vCard is free text that matches ordinary `contains` and
+`regex` rules by accident. Tapped business buttons and list replies are still answered.
+
 ### Per-session config
 
 **Supported.** Every config field (`rules`, `fallbackReply`, `fallbackCooldownSec`,
@@ -107,11 +111,22 @@ rule sets.
 
 `regex` patterns are operator-authored (trusted) and tested against at most the first 1000 characters
 of a message. At parse time every pattern is screened for catastrophic-backtracking shapes — nested,
-adjacent-overlapping, and repeated-variable-width quantifiers (e.g. `(a+)+`, `.*.*.*`, `(a?){40}`) — and
-an unsafe one is skipped with a warning. This parse-time screen is the real safeguard: the sandbox hook
+adjacent-overlapping, and repeated-variable-width quantifiers (e.g. `(a+)+`, `.*.*.*`, `(a?){40}`), plus
+ambiguous repeated alternations (`(a|a)*`, `(a|ab)+`, `^([a-z]|[a-z0-9])+$`, `^(\w|\d)+$`) — and an
+unsafe one is skipped with a warning. This parse-time screen is the real safeguard: the sandbox hook
 timeout lets the host proceed but cannot interrupt a synchronous regex already running in the plugin
-worker, so a pattern that slips through would still pin that worker. Overlapping-alternation patterns
-(e.g. `(a|a)*`) are a known class the screen does not yet cover.
+worker, so a pattern that slips through would still pin that worker.
+
+An alternation is only rejected when two branches can consume the same text, so ordinary keyword sets
+like `(one|two|three)+` and `^(ya|tidak)$` are unaffected even where two branches share a first letter.
+The screen is a heuristic rather than a decision procedure: it covers the shapes that occur in real rule
+sets, and the 1000-character body cap remains as the second line of defence.
+
+The same inbound text is answered at most once every 10 seconds per chat. A rule whose reply also
+matches its own pattern is a fixed point, and an autoresponder on the other end would otherwise trade
+messages with it indefinitely, repeating one canned line as it goes. The throttle keys on that repeated
+text rather than on the rule, so two different questions are both answered even when they match the same
+rule.
 
 ## Changelog
 

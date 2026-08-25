@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { PluginNetCapability, PluginNetRequestInit, PluginNetResponse } from '../types/openwa';
-import { OpenAiSttClient, sanitizeContentType } from './openai-stt.client.ts';
+import { OpenAiSttClient, isHostBackpressure, sanitizeContentType } from './openai-stt.client.ts';
 
 test('sanitizeContentType keeps a valid mimetype (codec-stripped) but rejects CRLF / garbage', () => {
   assert.equal(sanitizeContentType('audio/ogg; codecs=opus'), 'audio/ogg'); // real PTT — codec stripped, kept
@@ -147,4 +147,47 @@ test('the circuit re-closes after the cooldown elapses', async () => {
   t = 6001; // past cooldown
   await assert.rejects(c.transcribe(a, 'audio/ogg'), /econnrefused/); // closed → hits net again
   assert.equal(calls(), 2);
+});
+
+test('host backpressure does not open the circuit breaker', async () => {
+  // The host rejects a fetch past its GLOBAL 16-slot limit, and a capability call past the per-plugin
+  // in-flight limit, both instantly and both shared with every other plugin on the gateway. Counting
+  // them as backend failures opened the breaker on a healthy backend: a busy line saturates the pool,
+  // the rejections are immediate and therefore consecutive, and five in a row stopped transcription for
+  // the whole cooldown.
+  assert.equal(isHostBackpressure(new Error('too many concurrent plugin net.fetch calls (max 16); retry shortly')), true);
+  assert.equal(isHostBackpressure(new Error('capability call rejected: too many concurrent capability calls (limit 32)')), true);
+  assert.equal(isHostBackpressure(new Error('ECONNREFUSED 127.0.0.1:7000')), false);
+  assert.equal(isHostBackpressure(new Error('STT 500 Internal Server Error')), false);
+
+  let now = 0;
+  const client = new OpenAiSttClient({
+    baseUrl: 'http://localhost:7000',
+    model: 'small',
+    timeoutMs: 1000,
+    net: { fetch: async () => { throw new Error('too many concurrent plugin net.fetch calls (max 16); retry shortly'); } } as never,
+    now: () => now,
+  } as never);
+
+  for (let i = 0; i < 8; i++) {
+    await assert.rejects(client.transcribe(new Uint8Array([1]), 'audio/ogg'));
+  }
+  assert.equal(client.isHealthy(), true, 'a saturated host must not be reported as a failing backend');
+});
+
+test('real backend failures still open the circuit breaker', async () => {
+  // The guard rail for the test above: the breaker must still do its job.
+  let now = 0;
+  const client = new OpenAiSttClient({
+    baseUrl: 'http://localhost:7000',
+    model: 'small',
+    timeoutMs: 1000,
+    net: { fetch: async () => { throw new Error('ECONNREFUSED 127.0.0.1:7000'); } } as never,
+    now: () => now,
+  } as never);
+
+  for (let i = 0; i < 8; i++) {
+    await assert.rejects(client.transcribe(new Uint8Array([1]), 'audio/ogg'));
+  }
+  assert.equal(client.isHealthy(), false, 'a dead backend still opens the breaker');
 });

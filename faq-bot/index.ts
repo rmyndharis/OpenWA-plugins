@@ -43,8 +43,18 @@ export function parseConfig(raw: Record<string, unknown>): {
 // a command prefix.
 const HOOK_PRIORITY = 80;
 
+// Minimum gap before the SAME inbound text is answered again in the same chat. Hardcoded, like the retry
+// cadence in the other plugins: it exists to stop a runaway exchange, not to be tuned. A rule whose own
+// reply matches its own pattern is a fixed point, and an autoresponder on the other end then answers each
+// of this plugin's replies forever, at full message rate, repeating one canned message as it goes.
+// Keyed on the text rather than the rule or the chat, so two different questions are both answered even
+// when they match the same rule.
+const MATCHED_REPLY_COOLDOWN_MS = 10_000;
+
 export default class FaqBot implements IPlugin {
   private readonly fallbackAt = new Map<string, number>();
+  /** `${sessionId}:${chatId}:${pattern}` -> last answer for that rule, for MATCHED_REPLY_COOLDOWN_MS. */
+  private readonly matchedAt = new Map<string, number>();
 
   async onEnable(ctx: PluginContext): Promise<void> {
     this.warnSkipped(ctx); // fail-fast + surface any invalid regex rules at enable
@@ -79,6 +89,12 @@ export default class FaqBot implements IPlugin {
     // would answer a picture with "I did not understand" and claim the event away from a plugin that
     // could actually handle media. chat-flow guards the same way.
     if (m.fromMe || typeof m.body !== 'string' || !m.body.trim() || !m.chatId || !m.id) return false;
+    // Since host 0.23.2 a shared contact card arrives with its full vCard as the body and a poll with
+    // its question, so a non-empty body no longer means a human typed it. A vCard is free text (name,
+    // org, notes, numbers) and readily matches a `contains` or `regex` rule; with `fallbackReply` set,
+    // an unmatched card would answer and claim the event. 'unknown' stays admitted: business button and
+    // list replies land there and are real answers to a question this bot asked.
+    if (m.type === 'contact' || m.type === 'poll') return false;
 
     // Re-parse per event so a per-session config override (resolved by the host for this hook fire) is
     // honored — a snapshot cached at enable would ignore overrides set via the dashboard after enable.
@@ -96,7 +112,22 @@ export default class FaqBot implements IPlugin {
     const rule = matchRule(cfg.rules, m.body);
     try {
       if (rule) {
-        await ctx.messages.reply(sessionId, m.chatId, m.id, rule.reply);
+        // Keyed on the INBOUND TEXT, not on the rule. A runaway exchange repeats the same message: the
+        // other end's autoresponder sends one canned reply, this plugin answers, and that same canned
+        // reply arrives again. Keying on the rule instead would have suppressed a customer's second,
+        // genuinely different question whenever it happened to match the same rule ("berapa harga paket
+        // A?" then "kalau harga paket B?"), which costs far more than the loop it prevents.
+        // Claimed either way: the message matched a rule, so it is this plugin's, and the standard
+        // allows a claim to resolve to silence.
+        const key = `${sessionId}:${m.chatId}:${m.body.trim().toLowerCase().slice(0, 200)}`;
+        if (!allowCooldown(this.matchedAt, key, Date.now(), MATCHED_REPLY_COOLDOWN_MS)) return true;
+        try {
+          await ctx.messages.reply(sessionId, m.chatId, m.id, rule.reply);
+        } catch (e) {
+          // Release the window: a reply that never arrived must not silence the next identical question.
+          this.matchedAt.delete(key);
+          throw e;
+        }
         return true;
       }
       if (cfg.config.fallbackReply) {

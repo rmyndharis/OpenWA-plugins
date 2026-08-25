@@ -15,13 +15,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `supabase-otp-hook` |
-| **Version** | 0.3.4 |
-| **Released** | 2026-08-20 |
+| **Version** | 0.3.5 |
+| **Released** | 2026-08-25 |
 | **Status** | beta |
 | **Author** | maplerichie |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.16 (tested 0.23.0) |
+| **Requires OpenWA** | ≥ 0.8.16 (tested 0.23.3) |
 | **Keywords** | supabase, auth, otp, sms, whatsapp, verification, standard-webhooks, openwa |
 | **Repository** | [OpenWA-plugins/supabase-otp-hook](https://github.com/rmyndharis/OpenWA-plugins/tree/main/supabase-otp-hook) |
 <!-- END DETAILS -->
@@ -36,10 +36,16 @@
 - **Configurable message** — `{appName}` and `{otp}` placeholders.
 - **Synchronous feedback** — the host verifies the signature (→ **401** on failure) and runs a
   `session-alive` preflight (→ **503** on a dead WhatsApp session) before accepting, returning
-  **200 `application/json`** on success. Supabase learns immediately whether the OTP could be handed
-  off; a dead session no longer gets swallowed as a silent 202.
-- **Fire-and-forget WhatsApp send** — the ingress worker dispatch is bounded to 5 s, so the send runs
-  in the background to avoid a timeout-induced retry that would duplicate the OTP.
+  **200** on success. Supabase learns immediately whether the OTP could be handed
+  off; a dead session no longer gets swallowed as a silent 202. The ack body is the JSON literal
+  `{"ok":true}`; its content type is `application/json` on hosts below 0.20.0 and `text/plain` on 0.20.0
+  and later, which forces the type on every ingress reflection, so nothing should match on it.
+- **Fail-fast WhatsApp send** — a send that fails immediately (no live engine, the plugin not activated
+  for the session, the concurrent-capability limit) fails the delivery, so the host retries it and
+  dead-letters it for redrive instead of dropping the OTP, and
+  `GET /api/plugins/supabase-otp-hook/health` reports the last failure. A send that is only slow
+  finishes in the background: the ingress worker dispatch is bounded to 5 s, and an overrun would be
+  retried into a duplicate OTP.
 - **Per-user ordering + dedup** — ordered per `user.id`, deduped on `webhook-id`. Ordering and the
   retry/DLQ path need `QUEUE_ENABLED=true` on the host; with the queue off, ingress runs inline, takes
   no ordering lock, and makes a single attempt.
@@ -48,7 +54,7 @@
 
 Supabase calls the OpenWA ingress URL. The host verifies the Standard Webhooks signature against the
 instance secret (→ 401 on a mismatch), runs the `session-alive` preflight (→ 503 on a dead session),
-persists the event for dedup, fast-acks Supabase with **200 `application/json`**, then dispatches the
+persists the event for dedup, fast-acks Supabase with **200** `{"ok":true}`, then dispatches the
 sandboxed handler async from the ingress worker (retry + DLQ). The handler parses `{ user: { phone },
 sms: { otp } }`, normalizes the phone to `<digits>@c.us`, and fires the WhatsApp send in the background
 to stay within the worker's 5 s dispatch budget.
@@ -83,8 +89,9 @@ to the mint call.
   ⚠️ **This gives up the dead-session 503.** The host preflight probes the *instance* scope, and a blank
   scope has no single session to probe — `fallbackSessionId` is plugin config the host never sees. So a
   delivery whose fallback session is down is answered `200 {"ok":true}`, Supabase treats it as
-  delivered and does not retry, and the OTP is lost. The only trace is the plugin's
-  `sendText failed (background)` log line. Prefer Option A wherever the sending session is known.
+  delivered and does not retry. The send itself then fails fast, so the host records the delivery as
+  failed and dead-letters it for redrive, and `GET /api/plugins/supabase-otp-hook/health` reports the
+  failure. Supabase is still never told. Prefer Option A wherever the sending session is known.
 - **Option C — misconfiguration.** Both blank → the handler drops the delivery (no session to send from).
 
 > The plugin's **Sessions** tab controls *activity*, not *which session sends*. Sending session = `sessionScope` or `fallbackSessionId`, in that order.

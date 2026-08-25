@@ -94,6 +94,10 @@ if (!result.some((f) => f.name === mainInZip)) {
 // ── Report size + sha256 (release artifacts — surfaced here and in the GitHub Release) ──
 // Size is checked before the write, not after: an oversized archive that fails the limit used to be
 // left behind on disk anyway.
+// The host caps a package at 200 members as well as 5 MB, and refuses the whole install on either.
+// A configUi entry is expanded recursively, so a static editor bundle reaches the file count long
+// before the byte count, and that refusal would land at install, after the release is published.
+if (result.length > 200) fail(`package has ${result.length} files, over the 200-file install limit`);
 const zip = zipStore(result);
 const kb = (zip.length / 1024).toFixed(1);
 if (zip.length > 5 * 1024 * 1024) fail(`package is ${kb} KB, over the 5 MB install limit`);

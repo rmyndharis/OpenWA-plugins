@@ -117,6 +117,7 @@ function makeDeps(state: GroupState) {
     detect: {
       calls: detectCalls,
       mockResolvedValue: (v: { lang: string; confidence: number }) => { detectImpl = async () => v; },
+      mockRejectedValue: (e: unknown) => { detectImpl = () => Promise.reject(e); },
     },
     translate: {
       calls: translateCalls,
@@ -655,4 +656,71 @@ test('the skip filter still recognises what it is meant to skip', () => {
   for (const translatable of ['hello', 'https://a.co and text', 'lihat https://a.co ya', '1', 'halo 👍']) {
     assert.equal(isUrlOrEmojiOnly(translatable), false, `should translate: ${JSON.stringify(translatable)}`);
   }
+});
+
+test('/tr help answers once per group per window, so a stranger cannot make the bot repeat', async () => {
+  // The only reply this plugin gives an unauthorized user, and therefore the only command a stranger
+  // can repeat to make the bot post into the group on every attempt. That is the amplification the
+  // denial reply is opt-in to withhold, so the open command must be bounded the same way.
+  const { store, gateway, translator, mocks } = makeDeps(freshState({ announced: true }));
+  const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+
+  await c.handleMessage('s', msg({ body: '/tr help', author: 'stranger@c.us' }));
+  assert.equal(mocks.sendText.calls.length, 1, 'the first ask is answered: the command is discoverable');
+
+  for (let i = 0; i < 5; i++) {
+    await c.handleMessage('s', msg({ body: '/tr help', author: 'stranger@c.us' }));
+  }
+  assert.equal(mocks.sendText.calls.length, 1, 'repeats inside the window post nothing');
+
+  // A different group is a different bucket: bounding one must not silence another.
+  await c.handleMessage('s', msg({ body: '/tr help', chatId: 'other@g.us', author: 'stranger@c.us' }));
+  assert.equal(mocks.sendText.calls.length, 2);
+});
+
+test('/tr status is admin-gated: it publishes the participant roster', async () => {
+  // The participant table is this plugin's own access-control state: who is ignored, who holds
+  // delegated control, and the language learned for each member. It was answered for any member on
+  // every attempt, which both disclosed that roster and handed back the amplification above.
+  const state = freshState({
+    announced: true,
+    active: true,
+    participants: { '111@c.us': { lang: 'en', source: 'pinned', enabled: true, samples: 2, updatedAt: 'x' } },
+  });
+  const { store, gateway, translator, mocks } = makeDeps(state);
+  const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+
+  mocks.getGroupAdmins.mockResolvedValue([]); // the sender is not an admin
+  await c.handleMessage('s', msg({ body: '/tr status', author: 'stranger@c.us' }));
+  assert.equal(mocks.sendText.calls.length, 0, 'a non-admin gets no roster');
+
+  mocks.getGroupAdmins.mockResolvedValue(['boss@c.us']);
+  await c.handleMessage('s', msg({ body: '/tr status', author: 'boss@c.us' }));
+  assert.equal(mocks.sendText.calls.length, 1, 'an admin still gets it');
+});
+
+test('records why a message was left untranslated when detect fails', async () => {
+  // A dead or unreachable backend used to be indistinguishable from a group with nothing to translate:
+  // detect() threw, the catch returned, and nothing was written anywhere. The only symptom an operator
+  // sees is that translation stopped, so the cause has to be recorded where it happens.
+  const state = freshState({
+    announced: true,
+    active: true,
+    participants: {
+      '111@c.us': { lang: 'en', source: 'pinned', enabled: true, samples: 2, updatedAt: 'x' },
+      '222@c.us': { lang: 'es', source: 'pinned', enabled: true, samples: 2, updatedAt: 'x' },
+    },
+  });
+  const { store, gateway, translator, logger, mocks } = makeDeps(state);
+  mocks.detect.mockRejectedValue(new Error('fetch refused: host not on the allowlist'));
+  const c = new TranslationCoordinator(translator, store, gateway, OPTS, logger);
+
+  await c.handleMessage('s', msg({ body: 'hola a todos', author: '222@c.us' }));
+
+  assert.equal(mocks.translate.calls.length, 0, 'nothing is translated when detection failed');
+  const warned = mocks.warn.calls.find(
+    (c2) => (c2[1] as { action?: string } | undefined)?.action === 'translation_detect_failed',
+  );
+  assert.ok(warned, 'the failure must leave a trace naming why');
+  assert.match(String((warned![1] as { error?: string }).error), /allowlist/);
 });

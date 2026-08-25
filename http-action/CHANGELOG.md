@@ -5,6 +5,31 @@ and the top entry's version must match `manifest.json`.
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-08-25
+
+### Changed
+
+- Dedup markers are stored in a fixed number of sharded keys rather than one key per answered message.
+  The host re-measures its storage quota by stat-ing every key on every write, synchronously, on the
+  gateway event loop, so a busy install (about 86,000 markers inside the 3-day window at 20 commands a
+  minute) made every write in every plugin on the gateway stat that many files. Markers written before
+  this are still honoured and are drained by the existing hourly sweep, so no command is re-fired.
+- Enabling the plugin now warns when an action sets `request.headers`. Those values are returned
+  unmasked by the plugins API: the host redacts config per schema field, and every action lives inside
+  one `actions` field, so marking it secret would hide the action definitions themselves. Credentials
+  belong in the Token / API key field.
+
+### Fixed
+
+- A poll or a shared contact card no longer triggers an action. OpenWA 0.23.2 fills the message body for
+  both, so a poll titled with a configured prefix could fire a real request against the configured
+  backend and claim the message. Business button and list replies still trigger actions.
+- A whitespace-only body is ignored, matching the guard the other command plugins use.
+
+### Changed
+
+- **Verified against OpenWA v0.23.3** (testedOpenWAVersion 0.23.0 → 0.23.3).
+
 ## [0.2.6] - 2026-08-20
 
 ### Changed

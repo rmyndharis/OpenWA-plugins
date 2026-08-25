@@ -90,12 +90,17 @@ export default class ChatFlow implements IPlugin {
   private async onMessage(ctx: PluginContext, hook: HookContext<IncomingMessage>): Promise<HookResult> {
     if (hook.source !== 'Engine' || !hook.sessionId) return { continue: true };
     const m = hook.data;
-    // `!m.body.trim()` matters as much as the type check: a message with no text — a sticker, a voice
-    // note, an image sent without a caption — carries an empty body, so it used to reach the menu.
-    // (A captioned image does carry its caption and still does.) With the documented empty `trigger` that STARTED
-    // the flow; with a flow already open it answered "Invalid option" to a photo and claimed the event
+    // Two guards, both load-bearing. `!m.body.trim()` drops what carries no text at all: a sticker, a
+    // voice note, an image sent without a caption. (A captioned image carries its caption and still
+    // reaches the menu, deliberately.) With the documented empty `trigger` an empty body STARTED the
+    // flow; with a flow already open it answered "Invalid option" to a photo and claimed the event
     // from sibling auto-repliers.
     if (m.fromMe || typeof m.body !== 'string' || !m.body.trim() || !m.chatId || !m.id) return { continue: true };
+    // The type denylist drops what DOES carry text but was never typed at this menu. Since host 0.23.2
+    // a shared contact card arrives with its full vCard as the body and a poll with its question, so
+    // body alone no longer means "a human typed this". 'unknown' is deliberately admitted: business
+    // button and list replies land there, and a tapped menu button is exactly what this plugin wants.
+    if (m.type === 'contact' || m.type === 'poll') return { continue: true };
 
     let liveCfg;
     try {

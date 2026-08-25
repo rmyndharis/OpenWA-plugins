@@ -143,7 +143,10 @@ test('healthCheck is healthy with an empty queue; onDisable/onUnload run cleanly
 // every one of its (up to 5) attempts instead of ever converging. That's what relayInbound's `recoverOn404`
 // option exists to prevent — this pins that the drain call site actually passes it false.
 test('retry drain leaves a dangling mapping alone on a 404 — no rebuild, the retry budget absorbs it', async (t) => {
-  const { ctx, storageMap } = fakeCtx(goodConfig);
+  // relayOwnMessages off so the message:sent dispatch below captures this session's resolved config
+  // without relaying anything: the drain re-posts only for sessions the plugin has actually seen an
+  // event for, because that dispatch is the only place a per-session config resolves.
+  const { ctx, storageMap, cbs } = fakeCtx({ ...goodConfig, relayOwnMessages: false });
   // A stale mapping: Chatwoot conversation 55 is gone (operator deleted it out of band) but the mapping
   // still points at it.
   storageMap.set('conv:sess:c@wa', { conversationId: 55, contactId: 9, sourceId: 'src' });
@@ -177,6 +180,11 @@ test('retry drain leaves a dangling mapping alone on a 404 — no rebuild, the r
   t.mock.timers.enable({ apis: ['setInterval'] });
   const adapter = new ChatwootAdapter();
   await adapter.onEnable(ctx);
+  // One event for this session, so its config is resolved and captured the way production does.
+  await cbs['message:sent']({
+    source: 'Engine', sessionId: 'sess', timestamp: new Date(),
+    data: { id: 'seen', from: 'me', to: 'x', chatId: 'other@wa', body: 'x', type: 'chat', timestamp: 0, fromMe: true, isGroup: false },
+  });
   t.mock.timers.tick(RETRY_INTERVAL_MS);
   // The drain's own work (storage + the fetch double above) all settles on real promises; flush them.
   await new Promise(res => setImmediate(res));
@@ -188,6 +196,52 @@ test('retry drain leaves a dangling mapping alone on a 404 — no rebuild, the r
   const retry = storageMap.get('retry:sess:m1') as { attempts: number } | undefined;
   assert.ok(retry, 'the queued message is kept for the next drain, not treated as delivered');
   assert.equal(retry?.attempts, 1, 'the failed attempt bumps the retry counter — the budget absorbs the 404, nothing else does');
+
+  await adapter.onDisable();
+});
+
+test('the retry drain never re-posts one session\'s message with another session\'s Chatwoot account', async (t) => {
+  // ctx.config resolves the firing session's slice only inside a hook or webhook dispatch; on the retry
+  // timer it falls back to the base slice, and no capability resolves another session's config. The
+  // drain used to re-post every queued entry with that base slice, so on the multi-tenant shape this
+  // plugin advertises, tenant B's customer message went to tenant A's helpdesk with tenant A's token,
+  // and for a chat with no mapping yet it minted the conversation there and stored the mapping for good.
+  const { ctx, storageMap, cbs } = fakeCtx({ ...goodConfig, relayOwnMessages: false });
+  // Queued for a session this worker has never dispatched an event for.
+  storageMap.set('retry:tenantB:m1', {
+    sessionId: 'tenantB',
+    chatId: 'c@wa',
+    msg: { id: 'm1', from: 'x', to: 'y', chatId: 'c@wa', body: 'hi', type: 'chat', timestamp: 0, fromMe: false, isGroup: false },
+    attempts: 0,
+    enqueuedAt: 1,
+  });
+  const calls: string[] = [];
+  ctx.net.fetch = (async (url: string, init?: { method?: string }) => {
+    calls.push(`${init?.method ?? 'GET'} ${url}`);
+    return { ok: true, status: 200, headers: {}, body: '{}' };
+  }) as typeof ctx.net.fetch;
+
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const adapter = new ChatwootAdapter();
+  await adapter.onEnable(ctx);
+  t.mock.timers.tick(RETRY_INTERVAL_MS);
+  await new Promise(res => setImmediate(res));
+  await new Promise(res => setImmediate(res));
+
+  assert.deepEqual(calls, [], 'nothing may be posted for a session whose own config cannot be resolved');
+  const held = storageMap.get('retry:tenantB:m1') as { attempts: number } | undefined;
+  assert.ok(held, 'the entry is kept, not delivered and not dropped');
+  assert.equal(held?.attempts, 0, 'and not counted as a failed attempt: a retry could never have fixed this');
+
+  // Once that session dispatches an event, its slice is captured and the entry drains normally.
+  await cbs['message:sent']({
+    source: 'Engine', sessionId: 'tenantB', timestamp: new Date(),
+    data: { id: 'seen', from: 'me', to: 'x', chatId: 'other@wa', body: 'x', type: 'chat', timestamp: 0, fromMe: true, isGroup: false },
+  });
+  t.mock.timers.tick(RETRY_INTERVAL_MS);
+  await new Promise(res => setImmediate(res));
+  await new Promise(res => setImmediate(res));
+  assert.ok(calls.length > 0, 'a known session drains as before');
 
   await adapter.onDisable();
 });

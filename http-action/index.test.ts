@@ -30,9 +30,9 @@ function fakeStore(): StorageLike & { m: Map<string, unknown> } {
   };
 }
 
-const msg = (body: string, id = 'm1'): IncomingMessage => ({
+const msg = (body: string, id = 'm1', type = 'text'): IncomingMessage => ({
   id, from: '62@s.whatsapp.net', to: 'bot', chatId: 'c1',
-  body, type: 'text', timestamp: 0, fromMe: false, isGroup: false,
+  body, type, timestamp: 0, fromMe: false, isGroup: false,
 }) as IncomingMessage;
 
 // Minimal PluginContext-shaped ctx for the priority/claim tests below — the file's other tests exercise
@@ -60,15 +60,33 @@ function makeCtx(overrides: {
 
 // Enables a fresh HttpAction (one '/stock' action) and fires one message:received with `body`, returning
 // the synchronous {continue} result. The floated handleMessage call is out of scope — never awaited here.
-async function runHook(body: string) {
+async function runHook(body: string, type = 'text') {
   let handler: HookHandler | undefined;
   const ctx = makeCtx({ registerHook: (_e, h) => { handler = h; } });
   await new HttpAction().onEnable(ctx as never);
   return handler!({
     event: 'message:received', source: 'Engine', sessionId: 's1', timestamp: new Date(),
-    data: msg(body),
+    data: msg(body, 'm1', type),
   });
 }
+
+// From host 0.23.2 a poll arrives with its question as the body and a contact card with its vCard, so a
+// non-empty body no longer means someone typed a command. This plugin performs real writes against the
+// operator's backend, which makes an accidental trigger the most expensive one in the catalog.
+test('a poll or a contact card never triggers an action', async () => {
+  assert.equal((await runHook('/stock ABC')).continue, false,
+    'guard rail: typed as text this body DOES trigger the action and claim the message');
+  assert.equal((await runHook('/stock ABC', 'poll')).continue, true,
+    'a poll titled with a configured prefix must not fire a request');
+  assert.equal((await runHook('/stock ABC', 'contact')).continue, true,
+    'nor may a contact card');
+  assert.equal((await runHook('/stock ABC', 'unknown')).continue, false,
+    'a tapped business button is a legitimate way to invoke an action');
+});
+
+test('a whitespace-only body is ignored', async () => {
+  assert.equal((await runHook('   ')).continue, true);
+});
 
 // ── Co-installation: claim + priority (PLUGIN-STANDARD.md) ─────────────────────────────────────────
 

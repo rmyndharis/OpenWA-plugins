@@ -8,6 +8,29 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-08-25
+
+### Fixed
+
+- **An overnight window now covers the following morning, not the same one.** A window such as
+  `22:00-06:00` under `mon` was read entirely out of the Monday entry, so the plugin stayed silent on
+  Monday morning, which nothing had declared open, and replied on Tuesday morning, which the Monday
+  window actually covers. A window belongs to the day it opens on. This supersedes the 0.2.2 note that
+  described an overnight window as open late and early on the same day.
+- A blank `cooldownSec` falls back to the 3600s default instead of disabling the throttle. An empty
+  string became `0`, which is the documented "reply every time" value, so every after-hours message
+  from the same contact drew its own reply.
+
+### Added
+
+- A `healthCheck` reporting the live timezone and cooldown. It turns unhealthy when a config edit made
+  after enable fails validation: the plugin answers nothing in that state, and the host otherwise
+  reports a plugin with no health check as healthy.
+
+### Changed
+
+- **Verified against OpenWA v0.23.3** (testedOpenWAVersion 0.23.0 → 0.23.3).
+
 ## [0.2.5] - 2026-08-20
 
 ### Changed

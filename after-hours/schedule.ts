@@ -65,6 +65,22 @@ export function assertValidTimezone(tz: string): void {
   }
 }
 
+/** Minutes `w` covers on the weekday it OPENS on. A wrapped window contributes only its evening half. */
+function coversOnOpenDay(w: DayWindow | undefined, minutes: number): boolean {
+  if (!w) return false;
+  if (w.openMin === w.closeMin) return true; // "00:00-00:00" is open all day
+  if (w.openMin < w.closeMin) return minutes >= w.openMin && minutes < w.closeMin;
+  return minutes >= w.openMin;
+}
+
+/** Minutes the PREVIOUS weekday's window carries into this one: a wrapped window's morning half. */
+function coversAsSpillover(w: DayWindow | undefined, minutes: number): boolean {
+  // Only a wrapped window spills over. "00:00-00:00" ends at midnight, and a normal window closes on
+  // the same day it opened.
+  if (!w || w.openMin <= w.closeMin) return false;
+  return minutes < w.closeMin;
+}
+
 /** True when `date` falls outside the schedule's window for its weekday in `timezone`. */
 export function isAfterHours(date: Date, schedule: Schedule, timezone: string): boolean {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -76,13 +92,12 @@ export function isAfterHours(date: Date, schedule: Schedule, timezone: string): 
   }).formatToParts(date);
   const get = (type: string): string => parts.find(p => p.type === type)?.value ?? '';
   const day = WEEKDAY_TO_KEY[get('weekday')];
+  if (!day) return true; // an unmapped weekday, treated as closed
   const minutes = (Number(get('hour')) % 24) * 60 + Number(get('minute'));
-  const window = day ? schedule[day] : undefined;
-  if (!window) return true; // closed day (or an unmapped weekday — treat as closed)
-  // "00:00-00:00" means open all day.
-  if (window.openMin === window.closeMin) return false;
-  // A normal window opens and closes on the same day; a wrapped one ("22:00-06:00") opens in the
-  // evening and closes the next morning, so "inside" is late OR early rather than between.
-  if (window.openMin < window.closeMin) return minutes < window.openMin || minutes >= window.closeMin;
-  return minutes < window.openMin && minutes >= window.closeMin;
+  // A window belongs to the weekday it OPENS on, so "22:00-06:00" under `mon` is open on Monday evening
+  // and on TUESDAY morning. Reading both halves out of the `mon` entry left the plugin silent on Monday
+  // morning, which nothing had declared open, and replying on Tuesday morning, which the Monday window
+  // actually covers: wrong on both days, in opposite directions.
+  const yesterday = DAYS[(DAYS.indexOf(day) + 6) % 7]; // Sunday's previous day is Saturday
+  return !coversOnOpenDay(schedule[day], minutes) && !coversAsSpillover(schedule[yesterday], minutes);
 }

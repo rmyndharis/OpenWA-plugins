@@ -287,3 +287,69 @@ test('a conversation id claimed by two sessions never resolves without a scope',
 
   assert.equal(await store.getByConversation(42), null);
 });
+
+// ── Mapping storage is sharded, for the same reason the dedup markers are ────────────────────────────
+
+test('mapping key count stays constant however many chats are relayed', async () => {
+  // The host re-measures its quota on EVERY set by stat-ing every key of the plugin, synchronously, on
+  // the gateway event loop. Three unpruned keys per chat made every write in the whole plugin O(chats),
+  // and it only got worse the longer the install ran.
+  const storage = fakeStorage();
+  const store = new MappingStore(storage, fakeMappings());
+  for (let i = 0; i < 400; i++) {
+    await store.link('sess', `chat${i}@wa`, 'inst', { conversationId: i + 1, contactId: i, sourceId: `s${i}` });
+  }
+  const keys = await storage.list();
+  const standalone = keys.filter(k => k.startsWith('conv:') || /^wa:/.test(k));
+  assert.equal(standalone.length, 0, 'no per-chat standalone key survives a write');
+  assert.ok(keys.length <= SEEN_SHARDS, `bucket count is bounded, got ${keys.length} keys for 400 chats`);
+  // and every one of them still resolves
+  assert.equal((await store.getByChat('sess', 'chat399@wa'))?.conversationId, 400);
+  assert.deepEqual(await store.getByConversation(400, 'sess'), { sessionId: 'sess', chatId: 'chat399@wa' });
+});
+
+test('a mapping written by an earlier version still resolves, then is retired on its next write', async () => {
+  // Upgrade path. Bucket entries are keyed by the SAME string the standalone key used, so there is no
+  // migration pass: the same lookup finds either. Orphaning one would re-create that chat's Chatwoot
+  // conversation and split its thread, which is the one outcome this must never have.
+  const storage = fakeStorage();
+  const store = new MappingStore(storage, fakeMappings());
+  await storage.set('conv:sess:old@wa', { conversationId: 55, contactId: 9, sourceId: 'src' });
+
+  assert.equal((await store.getByChat('sess', 'old@wa'))?.conversationId, 55, 'the pre-upgrade key resolves');
+
+  await store.patch('sess', 'old@wa', { name: 'Budi' });
+  const after = await store.getByChat('sess', 'old@wa');
+  assert.equal(after?.conversationId, 55, 'the merge kept the existing document');
+  assert.equal(after?.name, 'Budi');
+  assert.equal(await storage.get('conv:sess:old@wa'), null, 'the standalone key is retired once rewritten');
+});
+
+test('unlinking removes both copies, so a retired standalone key cannot resurrect a mapping', async () => {
+  const storage = fakeStorage();
+  const store = new MappingStore(storage, fakeMappings());
+  await storage.set('conv:sess:z@wa', { conversationId: 77, contactId: 1, sourceId: 's' });
+  await store.unlinkByChatId('sess', 'z@wa');
+  assert.equal(await store.getByChat('sess', 'z@wa'), null, 'the fallback must not read back an unlinked mapping');
+});
+
+test('two chats sharing a bucket do not erase each other', async () => {
+  // A bucket is a read-modify-write shared across chats, and the per-chat locks cannot serialize it
+  // because they are keyed by chat. Interleaving would drop one chat's mapping entirely.
+  const storage = fakeStorage();
+  const store = new MappingStore(storage, fakeMappings());
+  const target = shardOf('conv:sess:a@wa');
+  let partner = '';
+  for (let i = 0; i < 100_000 && !partner; i++) {
+    if (shardOf(`conv:sess:p${i}@wa`) === target) partner = `p${i}@wa`;
+  }
+  assert.ok(partner, 'expected a colliding chat id');
+
+  await Promise.all([
+    store.link('sess', 'a@wa', 'inst', { conversationId: 1, contactId: 1, sourceId: 'a' }),
+    store.link('sess', partner, 'inst', { conversationId: 2, contactId: 2, sourceId: 'b' }),
+  ]);
+
+  assert.equal((await store.getByChat('sess', 'a@wa'))?.conversationId, 1);
+  assert.equal((await store.getByChat('sess', partner))?.conversationId, 2);
+});

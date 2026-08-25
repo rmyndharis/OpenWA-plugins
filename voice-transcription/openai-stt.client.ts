@@ -41,6 +41,18 @@ export interface OpenAiSttOptions {
  * `ctx.net.fetch`. The audio is uploaded as a binary multipart body (a Buffer) — it crosses the
  * sandbox→host boundary via structuredClone intact, which a string body could not.
  */
+/**
+ * True when the host refused the call because IT is saturated, not because the backend failed. Both
+ * limits are shared with every other plugin on the gateway, so this says nothing about the STT service
+ * and must not count toward the circuit breaker. The host throws a plain Error carrying no code, so the
+ * message is the only discriminator available; the match is deliberately on the phrase both messages
+ * share rather than on either exact string.
+ */
+export function isHostBackpressure(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  return /too many concurrent/i.test(message);
+}
+
 export class OpenAiSttClient implements SttProvider {
   private readonly base: string;
   private readonly failureThreshold: number;
@@ -70,9 +82,19 @@ export class OpenAiSttClient implements SttProvider {
       this.consecutiveFailures = 0;
       return result;
     } catch (err) {
-      this.consecutiveFailures++;
-      if (this.consecutiveFailures >= this.failureThreshold) {
-        this.openUntil = this.now() + this.cooldownMs;
+      // Host backpressure is not a backend failure. The host rejects a fetch past its GLOBAL 16-slot
+      // limit ("too many concurrent plugin net.fetch calls") and a capability call past the per-plugin
+      // in-flight limit ("too many concurrent capability calls"), both instantly and both shared with
+      // every other plugin on the gateway. Counting them opened the breaker on a perfectly healthy
+      // backend: a busy line saturates the pool, the rejections are immediate and therefore
+      // consecutive, and five in a row stopped transcription for the whole cooldown. Matched on the
+      // message because the host throws a plain Error with no code; matched loosely so a reworded
+      // limit still lands here rather than being counted as a backend fault.
+      if (!isHostBackpressure(err)) {
+        this.consecutiveFailures++;
+        if (this.consecutiveFailures >= this.failureThreshold) {
+          this.openUntil = this.now() + this.cooldownMs;
+        }
       }
       throw err;
     }

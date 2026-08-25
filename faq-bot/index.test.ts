@@ -32,6 +32,7 @@ async function runHook(
   config: { rules: Array<{ mode: string; pattern: string; reply: string }> } & Record<string, unknown>,
   body: string,
   onReply?: (text: string) => void,
+  type = 'text',
 ) {
   const { rules: ruleList, ...rest } = config;
   let handler: ((hook: unknown) => Promise<{ continue: boolean }>) | undefined;
@@ -44,9 +45,42 @@ async function runHook(
   await new FaqBot().onEnable(ctx as never);
   return handler!({
     source: 'Engine', sessionId: 's1', timestamp: new Date(),
-    data: { id: 'm1', chatId: 'c@x', body, fromMe: false, isGroup: false },
+    data: { id: 'm1', chatId: 'c@x', body, type, fromMe: false, isGroup: false },
   });
 }
+
+// A shared contact card and a poll carry real text in `body` from host 0.23.2 on, so a non-empty body
+// is no longer proof a human typed something at this bot. A vCard is free text and matches ordinary
+// rules readily; `fallbackReply` would answer one and claim the event from a plugin that handles media.
+const VCARD = 'BEGIN:VCARD\nVERSION:3.0\nFN:Budi Santoso\nORG:Toko Berkah\nTEL;TYPE=CELL:+628123456789\nEND:VCARD';
+
+test('a shared contact card never matches a rule and never claims the message', async () => {
+  const replies: string[] = [];
+  const rules = [{ mode: 'contains', pattern: 'toko', reply: 'Which store?' }];
+  const matchedAsText = await runHook({ rules }, VCARD, t => replies.push(t));
+  assert.equal(matchedAsText.continue, false, 'guard rail: as plain text this vCard DOES match the rule');
+
+  replies.length = 0;
+  const asContact = await runHook({ rules }, VCARD, t => replies.push(t), 'contact');
+  assert.equal(asContact.continue, true, 'a contact card must pass down the chain');
+  assert.deepEqual(replies, [], 'and must draw no reply');
+});
+
+test('a poll question never draws the fallback reply', async () => {
+  const replies: string[] = [];
+  const cfg = { rules: [{ mode: 'contains', pattern: 'xyzzy', reply: 'hit' }], fallbackReply: 'I did not understand' };
+  const asPoll = await runHook(cfg, 'Where should we eat on Friday?', t => replies.push(t), 'poll');
+  assert.equal(asPoll.continue, true, 'a poll must pass down the chain');
+  assert.deepEqual(replies, [], 'the fallback must not answer a poll');
+});
+
+test('a business button reply is still answered: type unknown stays admitted', async () => {
+  const replies: string[] = [];
+  const rules = [{ mode: 'exact', pattern: 'Order status', reply: 'Order 123 is on the way' }];
+  const tapped = await runHook({ rules }, 'Order status', t => replies.push(t), 'unknown');
+  assert.equal(tapped.continue, false, 'a tapped button is real user input and must be answered');
+  assert.deepEqual(replies, ['Order 123 is on the way']);
+});
 
 // Responder band (PLUGIN-STANDARD.md "Co-installation"): keyword rules are more specific than a bot that
 // answers everything, less specific than a command prefix.
@@ -221,4 +255,48 @@ test('a failed fallback send releases the cooldown slot instead of silencing the
   failNext = false;
   await fire('m2');
   assert.equal(delivered, 1, 'the next message must be able to retry the fallback');
+});
+
+test('the same repeated text is answered once, but different questions are all answered', async () => {
+  // A rule whose reply matches its own pattern is a fixed point, and an autoresponder on the other end
+  // then answers each of this plugin's replies forever, repeating one canned message. The throttle is
+  // keyed on that repeated TEXT, not on the rule: keying on the rule would silence a customer's second,
+  // genuinely different question whenever it happened to match the same rule, which costs more than the
+  // loop it prevents.
+  const rules = [
+    { mode: 'contains', pattern: 'harga', reply: 'Harga mulai 50rb' },
+    { mode: 'contains', pattern: 'jam', reply: 'Buka 09.00-17.00' },
+  ];
+  const sent: string[] = [];
+  let handler: ((h: unknown) => Promise<{ continue: boolean }>) | undefined;
+  const ctx = makeCtx({
+    config: { rules: JSON.stringify(rules) },
+    registerHook: (_e, h) => { handler = h as (hook: unknown) => Promise<{ continue: boolean }>; },
+    reply: async (_s, _c, _q, text) => { sent.push(text); return { messageId: 'x', timestamp: 0 }; },
+  });
+  const { default: FaqBot } = await import('./index.ts');
+  await new FaqBot().onEnable(ctx as never);
+  const fire = (body: string, id: string) =>
+    handler!({ source: 'Engine', sessionId: 's1', timestamp: new Date(),
+               data: { id, chatId: 'c@x', body, type: 'text', fromMe: false, isGroup: false } });
+
+  // The loop shape: one canned message arriving over and over.
+  const canned = 'Terima kasih, cek harga di katalog kami';
+  const first = await fire(canned, 'm1');
+  await fire(canned, 'm2');
+  await fire(canned, 'm3');
+  assert.equal(first.continue, false, 'a matched message is claimed');
+  assert.deepEqual(sent, ['Harga mulai 50rb'], 'the repeat is answered once, so the exchange cannot run away');
+
+  // Two DIFFERENT customer questions that both match the `harga` rule must both be answered.
+  await fire('berapa harga paket A?', 'm4');
+  await fire('kalau harga paket B?', 'm5');
+  assert.deepEqual(
+    sent,
+    ['Harga mulai 50rb', 'Harga mulai 50rb', 'Harga mulai 50rb'],
+    'a different question matching the same rule is still answered',
+  );
+
+  await fire('jam berapa buka', 'm6');
+  assert.equal(sent.length, 4, 'and a different rule is unaffected');
 });

@@ -1,7 +1,7 @@
 {
   "id": "voice-transcription",
   "name": "Voice Note Transcription",
-  "version": "1.2.7",
+  "version": "1.2.8",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Transcribes inbound WhatsApp voice notes to text via an OpenAI-compatible speech-to-text backend (self-hosted Speaches/faster-whisper or hosted Groq/OpenAI) and delivers a `message.transcription` event to your webhook \u2014 so bots and AI can read and reply to audio. Off the message-delivery path; disabled until enabled.",
@@ -20,8 +20,8 @@
     "openwa"
   ],
   "status": "beta",
-  "minOpenWAVersion": "0.7.0",
-  "testedOpenWAVersion": "0.23.0",
+  "minOpenWAVersion": "0.8.0",
+  "testedOpenWAVersion": "0.23.3",
   "provides": [
     "transcription"
   ],
@@ -129,7 +129,7 @@
         "title": "Delivery timeout (ms)",
         "default": 5000,
         "min": 1000,
-        "max": 30000
+        "max": 25000
       },
       "chatDelivery": {
         "type": "string",

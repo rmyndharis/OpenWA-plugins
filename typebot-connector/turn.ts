@@ -80,10 +80,18 @@ export async function handleTurn(deps: TurnDeps, sessionId: string, source: stri
     // `awaiting` must track the server even if a WhatsApp send then fails — otherwise the next reply would be
     // mapped against a stale input.
     const sid = resp.sessionId ?? state?.sessionId;
-    if (resp.input && sid) {
-      await deps.store.set(key, { sessionId: sid, awaiting: resp.input, lastActivity: deps.now() });
-    } else {
-      await deps.store.clear(key); // flow ended
+    try {
+      if (resp.input && sid) {
+        await deps.store.set(key, { sessionId: sid, awaiting: resp.input, lastActivity: deps.now() });
+      } else {
+        await deps.store.clear(key); // flow ended
+      }
+    } catch (e) {
+      // A rejected write (the host rejects every `set` once the plugin is at its storage quota) must not
+      // swallow the bubbles below: the server has already advanced and they are the only thing the
+      // contact can still be given. Losing the row costs them a restart on their next message; throwing
+      // here costs them that restart AND this whole turn.
+      deps.log('typebot session state write failed; delivering this turn anyway', e);
     }
 
     // Per-part isolation. State above already recorded that the prompt was delivered, so letting one

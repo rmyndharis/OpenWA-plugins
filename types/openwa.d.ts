@@ -1,14 +1,27 @@
 // Vendored OpenWA plugin contract. There is no published @openwa SDK package; keep this in sync
 // with the OpenWA version you target. All imports of this module must be `import type`.
 //
-// Last aligned against OpenWA core v0.20.0 (tag), verified field-by-field against
+// Last aligned against OpenWA core v0.23.3 (tag), verified field-by-field against
 // src/core/plugins/plugin.interfaces.ts, src/core/hooks/hook.interfaces.ts, plugin-net.ts,
 // sandbox/{worker-bootstrap,worker-capability,worker-hooks,worker-webhooks}.ts and
 // src/engine/interfaces/whatsapp-engine.interface.ts. Where this file narrows the host on purpose it
 // says so; where the host is stricter than this file, the comment names the runtime consequence.
-// The 0.19.0 → 0.20.0 diff over those files is empty; 0.20.0's plugin-facing changes live elsewhere
-// (the production #sha256 pin on URL installs in plugin-download.ts, ingress text/plain reflections,
-// credential-dir modes) and none of them alter a member this file tracks. The 0.14.5 → 0.19.0 diff
+// The 0.20.0 → 0.23.3 diff over the four plugin-runtime sources is EMPTY. The engine interface gained
+// only optional trailing parameters (mentions on replyToMessage/editMessage, messageIds on sendSeen),
+// none of them reachable from a plugin: the sandbox capability router is a 19-verb allowlist carrying
+// neither verb. The one plugin-visible change in that range is BEHAVIORAL and lives in the engine
+// adapter rather than the contract. 0.23.2 made the Baileys body extractor fill `body` for polls,
+// shared events, business button replies and contact cards, matching what whatsapp-web.js has always
+// returned. See the `IncomingMessage.body` note below: it invalidated the guard this file used to
+// recommend, and five shipped plugins had followed that recommendation.
+// The 0.23.3 alignment also closed nine SILENT OMISSIONS in PluginManifest, every one of them typed by
+// the host and riding the index signature below as an unknown extra: description, author, homepage,
+// repository, license, dependencies, peerDependencies, provides and requires. Most are set by every
+// manifest in this repo, and the host returns description, author and provides on GET /plugins, so a
+// typo in one of those blanks a dashboard card and nothing complains.
+// The 0.19.0 → 0.20.0 diff over those files was empty too; 0.20.0's plugin-facing changes lived
+// elsewhere (the production #sha256 pin on URL installs in plugin-download.ts, ingress text/plain
+// reflections, credential-dir modes) and none of them altered a member this file tracks. The 0.14.5 → 0.19.0 diff
 // over those files changes no member this file tracks either: the one behavioral
 // addition in that range — the "storage:use" gate on ctx.storage — was already vendored above. That
 // alignment also fixed two SILENT OMISSIONS that had survived every earlier pass: `manifest.sdkVersion`
@@ -30,13 +43,14 @@
 // select, array/items, object/properties, min/max/pattern — see PluginConfigField) is plain manifest
 // JSON — the plugin still reads `ctx.config` as `Record<string, unknown>` and validates defensively.
 //
-// Host bounds a plugin cannot see from the types (v0.12.0 defaults, all host-side):
+// Host bounds a plugin cannot see from the types (all host-side, re-checked at v0.23.3):
 //   30 s per lifecycle phase (onLoad/onEnable/onDisable/onUnload) and per capability call, except
-//   the send verbs (messages.sendText / messages.reply / conversations.send) which get 120 s;
+//   the send verbs (ctx.messages.sendText / ctx.messages.reply / ctx.conversations.send) at 120 s;
 //   5 s per hook dispatch (overrun → the host fails OPEN with {continue:true} and drops your result);
+//   5 s per ingress webhook dispatch; 5 s for healthCheck (an overrun is reported unhealthy, not hung);
 //   32 concurrent capability calls per plugin (the 33rd throws);
 //   16 concurrent net.fetch calls GLOBALLY — shared across ALL plugins and workers, not per plugin;
-//   50 MiB total ctx.storage per plugin; 10 MiB net.fetch response body;
+//   50 MiB total ctx.storage per plugin; 10 MiB net.fetch response body; 256 MB worker heap;
 //   200 log lines / 10 s, 8 KiB per line.
 
 export type HookEvent =
@@ -188,25 +202,49 @@ export interface PluginManifest {
   id: string;
   name: string;
   version: string;
-  type: string;
+  /** Deliberate narrowing of the host's PluginType enum: INSTALLABLE_TYPES is {'extension'}, so a
+   *  manifest declaring engine/storage/queue/auth is rejected at load (install: HTTP 400; boot: the
+   *  directory is skipped and the registry entry is forced to ERROR). The other tiers are built-ins. */
+  type: 'extension';
   main: string;
+  /** Dashboard-facing metadata, all typed by the host and all set by every manifest here. The host
+   *  returns `description` and `author` on GET /plugins (with `provides` below), so a misspelled key
+   *  blanks the dashboard card rather than failing anything: the index signature at the bottom of this
+   *  interface accepts it as an unknown extra and nothing else checks the name. `homepage`,
+   *  `repository` and `license` are typed by the host but read only by this repo's catalog. */
+  description?: string;
+  author?: string;
+  homepage?: string;
+  repository?: string;
+  license?: string;
   permissions?: string[];
   sessions?: string[];
   hooks?: HookEvent[];
+  /** Feature names this plugin advertises. Returned by the host on GET /plugins (absent reads as []). */
+  provides?: string[];
+  /** Feature names this plugin expects from other plugins. Typed by the host, read by nothing in it. */
+  requires?: string[];
+  /** npm-style dependency maps. Typed by the host, read by nothing in it: there is no install-time
+   *  `npm install`, so a plugin bundles its dependencies into `main` and these stay documentation. */
+  dependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
   /** Integration SDK major.minor the plugin was authored against (e.g. '1' or '1.2'). STRING — the
    *  host's ingress validation calls sdkVersion.split('.'), so a JSON number (1, not "1") throws at
    *  load and the whole plugin comes up ERROR. Only the major is enforced; absent = treated as '1'. */
   sdkVersion?: string;
   /** Inbound webhook routes this plugin claims (needs the "webhook:ingress" permission). Validated by
-   *  the host at load: SDK-major match, the permission, unique non-empty routes, toleranceSec > 0, and
-   *  no scheme:'none' route unless the operator opted in (ALLOW_UNSIGNED_INGRESS). */
+   *  the host at load, and any failure takes the WHOLE plugin down, not just the route (install: HTTP
+   *  400; boot: the directory is skipped and the registry entry is forced to ERROR): SDK-major match,
+   *  the permission, unique non-empty routes, toleranceSec > 0, no scheme:'none' route unless the
+   *  operator opted in (ALLOW_UNSIGNED_INGRESS), response.ack.status an integer in 100..599, and every
+   *  response.ack header name an RFC 7230 token whose value carries no CR/LF. */
   ingress?: PluginIngressRoute[];
   /** v0.7: per-session activation (default true). The platform owns which sessions a plugin runs for. */
   sessionScoped?: boolean;
   /** v0.7: outbound HTTP host allowlist for ctx.net.fetch — "host" or "host:port"; deny by default.
    *  The catalogue uses both forms: a bare host matches any port, which is what most entries rely on.
    *  v1: `allowConfigHosts` additionally admits the host of each named config key (e.g. "baseUrl"). */
-  net?: { allow: string[]; allowConfigHosts?: string[] };
+  net?: { allow?: string[]; allowConfigHosts?: string[] };
   /** v0.7: a sandboxed-iframe config editor served by the host. */
   configUi?: { entry: string; height?: number };
   /** Declarative config schema (rendered by the host into an authenticated form). */
@@ -433,8 +471,17 @@ export interface IncomingMessage {
   from: string;
   to: string;
   chatId: string;
-  /** Empty string for every non-text type (sticker, voice, image without caption, …) — guard on
-   *  `!body.trim()`, not just on `typeof body`, before treating it as a command or menu key. */
+  /**
+   * Empty for sticker, voice, image/video/document without a caption, call, revoked and masked.
+   * NOT empty for every other non-text type: a poll carries its question, a shared event its name, a
+   * tapped business button its label, and a shared contact card its vCard (several cards arrive
+   * newline-joined). whatsapp-web.js has always populated these; Baileys matched it in host 0.23.2.
+   *
+   * So `!body.trim()` is NOT a test for "a human typed this". A matcher that treats the body as a
+   * command, a menu key or prose to forward must gate on `type` too, denying 'contact' and 'poll'.
+   * Do NOT deny 'unknown': business button and list replies land there and are real user input.
+   * Do NOT allowlist 'text': media captions arrive in `body` under their own media type.
+   */
   body: string;
   /** Host `MessageType`: text|image|video|audio|voice|document|sticker|location|contact|poll|call|
    *  revoked|masked|unknown. Kept as `string` here so a new host type never breaks a typecheck. */
@@ -485,6 +532,8 @@ export interface IncomingMessage {
   };
   // The message this one replies to (swipe-to-reply / quote), when present. `id` is the quoted WhatsApp
   // message id; `body` is its text. Carried on the inbound hook payload for reply-threading relays.
+  // Since host 0.23.2 the quote runs through the SAME extractor as the live message, so a quoted poll
+  // or contact card carries its text here rather than an empty string. Same caveat as `body` above.
   quotedMessage?: { id: string; body: string };
   // Shared location (`type: 'location'`), when present.
   location?: { latitude: number; longitude: number; description?: string; address?: string; url?: string };

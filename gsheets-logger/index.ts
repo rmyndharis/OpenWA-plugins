@@ -49,7 +49,10 @@ export function parseConfig(raw: Record<string, unknown>): { config: LoggerConfi
 
   // Clamp to safe positives: a non-numeric interval coerces to NaN, and setInterval(NaN) fires at ~1ms
   // (a flush hot-loop / Sheets-quota burn). A NaN batch size silently disables the size trigger. A finite
-  // but sub-second interval (e.g. 0.001) is likewise a hot-loop, so floor it to 1s.
+  // but sub-second interval (e.g. 0.001) is likewise a hot-loop, so floor it to 1s. The ceiling is the
+  // same hot-loop from the other end: setInterval takes a 32-bit millisecond delay, so an interval past
+  // 2_147_483s overflows, warns, and silently fires at ~1ms instead. The host never validates
+  // configSchema bounds, so the manifest's min/max are advisory and both ends are the plugin's job.
   const flushIntervalSec = Number(raw.flushIntervalSec ?? 5);
   const flushBatchSize = Number(raw.flushBatchSize ?? 20);
   return {
@@ -57,7 +60,10 @@ export function parseConfig(raw: Record<string, unknown>): { config: LoggerConfi
       serviceAccountJson,
       spreadsheetId,
       sheetTab: String(raw.sheetTab ?? 'Logs'),
-      flushIntervalSec: Number.isFinite(flushIntervalSec) && flushIntervalSec > 0 ? Math.max(1, flushIntervalSec) : 5,
+      flushIntervalSec:
+        Number.isFinite(flushIntervalSec) && flushIntervalSec > 0
+          ? Math.min(2_147_483, Math.max(1, flushIntervalSec))
+          : 5,
       flushBatchSize: Number.isFinite(flushBatchSize) && flushBatchSize >= 1 ? flushBatchSize : 20,
     },
     sa,
@@ -219,7 +225,12 @@ export default class GSheetsLogger implements IPlugin {
     if (dropped > 0) {
       this.ctx?.logger.warn(`gsheets-logger: buffer cap exceeded, dropped ${dropped} oldest rows`);
     }
-    if (this.buffer.length >= this.batchSize) void this.flush();
+    // Only while flushes are landing. A failed flush restores the whole batch, so the buffer sits at or
+    // above batchSize and every later message started another append: 30 messages made 28 attempts
+    // against the 403 the setup guide tells operators to expect, walking straight into Google's
+    // per-minute write quota. Until one succeeds and clears the error, the timer is the only retry
+    // path, which is the cadence the README documents.
+    if (this.buffer.length >= this.batchSize && this.lastFlushError === null) void this.flush();
   }
 
   // Returns the in-flight flush when one is running, so onDisable can `await this.flush()` and wait

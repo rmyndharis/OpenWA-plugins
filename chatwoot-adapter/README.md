@@ -15,13 +15,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chatwoot-adapter` |
-| **Version** | 0.9.5 |
-| **Released** | 2026-08-20 |
+| **Version** | 0.9.6 |
+| **Released** | 2026-08-25 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.7 (tested 0.23.0) |
+| **Requires OpenWA** | ≥ 0.8.7 (tested 0.23.3) |
 | **Keywords** | chatwoot, helpdesk, inbox, handover, two-way, agent, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/chatwoot-adapter](https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter) |
 <!-- END DETAILS -->
@@ -156,6 +156,11 @@ instance id or route — so re-copy the ingress URL from the mint response.
   gate, `net.allowConfigHosts`), the `conversation.send` media/voice types for outbound attachments, the
   sandbox-bridged `engine.getChatHistory` for the history backfill, and `engine.canonicalChatId` for `@lid`
   resolution.
+- **Polls, contact cards, shared events and button taps carry their text from OpenWA 0.23.2 on the
+  Baileys engine.** A poll's question, a shared contact's vCard, an event name and a tapped button's
+  label now appear as the Chatwoot message text instead of the `📊 Poll` / `👤 Contact` marker, which
+  is what the whatsapp-web.js engine has always relayed. The markers still appear when the shape
+  carries no text. In a group these messages now also carry the `*Sender:*` prefix.
 - **Agent replies containing a link look plainer from OpenWA 0.14.0 on the Baileys engine.** WhatsApp used
   to draw a preview card for a URL in an agent's reply. From 0.14.0 Baileys only generates that card when
   the sender asks for it, and a plugin has no way to ask, so those replies arrive as plain links. Delivery
@@ -174,22 +179,28 @@ instance id or route — so re-copy the ingress URL from the mint response.
 
 ### Known limitations
 
-- **Mapping storage grows with use (by design).** The `conv:`/`wa:` conversation-mapping entries in
-  plugin storage are never pruned — deleting a mapping would sever a live thread, and there is no safe
-  signal that a Chatwoot conversation will never be written to again. Growth is one small record per
-  WhatsApp chat ever relayed, so it stays modest in practice; `healthCheck` reports retry-queue and
-  dead-letter health if you need operational signals. The 3-day `seen:` dedup markers, by contrast,
-  expire and are pruned hourly.
+- **Mapping storage grows with use (by design).** A conversation mapping is never pruned: deleting one
+  would sever a live thread, and there is no safe signal that a Chatwoot conversation will never be
+  written to again. Growth is one small record per WhatsApp chat ever relayed, held in a fixed number of
+  sharded storage keys so the key count stays constant however many chats are relayed. `healthCheck`
+  reports retry-queue and dead-letter health if you need operational signals. The 3-day dedup markers,
+  by contrast, expire and are pruned hourly.
 
 ### Per-session config
 
-**Supported.** Every config field (`baseUrl`, `apiToken`, `accountId`, `inboxId`, `relayGroups`,
-`relayMedia`, `relayOwnMessages`, `backfillLimit`, `backfillAllOnce`) may be overridden per WhatsApp
-session via the dashboard; an override takes effect on the next inbound message or webhook delivery
-(config is re-read per event). This is the **first-class multi-tenant shape**: bind one instance per
-WhatsApp session, each pointing at a different Chatwoot account/inbox, and the session-scoped mapping
+**Supported, with a caveat.** Every config field (`baseUrl`, `apiToken`, `accountId`, `inboxId`,
+`relayGroups`, `relayMedia`, `relayOwnMessages`, `backfillLimit`, `backfillAllOnce`) may be overridden
+per WhatsApp session via the dashboard; an override takes effect on the next inbound message or webhook
+delivery (config is re-read per event). This is the **first-class multi-tenant shape**: bind one instance
+per WhatsApp session, each pointing at a different Chatwoot account/inbox, and the session-scoped mapping
 store isolates them. The per-session `baseUrl` is auto-added to the outbound allowlist via
 `allowConfigHosts`.
+
+**Caveat for the retry queue.** A session's config resolves only while OpenWA is dispatching an event for
+that session, and the queue of failed inbound relays is drained on a timer instead. A queued message is
+re-posted only once the plugin has seen an event for its session (its next message in either direction)
+since it was last enabled; until then it stays queued and counted under pending retries in the plugin's
+health, rather than being posted to whichever Chatwoot the base config names.
 
 ## Security
 

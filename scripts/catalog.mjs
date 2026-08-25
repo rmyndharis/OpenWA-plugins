@@ -54,17 +54,22 @@ const HOST_PERMISSIONS = new Set([
 ]);
 
 // Manifest hygiene gates (hard failures) and soft warnings. Keep these aligned with PLUGIN-STANDARD.md.
-function validateManifest(id, manifest) {
+export function validateManifest(id, manifest) {
   // `id` here is the DIRECTORY name, and it is what every path in this repo is built from — the plugin
   // folder, the zip name, the release tag. `manifest.id` is what the host installs under and what the
   // catalogue publishes. If the two disagree, the download URL points at one plugin and the installed
   // plugin calls itself another.
   // PLUGIN-STANDARD states an id shape and a reserved list; nothing checked either, so both could be
   // violated by a plugin that then took a path or a catalogue slot it should not have.
-  if (!ID_SHAPE.test(manifest.id ?? '')) {
+  // ID_SHAPE allows a dot, so it accepts `a..b`, which the host rejects outright as a path-escape
+  // shape (plugin-manifest.ts). Refuse it here rather than on the operator's gateway, after release.
+  if (!ID_SHAPE.test(manifest.id ?? '') || String(manifest.id).includes('..')) {
     throw new Error(`${id}: manifest.id "${manifest.id}" does not match ${ID_SHAPE} (PLUGIN-STANDARD.md)`);
   }
-  if (RESERVED_IDS.has(manifest.id)) {
+  // Lowercased before the lookup, the way the host does it. ID_SHAPE accepts mixed case, so a manifest
+  // id of `Auto-Reply` passed every gate here, took a tag, a published artifact and a catalogue slot,
+  // and was then refused at install as reserved, with the release already public.
+  if (RESERVED_IDS.has(String(manifest.id).toLowerCase())) {
     throw new Error(`${id}: "${manifest.id}" is a reserved id`);
   }
   if (manifest.id !== id) {
@@ -77,6 +82,16 @@ function validateManifest(id, manifest) {
     throw new Error(
       `${id}: repository must be a github.com URL under ${[...RELEASE_OWNERS].join(' or ')} — ` +
         `the catalogue builds its download URLs from it (got ${manifest.repository ?? 'nothing'})`,
+    );
+  }
+  // Each plugin README's Details table renders this link labelled with THIS repository's name, so an
+  // ungated homepage publishes a link that says one repository and goes to another. Checked after the
+  // repository gate above, so the prefix is already known to be a release-owner github.com URL. The
+  // trailing slash stops a sibling repository under the same owner from prefix-matching.
+  if (manifest.homepage !== undefined && !String(manifest.homepage).startsWith(`${manifest.repository}/`)) {
+    throw new Error(
+      `${id}: homepage must be a URL under ${manifest.repository}: the README Details table renders ` +
+        `it as this repository (got ${JSON.stringify(manifest.homepage)})`,
     );
   }
   if (manifest.sessionScoped === undefined) {
@@ -122,12 +137,12 @@ function validateManifest(id, manifest) {
   }
 }
 
-// Top released CHANGELOG heading: `## [x.y.z] — YYYY-MM-DD` (skips `## [Unreleased]`).
+// Top released CHANGELOG heading: `## [x.y.z] - YYYY-MM-DD` (skips `## [Unreleased]`).
 function readChangelogTop(id) {
   const path = join(ROOT, id, 'CHANGELOG.md');
   if (!existsSync(path)) throw new Error(`${id}: missing CHANGELOG.md`);
   const m = readFileSync(path, 'utf8').match(/^##\s*\[(\d+\.\d+\.\d+)\]\s*[—–-]\s*(\d{4}-\d{2}-\d{2})/m);
-  if (!m) throw new Error(`${id}: CHANGELOG.md has no released "## [x.y.z] — YYYY-MM-DD" heading`);
+  if (!m) throw new Error(`${id}: CHANGELOG.md has no released "## [x.y.z] - YYYY-MM-DD" heading`);
   return { version: m[1], date: m[2] };
 }
 
@@ -212,7 +227,7 @@ function detailsBlock(e) {
     `| **Type** | \`${e.type}\` |`,
     `| **Requires OpenWA** | ≥ ${e.minOpenWAVersion} ${e.testedOpenWAVersion ? `(tested ${e.testedOpenWAVersion})` : '(not yet smoke-tested)'} |`,
     `| **Keywords** | ${e.keywords.join(', ')} |`,
-    `| **Repository** | [OpenWA-plugins/${e.id}](${e.homepage}) |`,
+    `| **Repository** | [OpenWA-plugins/${e.id}](${e.homepage ?? e.repoUrl}) |`,
     '<!-- END DETAILS -->',
   ].join('\n');
 }
@@ -235,6 +250,9 @@ function replaceRegion(path, regex, replacement, label) {
   return current.replace(regex, replacement);
 }
 
+// Only run when invoked directly. validateManifest is imported by scripts/catalog.test.mjs, and
+// importing this module must not rebuild every plugin, which buildEntry does to compute the pin.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 const entries = discoverPlugins().map(buildEntry);
 
 const targets = [
@@ -258,4 +276,5 @@ if (CHECK) {
 } else {
   for (const t of stale) writeFileSync(t.path, t.next);
   console.log(`Catalog written (${entries.length} plugin(s)); updated ${stale.length} file(s).`);
+}
 }

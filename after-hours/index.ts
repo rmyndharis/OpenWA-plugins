@@ -26,7 +26,11 @@ export function parseConfig(raw: Record<string, unknown>): { config: AfterHoursC
   const timezone = String(raw.timezone ?? 'UTC') || 'UTC';
   assertValidTimezone(timezone);
 
-  const cooldown = Number(raw.cooldownSec ?? 3600);
+  // `Number("")` is 0, and 0 is the documented "reply every time" value, so a blank cooldownSec (an
+  // empty or whitespace-only string, which the config REST API stores verbatim) silently disabled the
+  // throttle instead of falling back to the default. Blank means "not set", not zero.
+  const rawCooldown = typeof raw.cooldownSec === 'string' && !raw.cooldownSec.trim() ? undefined : raw.cooldownSec;
+  const cooldown = Number(rawCooldown ?? 3600);
   return {
     schedule,
     config: {
@@ -53,6 +57,8 @@ const MAX_RETRY_ENTRIES = 5_000;
 const HOOK_PRIORITY = 95;
 
 export default class AfterHours implements IPlugin {
+  // Held for healthCheck(), which the host calls with no context of its own.
+  private ctx: PluginContext | null = null;
   private readonly repliedAt = new Map<string, number>();
   // Absolute "do not retry before" deadline per chat, set when a reply FAILS. Kept separately instead of
   // rewinding the cooldown timestamp: a rewind is only meaningful against the cooldown value it was
@@ -62,6 +68,7 @@ export default class AfterHours implements IPlugin {
   private readonly retryNotBefore = new Map<string, number>();
 
   async onEnable(ctx: PluginContext): Promise<void> {
+    this.ctx = ctx;
     parseConfig(ctx.config); // fail-fast: surface invalid config at enable, not per-message
     ctx.registerHook(
       'message:received',
@@ -72,6 +79,23 @@ export default class AfterHours implements IPlugin {
 
   async onConfigChange(ctx: PluginContext, _newConfig: Record<string, unknown>): Promise<void> {
     parseConfig(ctx.config); // re-validate on change (fail-fast feedback in the dashboard)
+  }
+
+  /**
+   * Reports on the BASE config: outside a hook the host resolves no per-session slice. A config edit
+   * that fails validation after enable is only logged (the host swallows onConfigChange's rejection),
+   * and every message then hits the same parse failure and is skipped. Without this the host answers
+   * "Plugin does not implement health check" with healthy:true, so the dashboard shows the plugin
+   * enabled and healthy while it answers nothing, indefinitely.
+   */
+  async healthCheck(): Promise<{ healthy: boolean; message?: string }> {
+    if (!this.ctx) return { healthy: false, message: 'after-hours: not enabled' };
+    try {
+      const { config } = parseConfig(this.ctx.config);
+      return { healthy: true, message: `after-hours: ${config.timezone}, cooldown ${config.cooldownSec}s` };
+    } catch (e) {
+      return { healthy: false, message: e instanceof Error ? e.message : String(e) };
+    }
   }
 
   // Returns true when this plugin sent the away message, so the hook can claim it and stop another bot

@@ -6,6 +6,35 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+## [1.2.8] - 2026-08-25
+
+### Fixed
+
+- **Host backpressure no longer opens the circuit breaker.** The host's global 16-slot `net.fetch` limit
+  and its per-plugin in-flight capability limit are shared with every other plugin on the gateway and
+  reject instantly. Counting them as backend failures meant a busy line saturated the pool, five
+  immediate rejections landed in a row, and transcription stopped for the full cooldown even though the
+  speech-to-text backend was perfectly healthy.
+- `deliveryTimeoutMs` is clamped to the range the manifest advertises. At the old advertised maximum the
+  fetch abort and the host's 30s capability budget expired together, so a slow receiver was reported as
+  a capability timeout, and a value of 0 or below made every delivery abort after 1ms.
+- An `sttBaseUrl` or `deliveryWebhookUrl` the host cannot use is named at enable time instead of failing
+  as silence. Neither URL is ever logged.
+
+### Added
+
+- A `healthCheck` covering the states that were previously fail-open warn lines: an open circuit
+  breaker, a missing or unusable backend URL, an unusable delivery webhook, and no delivery configured
+  at all. The host reports a plugin without one as healthy, so none of these were visible.
+
+### Changed
+
+- **`minOpenWAVersion` raised to 0.8.0.** Both `sttBaseUrl` and `deliveryWebhookUrl` are resolved
+  through `net.allowConfigHosts`, which first shipped in OpenWA 0.8.0. On a 0.7.x host the plugin
+  installed and enabled cleanly and then neither transcribed nor delivered anything.
+
+- **Verified against OpenWA v0.23.3** (testedOpenWAVersion 0.23.0 → 0.23.3).
+
 ## [1.2.7] - 2026-08-20
 
 ### Changed

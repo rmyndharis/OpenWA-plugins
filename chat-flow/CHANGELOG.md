@@ -8,6 +8,29 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.1.7] - 2026-08-25
+
+### Fixed
+
+- **Flow state is recorded before the message it describes is sent.** A storage write that failed after
+  the greeting had gone out left the flow unstarted, and with the documented empty `trigger` the next
+  message read as another first message and greeted again: one outbound WhatsApp message per inbound
+  message, uncapped. The same ordering now applies when advancing into a sub-menu, which previously
+  could show a menu the stored path had not moved to and then match the next answer a level up.
+- **Debug logging no longer writes message content.** `Trigger check` logged the full trimmed body of
+  every inbound message, `Loaded state` logged the stored path (the options a contact had picked), and
+  `Input matched option` logged the input and the reply text. Release 1.1.3 removed one line of this
+  and left the rest. Raising `LOG_LEVEL` to debug no longer turns the plugin log into a transcript.
+
+- A shared contact card or a poll no longer starts the flow or draws "Invalid option". OpenWA 0.23.2
+  fills the message body for both (a card carries its vCard, a poll its question), so a non-empty body
+  is no longer proof that someone typed at the menu. Business button and list replies are still
+  accepted, and a captioned image still reaches the menu as before.
+
+### Changed
+
+- **Verified against OpenWA v0.23.3** (testedOpenWAVersion 0.23.0 → 0.23.3).
+
 ## [1.1.6] - 2026-08-20
 
 ### Changed

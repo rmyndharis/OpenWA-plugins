@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hasSeen, markSeen, prune, allowCooldown, type StorageLike, DEDUP_TTL_MS } from './reliability.ts';
+import { hasSeen, markSeen, prune, allowCooldown, shardOf, type StorageLike, DEDUP_SHARDS, DEDUP_TTL_MS } from './reliability.ts';
 
 // Minimal in-memory StorageLike for tests. Flags simulate storage errors.
 function fakeStore(opts: { listFail?: boolean; getFail?: boolean; setFail?: boolean } = {}): StorageLike & { m: Map<string, unknown> } {
@@ -133,4 +133,54 @@ test('allowCooldown: distinct chats are independent', () => {
 test('DEDUP_TTL_MS export is a positive number (3 days)', () => {
   assert.ok(DEDUP_TTL_MS > 0);
   assert.equal(DEDUP_TTL_MS, 3 * 24 * 60 * 60 * 1000);
+});
+
+test('dedup key count stays constant however many commands are answered', async () => {
+  // The host re-measures its quota on EVERY set by stat-ing every key of the plugin, synchronously, on
+  // the gateway event loop. One key per answered message meant a busy install (20 commands a minute
+  // holds ~86,000 markers inside the 3-day window) made every write in every plugin stat that many
+  // files.
+  const storage = fakeStore();
+  for (let i = 0; i < 500; i++) await markSeen(storage, 's1', `m${i}`, 1000);
+  const keys = await storage.list();
+  assert.equal(keys.filter((k) => k.startsWith('dedup:')).length, 0, 'no per-message key is written');
+  assert.ok(keys.length <= DEDUP_SHARDS, `bucket count is bounded, got ${keys.length} keys for 500 markers`);
+  assert.equal(await hasSeen(storage, 's1', 'm499'), true, 'and every marker still resolves');
+  assert.equal(await hasSeen(storage, 's1', 'nope'), false);
+});
+
+test('a marker written before bucketing is still honoured', async () => {
+  // Missing one would fire a second real request against the operator's backend on redelivery, which is
+  // the exact thing dedup exists to prevent.
+  const storage = fakeStore();
+  await storage.set('dedup:s1:old-msg', { t: 1000 });
+  assert.equal(await hasSeen(storage, 's1', 'old-msg'), true);
+  assert.equal(await hasSeen(storage, 's1', 'other'), false);
+});
+
+test('a bucket ages its own entries out on write, without a global scan', async () => {
+  const storage = fakeStore();
+  await markSeen(storage, 's1', 'old', 0);
+  assert.equal(await hasSeen(storage, 's1', 'old'), true);
+  // A later write to the SAME bucket drops the expired entry.
+  const id = `s1:old`;
+  const partner = (() => {
+    for (let i = 0; i < 100_000; i++) if (shardOf(`s1:p${i}`) === shardOf(id)) return `p${i}`;
+    throw new Error('no colliding id');
+  })();
+  await markSeen(storage, 's1', partner, DEDUP_TTL_MS + 1);
+  assert.equal(await hasSeen(storage, 's1', 'old'), false, 'the expired marker is gone');
+  assert.equal(await hasSeen(storage, 's1', partner), true, 'the fresh one is kept');
+});
+
+test('two markers sharing a bucket do not erase each other', async () => {
+  // A bucket is a read-modify-write and every await inside it is an IPC round-trip, so interleaving
+  // would drop a marker and re-fire a real backend request on redelivery.
+  const storage = fakeStore();
+  const target = shardOf('s1:a');
+  let partner = '';
+  for (let i = 0; i < 100_000 && !partner; i++) if (shardOf(`s1:p${i}`) === target) partner = `p${i}`;
+  await Promise.all([markSeen(storage, 's1', 'a', 1000), markSeen(storage, 's1', partner, 1000)]);
+  assert.equal(await hasSeen(storage, 's1', 'a'), true);
+  assert.equal(await hasSeen(storage, 's1', partner), true);
 });

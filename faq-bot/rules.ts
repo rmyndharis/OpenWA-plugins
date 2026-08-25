@@ -65,12 +65,78 @@ function quantifierAt(
 
 const overlaps = (a: string, b: string): boolean => a === 'ANY' || b === 'ANY' || a === b;
 
+/** Turn an atom key back into a regex source safe to compile on its own. */
+function atomSource(key: string): string {
+  if (key.startsWith('\\') || key.startsWith('[')) return key;
+  return key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** The printable-ASCII characters an atom can match, or null when that cannot be decided (treated as
+ *  "matches anything"). Exact over the range an operator's rule realistically uses. Compiling a single
+ *  atom and testing it against one character cannot itself backtrack, and this runs once when config is
+ *  parsed, never per message. */
+function firstCharSet(key: string): Set<string> | null {
+  if (key === 'ANY') return null;
+  let re: RegExp;
+  try {
+    re = new RegExp(`^(?:${atomSource(key)})$`, 'u');
+  } catch {
+    return null; // unparseable on its own: assume it overlaps, fail closed
+  }
+  const out = new Set<string>();
+  for (let c = 32; c <= 126; c++) {
+    const ch = String.fromCharCode(c);
+    try {
+      if (re.test(ch)) out.add(ch);
+    } catch {
+      return null;
+    }
+  }
+  return out;
+}
+
+/** One top-level branch of an alternation. `literal` is the branch's exact text when it is nothing but
+ *  unquantified literal characters, else null. `first` is the key of its first atom, or null when that
+ *  could not be reduced to one atom (a branch opening with a group). */
+export interface Branch {
+  literal: string | null;
+  first: string | null;
+}
+
+/** True when a REPEATED alternation is ambiguous: two branches can consume the same text, so at each
+ *  position the engine has more than one way forward and must try them all on failure. That is what
+ *  turns `(a|a)*` and `^([a-z]|[a-z0-9])+$` exponential.
+ *
+ *  Two literal branches are ambiguous only when one is a PREFIX of the other (`a` and `ab`, or two equal
+ *  branches). Sharing a first character is not enough on its own: `(one|two|three)+` has two branches
+ *  starting `t`, but they diverge at the next character and the engine can never split the same text two
+ *  ways. Anything not reducible to a literal falls back to first-character overlap, which is
+ *  conservative, and an unknown branch counts as overlapping so the check fails closed. */
+function branchesAmbiguous(branches: Branch[]): boolean {
+  for (let a = 0; a < branches.length; a++) {
+    for (let b = a + 1; b < branches.length; b++) {
+      const x = branches[a];
+      const y = branches[b];
+      if (x.literal !== null && y.literal !== null) {
+        if (x.literal.startsWith(y.literal) || y.literal.startsWith(x.literal)) return true;
+        continue;
+      }
+      if (x.first === null || y.first === null) return true;
+      const sx = firstCharSet(x.first);
+      const sy = firstCharSet(y.first);
+      if (sx === null || sy === null) return true;
+      for (const ch of sx) if (sy.has(ch)) return true;
+    }
+  }
+  return false;
+}
+
 /** A group repeated this many times (or unbounded) with a variable-width body backtracks catastrophically;
  *  a smaller bounded repeat is bounded by the constant and safe. */
 const REPEAT_THRESHOLD = 10;
 
 /**
- * Conservatively reject patterns prone to catastrophic backtracking. Three classes are closed:
+ * Conservatively reject patterns prone to catastrophic backtracking. Four classes are closed:
  *  1. an unbounded quantifier on a group that itself contains one — `(a+)+`, `((a+))+`, `(\w+\s?)*`;
  *  2. THREE OR MORE adjacent unbounded quantifiers over overlapping atoms in one concatenation —
  *     `.*.*.*`, `\w*\w*\w*` (O(n^3)+); TWO adjacent (`.*.*`, `.*\d+`) is only O(n^2), safe under the
@@ -78,12 +144,29 @@ const REPEAT_THRESHOLD = 10;
  *  3. an unbounded or ≥REPEAT_THRESHOLD repeat of a group whose body has a variable-width quantifier —
  *     `(a?){40}`, `(a?)+` (exponential); a small bounded repeat of a VARIABLE body like `(ab?){2}` is
  *     allowed, but any repeat of an UNBOUNDED body is not — see (1).
+ *  4. a REPEATED group whose top-level alternation is AMBIGUOUS, i.e. two branches can consume the same
+ *     text: `(a|a)*`, `(a|ab)+`, `^([a-z]|[a-z0-9])+$`, `^(\w|\d)+$`. The engine then has more than one
+ *     way forward at each position and must try them all, which is exponential and saturates far below
+ *     the input cap (`^([a-z]|[a-z0-9])+$` needs 259 ms at 23 characters and over a minute at 31).
+ *     `(one|two|three)+` is NOT this shape: two branches start `t` but diverge immediately, so no text
+ *     splits two ways. See branchesAmbiguous.
  * Character classes follow JS semantics (`[]` empty, `[^]` any). Accepted patterns run on the native engine
- * unchanged. Overlapping-alternation (`(a|a)*`) is still not modelled — a documented residual. Fails closed.
+ * unchanged. Fails closed: anything the walker cannot reduce is treated as unsafe.
+ *
+ * This is a heuristic, not a decision procedure. It models the shapes that actually reach an operator's
+ * config; a determined author can still write something pathological that it accepts, which is why the
+ * body cap and the plugin's own guards remain.
  */
 export function isSafeRegexPattern(p: string): boolean {
   if (p.length > MAX_PATTERN_LENGTH) return false;
-  const stack: { hasUnbounded: boolean; hasVariable: boolean; savedPrev: string | null; savedRun: number }[] = [];
+  const stack: {
+    hasUnbounded: boolean;
+    hasVariable: boolean;
+    savedPrev: string | null;
+    savedRun: number;
+    // One record per top-level branch of THIS group; see Branch.
+    branches: Branch[];
+  }[] = [];
   // Rule 2 state: the key of the previous unbounded-quantified atom in the current flat concatenation,
   // or null after a mandatory atom / `|` / group boundary (which break adjacency).
   let prevUnbounded: string | null = null;
@@ -92,23 +175,47 @@ export function isSafeRegexPattern(p: string): boolean {
   while (i < p.length) {
     const c = p[i];
 
-    if (c === '|') { prevUnbounded = null; adjacentRun = 0; i++; continue; }
+    if (c === '|') {
+      prevUnbounded = null; adjacentRun = 0;
+      if (stack.length) stack[stack.length - 1].branches.push({ literal: '', first: null });
+      i++; continue;
+    }
     if (c === '(') {
       // The run so far is parked, not discarded: whether this group breaks it depends on whether it can
       // match empty, which is only known at the closing paren.
-      stack.push({ hasUnbounded: false, hasVariable: false, savedPrev: prevUnbounded, savedRun: adjacentRun });
+      if (stack.length) {
+        // A nested group means this branch is no longer a plain literal and its first character is not a
+        // single atom. Both are recorded as unknown, which branchesAmbiguous treats as overlapping.
+        const br = stack[stack.length - 1].branches;
+        const cur = br[br.length - 1];
+        if (cur) { cur.literal = null; if (cur.first === null) cur.first = null; }
+      }
+      stack.push({
+        hasUnbounded: false, hasVariable: false, savedPrev: prevUnbounded, savedRun: adjacentRun,
+        branches: [{ literal: '', first: null }],
+      });
       prevUnbounded = null; adjacentRun = 0;
       i++;
       if (p[i] === '?') { i++; if (p[i] === '<') i++; if (p[i] === ':' || p[i] === '=' || p[i] === '!') i++; }
       continue;
     }
     if (c === ')') {
-      const frame = stack.pop() ?? { hasUnbounded: false, hasVariable: false, savedPrev: null, savedRun: 0 };
+      const frame = stack.pop() ?? {
+        hasUnbounded: false, hasVariable: false, savedPrev: null, savedRun: 0,
+        branches: [] as Branch[],
+      };
       const q = quantifierAt(p, i + 1);
       // (1) nested unbounded. A BOUNDED repeat counts too once it repeats at all: `(a+){3}` expands to
       // `a+a+a+`, which backtracks exponentially — the constant bounds the repeat, not the search.
       if ((q.unbounded || q.count >= 2) && frame.hasUnbounded) return false;
       if (q.count >= REPEAT_THRESHOLD && frame.hasVariable) return false; // (3) large/unbounded repeat of a variable body
+      // (4) a REPEATED group whose top-level alternation branches can start with the same character.
+      // The engine then has two ways to consume each character and must try both on failure, which is
+      // exponential: `^([a-z]|[a-z0-9])+$` needs over a minute on a 31-character input, well inside the
+      // body cap, and JS regex execution cannot be interrupted.
+      if ((q.unbounded || q.count >= 2) && frame.branches.length >= 2 && branchesAmbiguous(frame.branches)) {
+        return false;
+      }
       if (stack.length) {
         if (q.unbounded || frame.hasUnbounded) stack[stack.length - 1].hasUnbounded = true;
         if (q.variable || frame.hasVariable) stack[stack.length - 1].hasVariable = true;
@@ -124,6 +231,17 @@ export function isSafeRegexPattern(p: string): boolean {
 
     const atom = atomAt(p, i);
     const q = quantifierAt(p, i + atom.len);
+    if (stack.length) {
+      const br = stack[stack.length - 1].branches;
+      const cur = br[br.length - 1];
+      if (cur) {
+        if (cur.first === null) cur.first = atom.key;
+        // The branch stays a literal only while every atom is a bare, unquantified single character.
+        if (cur.literal !== null) {
+          cur.literal = !q.present && atom.len === 1 && atom.key !== 'ANY' ? cur.literal + atom.key : null;
+        }
+      }
+    }
     if (stack.length && q.variable) stack[stack.length - 1].hasVariable = true;
     if (q.unbounded) {
       if (stack.length) stack[stack.length - 1].hasUnbounded = true;

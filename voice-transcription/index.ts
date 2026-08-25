@@ -49,6 +49,15 @@ function readTimeoutMs(cfg: Record<string, unknown>): number {
   return Math.min(25000, Math.max(1000, readNumber(cfg, "timeoutMs", 20000)));
 }
 
+// Same reasoning, same ceiling, for the delivery webhook. Unclamped, the manifest's advertised 30000
+// maximum expired together with the host's 30s per-capability budget, so a slow receiver surfaced as a
+// capability timeout rather than a delivery timeout: the exact misdiagnosis 1.1.0 fixed for timeoutMs.
+// A 0 or negative value was worse: plugin-net clamps it to 1ms, so every delivery aborted instantly,
+// swallowed into a warn line.
+function readDeliveryTimeoutMs(cfg: Record<string, unknown>): number {
+  return Math.min(25000, Math.max(1000, readNumber(cfg, "deliveryTimeoutMs", 5000)));
+}
+
 function readNumber(
   cfg: Record<string, unknown>,
   key: string,
@@ -69,6 +78,31 @@ function readStringArray(
     ? (v as string[])
     : fallback;
 }
+// The host resolves this plugin's outbound allowlist from the RAW config value and refuses the fetch at
+// the capability boundary when it cannot use that value, saying nothing on this side. Both failures then
+// look like silence: a transcription that never happens, or a transcript that never arrives. Name the
+// problem where the value is read.
+//
+// Deliberately NOT an https-only rule. The shipped default STT backend is a self-hosted Speaches on
+// loopback over http, which is a first-class supported install, and a plugin cannot see its own
+// effective allowlist. The value itself is never rewritten and never logged: `deliveryWebhookUrl` is one
+// an operator may have put a token in.
+function backendUrlProblem(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return "is not a URL";
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return "is not an http(s) URL";
+  }
+  // A credentialed value is dropped from the config-derived allowlist outright, so a non-loopback host
+  // named this way is refused on every call.
+  if (parsed.username || parsed.password) return "carries embedded credentials";
+  return null;
+}
+
 function readChatDelivery(cfg: Record<string, unknown>): ChatDeliveryMode {
   const v = cfg["chatDelivery"];
   return v === "self" || v === "reply" ? v : "off";
@@ -77,6 +111,10 @@ function readChatDelivery(cfg: Record<string, unknown>): ChatDeliveryMode {
 export class VoiceTranscriptionPlugin implements IPlugin {
   private coordinator: TranscriptionCoordinator | null = null;
   private ctxRef: PluginContext | null = null;
+  // Held for healthCheck. The client already tracks whether its circuit breaker is open; nothing was
+  // asking it outside a test, so an open breaker, a missing backend and an unusable URL were all a
+  // single warn line while the dashboard reported the plugin healthy.
+  private provider: OpenAiSttClient | null = null;
   // Signature of the coordinator-affecting config last used to build `this.coordinator`. The hook
   // recomputes this per event and rebuilds the coordinator only when it changes — so a per-session
   // override (resolved by the host for the firing session) takes effect, WITHOUT resetting the STT
@@ -111,6 +149,24 @@ export class VoiceTranscriptionPlugin implements IPlugin {
         "voice-transcription: sttBaseUrl is not set — every transcription will fail until it is configured",
         { action: "transcription_no_backend" },
       );
+    } else {
+      const problem = backendUrlProblem(readString(context.config, "sttBaseUrl", ""));
+      if (problem) {
+        context.logger.warn(
+          `voice-transcription: sttBaseUrl ${problem}; every transcription will be refused`,
+          { action: "transcription_backend_url_invalid" },
+        );
+      }
+    }
+    const deliveryUrl = readOptionalString(context.config, "deliveryWebhookUrl");
+    if (deliveryUrl) {
+      const problem = backendUrlProblem(deliveryUrl);
+      if (problem) {
+        context.logger.warn(
+          `voice-transcription: deliveryWebhookUrl ${problem}; every delivery will be refused`,
+          { action: "transcription_delivery_url_invalid" },
+        );
+      }
     }
     context.logger.log("Voice transcription plugin enabled", {
       action: "transcription_enabled",
@@ -141,7 +197,7 @@ export class VoiceTranscriptionPlugin implements IPlugin {
       readTimeoutMs(cfg),
       readString(cfg, "deliveryWebhookUrl", ""),
       readOptionalString(cfg, "deliverySecret") ?? "",
-      readNumber(cfg, "deliveryTimeoutMs", 5000),
+      readDeliveryTimeoutMs(cfg),
       readChatDelivery(cfg),
       JSON.stringify(readStringArray(cfg, "enabledMessageTypes", ["voice"])),
       readNumber(cfg, "maxSizeBytes", 16 * 1024 * 1024),
@@ -150,8 +206,51 @@ export class VoiceTranscriptionPlugin implements IPlugin {
     ]);
   }
 
+  /**
+   * The host answers `healthy: true` for a plugin that implements no health check, so every failure this
+   * plugin has is fail-open and logged: an open circuit breaker, a missing or unusable backend URL, and
+   * a delivery webhook that aborts every time all left the dashboard green while nothing was transcribed.
+   * Reports on the BASE config, since outside a hook the host resolves no per-session slice.
+   */
+  healthCheck(): Promise<{ healthy: boolean; message?: string }> {
+    if (!this.ctxRef || !this.coordinator) {
+      return Promise.resolve({ healthy: false, message: "voice-transcription: not enabled" });
+    }
+    const cfg = this.ctxRef.config;
+    const stt = readOptionalString(cfg, "sttBaseUrl");
+    if (!stt) {
+      return Promise.resolve({ healthy: false, message: "voice-transcription: sttBaseUrl is not set" });
+    }
+    const sttProblem = backendUrlProblem(stt);
+    if (sttProblem) {
+      return Promise.resolve({ healthy: false, message: `voice-transcription: sttBaseUrl ${sttProblem}` });
+    }
+    const deliveryUrl = readOptionalString(cfg, "deliveryWebhookUrl");
+    const deliveryProblem = deliveryUrl ? backendUrlProblem(deliveryUrl) : null;
+    if (deliveryProblem) {
+      return Promise.resolve({
+        healthy: false,
+        message: `voice-transcription: deliveryWebhookUrl ${deliveryProblem}`,
+      });
+    }
+    if (!deliveryUrl && readChatDelivery(cfg) === "off") {
+      return Promise.resolve({
+        healthy: false,
+        message: "voice-transcription: no delivery configured, transcripts have nowhere to go",
+      });
+    }
+    if (this.provider && !this.provider.isHealthy()) {
+      return Promise.resolve({
+        healthy: false,
+        message: "voice-transcription: STT circuit breaker is open, the backend is failing",
+      });
+    }
+    return Promise.resolve({ healthy: true, message: `voice-transcription: ${readString(cfg, "model", "small")}` });
+  }
+
   onDisable(context: PluginContext): Promise<void> {
     this.coordinator = null;
+    this.provider = null;
     context.logger.log("Voice transcription plugin disabled", {
       action: "transcription_disabled",
     });
@@ -160,20 +259,20 @@ export class VoiceTranscriptionPlugin implements IPlugin {
 
   private build(context: PluginContext): TranscriptionCoordinator {
     const cfg = context.config;
-    const provider = new OpenAiSttClient({
+    const provider = (this.provider = new OpenAiSttClient({
       baseUrl: readString(cfg, "sttBaseUrl", ""),
       apiKey: readOptionalString(cfg, "sttApiKey"),
       model: readString(cfg, "model", "small"),
       language: readOptionalString(cfg, "language"),
       timeoutMs: readTimeoutMs(cfg),
       net: context.net,
-    });
+    }));
     const deliveryUrl = readString(cfg, "deliveryWebhookUrl", "");
     const delivery = deliveryUrl
       ? new WebhookDelivery({
           url: deliveryUrl,
           secret: readOptionalString(cfg, "deliverySecret"),
-          timeoutMs: readNumber(cfg, "deliveryTimeoutMs", 5000),
+          timeoutMs: readDeliveryTimeoutMs(cfg),
           net: context.net,
         })
       : undefined;

@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const GROUPS = [
-  ['chatwoot-adapter/chat-lock.ts', 'typebot-connector/chat-lock.ts'],
+  ['chatwoot-adapter/chat-lock.ts', 'http-action/chat-lock.ts', 'typebot-connector/chat-lock.ts'],
   ['chatwoot-adapter/multipart.ts', 'typebot-connector/multipart.ts', 'voice-transcription/multipart.ts'],
   ['http-action/jid.ts', 'typebot-connector/jid.ts'],
   ['after-hours/cooldown.ts', 'faq-bot/cooldown.ts', 'http-action/cooldown.ts'],

@@ -5,7 +5,7 @@
 
 ![type: extension](https://img.shields.io/badge/type-extension-blue.svg)
 ![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)
-![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.7.0-25D366.svg)
+![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.8.0-25D366.svg)
 [![downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Frmyndharis%2FOpenWA-plugins%2Fbadges%2Fdownloads%2Fgroup-translate.json)](https://github.com/rmyndharis/OpenWA-plugins/releases?q=group-translate)
 
 ## Details
@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `group-translate` |
-| **Version** | 1.3.5 |
-| **Released** | 2026-08-20 |
+| **Version** | 1.3.6 |
+| **Released** | 2026-08-25 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.23.0) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.23.3) |
 | **Keywords** | translation, libretranslate, i18n, groups, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/group-translate](https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate) |
 <!-- END DETAILS -->
@@ -40,12 +40,12 @@
 
 ## Commands
 
-Default prefix `/tr` (configurable). Read-only commands are open; the rest are admin-only.
+Default prefix `/tr` (configurable). `/tr help` is open to anyone; every other command is admin-only.
 
 | Command | Who | Effect |
 | ------- | --- | ------ |
-| `/tr help` | anyone | Show the command list |
-| `/tr status` | anyone | Show whether translation is on + per-participant languages |
+| `/tr help` | anyone | Show the command list (answered at most once a minute per group) |
+| `/tr status` | admin | Show whether translation is on + per-participant languages |
 | `/tr on` · `/tr off` | admin | Enable / disable translation in this group |
 | `/tr setlang <code> [@user]` | admin | Pin a language (e.g. `/tr setlang id @member`) |
 | `/tr auto [@user]` | admin | Go back to auto-learning a participant's language |
@@ -68,7 +68,7 @@ Default prefix `/tr` (configurable). Read-only commands are open; the rest are a
    itself — not in this plugin's config — e.g. `SSRF_ALLOWED_HOSTS=localhost,127.0.0.1`. The default
    `libretranslateUrl` *is* a loopback address, so out of the box the plugin cannot reach its backend
    until this is done (see [Security](#security)).
-3. Have OpenWA **≥ 0.7.0** running with a logged-in WhatsApp session for the group(s) you want to translate.
+3. Have OpenWA **≥ 0.8.0** running with a logged-in WhatsApp session for the group(s) you want to translate.
 4. Install and enable the plugin (see [Install](#install)), then have a group admin run `/tr on`.
    Enabling the plugin is silent: it says nothing in any group until someone addresses it with a
    `/tr` command. It never translates until an admin has run `/tr on` in that specific group, and it
@@ -110,9 +110,16 @@ Then, in the group, an admin runs `/tr on`. Or install the packaged `.zip` from
 
 ## Compatibility
 
-Targets OpenWA **≥ 0.7.0** — outbound HTTP uses the v0.7 `ctx.net.fetch` capability. Declares
+Targets OpenWA **≥ 0.8.0**, the release that introduced `net.allowConfigHosts`. Outbound HTTP itself
+uses the v0.7 `ctx.net.fetch` capability, but on a 0.7.x host only the shipped loopback entries are
+reachable, so any other `libretranslateUrl` is refused and nothing is translated. Declares
 `messages:send`, `engine:read` (for admin checks), `net:fetch`, and `storage:use` (each group's
 settings and learned participant languages).
+
+Shared contact cards are never translated: from OpenWA 0.23.2 a card carries its vCard in the message
+body, which would otherwise send a third party's name and number to your translation backend, post a
+machine-translated card into the group, and let language detection pin the sender's language from
+vCard field names. Poll questions are translated normally.
 
 ### Per-session config
 

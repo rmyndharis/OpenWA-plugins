@@ -164,8 +164,15 @@ export default class HttpActionPlugin implements IPlugin {
       const msg = h.data as IncomingMessage | undefined;
       if (!sessionId || !msg) return { continue: true };
       if (msg.fromMe) return { continue: true };
-      if (typeof msg.body !== 'string' || msg.body.length === 0) return { continue: true };
+      if (typeof msg.body !== 'string' || !msg.body.trim()) return { continue: true };
       if (!msg.chatId || !msg.id) return { continue: true };
+      // Since host 0.23.2 a poll arrives with its question as the body and a contact card with its
+      // vCard, so a non-empty body no longer means someone typed a command. This plugin performs real
+      // writes against the operator's backend, so an accidental trigger is the most expensive one in
+      // the catalog: a poll titled with a configured prefix would fire a GET or POST and claim the
+      // message. 'unknown' stays admitted; a tapped business button is a legitimate way to invoke an
+      // action.
+      if (msg.type === 'contact' || msg.type === 'poll') return { continue: true };
 
       // Re-read config per event so a live dashboard edit is picked up without re-enable.
       let liveCfg: HttpActionConfig;
@@ -202,6 +209,18 @@ export default class HttpActionPlugin implements IPlugin {
       return { continue: !mine };
     }, HOOK_PRIORITY);
 
+    // Per-action request headers have no `secret: true` home. The host redacts plugin config per schema
+    // FIELD, and every action lives inside the single `actions` textarea, so a credential typed into an
+    // action header comes back verbatim on GET /plugins while `authToken` is masked. Marking the whole
+    // textarea secret would hide the action definitions themselves, so say it once here and name the
+    // actions, rather than let an operator assume this plugin masks every credential in its config.
+    const headerActions = cfg.actions.filter(a => a.request.headers).map(a => a.id);
+    if (headerActions.length) {
+      ctx.logger.warn(
+        `${PLUGIN}: action request headers are stored and returned unmasked by the plugins API; put a credential in the Token / API key field (authType 'apikey' names the header) rather than in an action header`,
+        { actions: headerActions },
+      );
+    }
     ctx.logger.log(`${PLUGIN} enabled (${cfg.actions.length} action(s), ${cfg.baseUrl})`);
   }
 

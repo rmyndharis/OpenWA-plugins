@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `typebot-connector` |
-| **Version** | 0.2.6 |
-| **Released** | 2026-08-20 |
+| **Version** | 0.2.7 |
+| **Released** | 2026-08-25 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.2 (tested 0.23.0) |
+| **Requires OpenWA** | ≥ 0.8.2 (tested 0.23.3) |
 | **Keywords** | typebot, chatbot, flow, bot, no-code, two-way, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/typebot-connector](https://github.com/rmyndharis/OpenWA-plugins/tree/main/typebot-connector) |
 <!-- END DETAILS -->
@@ -106,6 +106,10 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
   outbound media/voice.
 - **Auto-starts every chat in scope** (including groups by default). Don't run another auto-reply /
   menu / FAQ plugin on the same session — they will conflict.
+- Shared contact cards and polls do not answer the current step. From OpenWA 0.23.2 both carry text in
+  the message body, so a vCard holding a bare in-range digit could otherwise select a numbered choice.
+  The contact is asked to type instead and the flow stays put; sharing a card at a file-upload step
+  still gets that step's own prompt.
 - **In a group, each participant gets their own flow**, keyed by the sender. A group message the
   engine delivers with no identifiable sender is skipped rather than answered: there is no way to
   tell whose flow it belongs to, and guessing would feed one contact's answer into another's session.

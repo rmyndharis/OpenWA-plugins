@@ -217,3 +217,60 @@ test("coordinator rebuilds when coordinator-affecting config changes, is reused 
     "coordinator rebuilt for changed config",
   );
 });
+
+// The host reports a plugin that implements no health check as HEALTHY, so every fail-open condition
+// this plugin has (an open circuit breaker, a backend URL the host will refuse, no delivery configured
+// at all) showed a green tile while nothing was being transcribed.
+function healthCtx(config: Record<string, unknown>): PluginContext {
+  return {
+    config,
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    registerHook() {},
+    net: { fetch: async () => ({ ok: true, status: 200, headers: {}, body: "{}" }) },
+    storage: { get: async () => null, set: async () => {}, delete: async () => {}, list: async () => [] },
+    messages: { sendText: async () => ({ messageId: "x", timestamp: 0 }), reply: async () => ({ messageId: "x", timestamp: 0 }) },
+    conversations: { send: async () => ({}) },
+  } as unknown as PluginContext;
+}
+
+test("healthCheck reports the states that were previously fail-open warn lines", async () => {
+  const fresh = new VoiceTranscriptionPlugin();
+  assert.equal((await fresh.healthCheck()).healthy, false, "not enabled is not healthy");
+
+  const ok = new VoiceTranscriptionPlugin();
+  await ok.onEnable(healthCtx({ sttBaseUrl: "https://stt.example.com", deliveryWebhookUrl: "https://hook.example.com" }));
+  assert.equal((await ok.healthCheck()).healthy, true);
+
+  for (const [label, config] of [
+    ["sttBaseUrl is not a URL", { sttBaseUrl: "stt.example.com", deliveryWebhookUrl: "https://h.example.com" }],
+    ["sttBaseUrl carries credentials", { sttBaseUrl: "https://u:p@stt.example.com", deliveryWebhookUrl: "https://h.example.com" }],
+    ["delivery webhook unusable", { sttBaseUrl: "https://stt.example.com", deliveryWebhookUrl: "ftp://h.example.com" }],
+    ["no delivery configured", { sttBaseUrl: "https://stt.example.com" }],
+  ] as [string, Record<string, unknown>][]) {
+    const p = new VoiceTranscriptionPlugin();
+    await p.onEnable(healthCtx(config));
+    const h = await p.healthCheck();
+    assert.equal(h.healthy, false, `${label}: must be reported unhealthy`);
+    assert.ok(h.message, `${label}: must say why`);
+    // A credential in the URL must never be echoed into the health message, which the dashboard renders.
+    assert.ok(!/u:p@/.test(h.message ?? ""), `${label}: must not echo the URL`);
+  }
+});
+
+test("deliveryTimeoutMs is clamped to the range the manifest advertises", async () => {
+  // The host never validates configSchema bounds. Unclamped, the advertised maximum expired together
+  // with the host's 30s capability budget so a slow receiver surfaced as a capability timeout, and 0 or
+  // below made plugin-net abort every delivery after 1ms.
+  const read = async (deliveryTimeoutMs: unknown) => {
+    const p = new VoiceTranscriptionPlugin();
+    const cfg: Record<string, unknown> = { sttBaseUrl: "https://stt.example.com", deliveryWebhookUrl: "https://h.example.com" };
+    if (deliveryTimeoutMs !== undefined) cfg.deliveryTimeoutMs = deliveryTimeoutMs;
+    await p.onEnable(healthCtx(cfg));
+    return JSON.parse((p as unknown as { configSignature(c: Record<string, unknown>): string }).configSignature(cfg))[7] as number;
+  };
+  assert.equal(await read(undefined), 5000, "default");
+  assert.equal(await read(0), 1000, "zero would abort every delivery after 1ms");
+  assert.equal(await read(-1), 1000, "negative likewise");
+  assert.equal(await read(30000), 25000, "the advertised maximum is clamped below the host budget");
+  assert.equal(await read(5000), 5000, "a sane value is untouched");
+});
