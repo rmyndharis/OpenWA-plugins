@@ -179,22 +179,28 @@ instance id or route — so re-copy the ingress URL from the mint response.
 
 ### Known limitations
 
-- **Mapping storage grows with use (by design).** The `conv:`/`wa:` conversation-mapping entries in
-  plugin storage are never pruned — deleting a mapping would sever a live thread, and there is no safe
-  signal that a Chatwoot conversation will never be written to again. Growth is one small record per
-  WhatsApp chat ever relayed, so it stays modest in practice; `healthCheck` reports retry-queue and
-  dead-letter health if you need operational signals. The 3-day `seen:` dedup markers, by contrast,
-  expire and are pruned hourly.
+- **Mapping storage grows with use (by design).** A conversation mapping is never pruned: deleting one
+  would sever a live thread, and there is no safe signal that a Chatwoot conversation will never be
+  written to again. Growth is one small record per WhatsApp chat ever relayed, held in a fixed number of
+  sharded storage keys so the key count stays constant however many chats are relayed. `healthCheck`
+  reports retry-queue and dead-letter health if you need operational signals. The 3-day dedup markers,
+  by contrast, expire and are pruned hourly.
 
 ### Per-session config
 
-**Supported.** Every config field (`baseUrl`, `apiToken`, `accountId`, `inboxId`, `relayGroups`,
-`relayMedia`, `relayOwnMessages`, `backfillLimit`, `backfillAllOnce`) may be overridden per WhatsApp
-session via the dashboard; an override takes effect on the next inbound message or webhook delivery
-(config is re-read per event). This is the **first-class multi-tenant shape**: bind one instance per
-WhatsApp session, each pointing at a different Chatwoot account/inbox, and the session-scoped mapping
+**Supported, with a caveat.** Every config field (`baseUrl`, `apiToken`, `accountId`, `inboxId`,
+`relayGroups`, `relayMedia`, `relayOwnMessages`, `backfillLimit`, `backfillAllOnce`) may be overridden
+per WhatsApp session via the dashboard; an override takes effect on the next inbound message or webhook
+delivery (config is re-read per event). This is the **first-class multi-tenant shape**: bind one instance
+per WhatsApp session, each pointing at a different Chatwoot account/inbox, and the session-scoped mapping
 store isolates them. The per-session `baseUrl` is auto-added to the outbound allowlist via
 `allowConfigHosts`.
+
+**Caveat for the retry queue.** A session's config resolves only while OpenWA is dispatching an event for
+that session, and the queue of failed inbound relays is drained on a timer instead. A queued message is
+re-posted only once the plugin has seen an event for its session (its next message in either direction)
+since it was last enabled; until then it stays queued and counted under pending retries in the plugin's
+health, rather than being posted to whichever Chatwoot the base config names.
 
 ## Security
 

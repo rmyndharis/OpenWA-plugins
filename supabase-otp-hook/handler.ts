@@ -2,9 +2,9 @@
 //
 // Runs ASYNC. The host verifies the Standard Webhooks signature (manifest signature.scheme:
 // 'standard-webhooks') and runs the `session-alive` preflight BEFORE dispatching this handler, then
-// fast-acks Supabase (200 application/json) and enqueues this handler from the ingress worker (BullMQ,
-// retry + DLQ). So by the time we run, the request is authentic and the sending session is live; this
-// handler only parses the payload and fires the WhatsApp send.
+// fast-acks Supabase (200) and enqueues this handler from the ingress worker (BullMQ, retry + DLQ). So
+// by the time we run, the request is authentic and the sending session is live; this handler only
+// parses the payload and fires the WhatsApp send.
 //
 // The return value is ignored — only whether this handler THROWS matters: a throw makes the host retry
 // (3×, backoff) then DLQ for redrive. Returning completes the JOB, but that is not quite "no retry":
@@ -17,8 +17,9 @@
 // Failure handling:
 // - Missing/malformed phone/otp → return (permanent client error; a retry won't fix a bad payload).
 // - No session to send from     → return (operator config error; won't self-heal in the retry window).
-// - sendText failure            → fire-and-forget: the worker dispatch has a 5 s budget, so awaiting a
-//   slow send risks a 504 → retry → DUPLICATE OTP. Background it; log failures.
+// - sendText failure            → throw if it lands inside the fail-fast window, so the host retries the
+//   delivery and finally dead-letters it. A send that is only SLOW is left running in the background:
+//   the worker dispatch has a 5 s budget, and an overrun is a retry → DUPLICATE OTP.
 
 import type { WebhookRequest, PluginMessagingCapability } from '../types/openwa';
 
@@ -33,6 +34,11 @@ export interface HandlerDeps {
   config: SupabaseSmsConfig;
   messages: Pick<PluginMessagingCapability, 'sendText'>;
   log: (message: string, meta?: Record<string, unknown>) => void;
+  /** The send's outcome (null = delivered), reported even after the fail-fast window closed and this
+   *  handler returned. index.ts keeps the last one for healthCheck. */
+  onSendResult?: (error: string | null) => void;
+  /** Fail-fast window override in ms; defaults to SEND_FAILFAST_MS. Tests shorten it. */
+  failFastMs?: number;
 }
 
 interface SupabaseSmsPayload {
@@ -73,6 +79,14 @@ export function maskChatId(chatId: string): string {
 export function composeMessage(template: string, otp: string, appName: string): string {
   return template.replace(/\{appName\}|\{otp\}/g, token => (token === '{appName}' ? appName : otp));
 }
+
+/**
+ * How long the handler waits for the send to fail before leaving it to finish in the background. Long
+ * enough for the capability round trip that carries an instant rejection (plugin not activated for the
+ * session, session has no live engine, at the concurrent-capability limit), and far short of the host's
+ * 5 s dispatch budget, whose overrun is reported as a failed delivery and retried into a duplicate OTP.
+ */
+const SEND_FAILFAST_MS = 1500;
 
 /**
  * Handle one Supabase Send SMS delivery. The host has already verified the signature and confirmed the
@@ -123,14 +137,51 @@ export async function handleSendSms(deps: HandlerDeps, req: WebhookRequest): Pro
   // Never the code itself: it is a live credential, and debug is on exactly when output is being shared.
   if (cfg.debug) deps.log('supabase-otp-hook: sending OTP', { debug: true, sessionId, chatId: maskChatId(targetChatId), textLength: text.length });
 
-  // Fire-and-forget: the worker dispatch is bounded to 5 s (INGRESS_DISPATCH_TIMEOUT_MS), so awaiting a
-  // slow send risks a 504 → retry → DUPLICATE OTP. Background it; failures are logged, not retried.
-  void deps.messages.sendText(sessionId, targetChatId, text).then(
-    () => { if (cfg.debug) deps.log('supabase-otp-hook: sendText ok', { debug: true, sessionId, chatId: maskChatId(targetChatId) }); },
+  // The send is raced against a short deadline rather than fired and forgotten. The two failure modes
+  // pull in opposite directions and both are real:
+  //
+  //  - A send that is only SLOW must outlive this handler. The worker dispatch is bounded to 5 s
+  //    (INGRESS_DISPATCH_TIMEOUT_MS) and an overrun reaches the host as a failed delivery, which retries
+  //    the job and sends the contact a DUPLICATE OTP.
+  //  - A send that has ALREADY FAILED must not be swallowed. The capability layer rejects instantly when
+  //    the plugin is not activated for the session, when the session has no live engine, and when the
+  //    plugin is at its concurrent-capability limit. Supabase was acked 200 before this handler ran and
+  //    never retries such a delivery itself, so backgrounding it lost the code outright, with one warn
+  //    line to show for it.
+  //
+  // Throwing inside the window hands the delivery back to the host, which retries it with backoff and
+  // writes a dead-letter row for redrive once the attempts are spent. Nothing was delivered in that
+  // case, so a retry cannot duplicate anything.
+  const settled = deps.messages.sendText(sessionId, targetChatId, text).then(
+    () => {
+      if (cfg.debug) deps.log('supabase-otp-hook: sendText ok', { debug: true, sessionId, chatId: maskChatId(targetChatId) });
+      deps.onSendResult?.(null);
+      return null;
+    },
     (err: unknown) => {
-      deps.log('supabase-otp-hook: sendText failed (background)', {
-        sessionId, chatId: maskChatId(targetChatId), error: err instanceof Error ? err.message : String(err),
+      const error = err instanceof Error ? err.message : String(err);
+      deps.log('supabase-otp-hook: sendText failed', {
+        sessionId, chatId: maskChatId(targetChatId), error,
       });
+      deps.onSendResult?.(error);
+      return error;
     },
   );
+
+  const failFastMs = deps.failFastMs ?? SEND_FAILFAST_MS;
+  // A sentinel rather than a rejection, so a slow send is not mistaken for a failed one.
+  const pending = Symbol('pending');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // Deliberately NOT unref'd: this timer is the only thing that can end the race when the send neither
+  // resolves nor rejects, and an unref'd one lets the loop drain first, leaving the handler hanging
+  // until the host's dispatch budget kills it. It is cleared the moment the race settles, so it holds
+  // the loop for at most one window, while an OTP delivery is genuinely in flight.
+  const deadline = new Promise<typeof pending>(resolve => {
+    timer = setTimeout(() => resolve(pending), failFastMs);
+  });
+  const outcome = await Promise.race([settled, deadline]);
+  clearTimeout(timer);
+  if (outcome !== pending && outcome !== null) {
+    throw new Error(`supabase-otp-hook: WhatsApp send failed: ${outcome}`);
+  }
 }

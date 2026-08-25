@@ -198,7 +198,7 @@ and upload it in the dashboard **Plugins → Install**.
 | `spreadsheetId` | yes | — | Spreadsheet ID from its URL |
 | `sheetTab` | no | `Logs` | Target tab name |
 | `flushIntervalSec` | no | `5` | Seconds between flushes |
-| `flushBatchSize` | no | `20` | Flush early once this many rows are buffered |
+| `flushBatchSize` | no | `20` | Flush early once this many rows are buffered; paused while a flush is failing, so retries keep to `flushIntervalSec` |
 
 The target tab must exist, **with a header row of your choosing** — the plugin appends data rows only.
 
@@ -216,9 +216,9 @@ capabilities are version-dependent:
 - **`message:ack` rows** require OpenWA **≥ v0.6.1** (#427). On v0.6.0 the hook was declared but never
   fired, so ack rows are absent.
 - **Live config updates** (a `PUT …/config` reaching the running plugin) and **graceful-shutdown buffer
-  flush** require the sandbox lifecycle follow-ups (#430), **unreleased** (first release after v0.6.1). On
-  v0.6.0/v0.6.1, a config change needs a disable + re-enable, and a non-graceful exit (SIGKILL/OOM) can
-  drop rows buffered since the last flush (≤ `flushIntervalSec`).
+  flush** arrived with the sandbox lifecycle follow-ups (#430) in OpenWA **v0.6.2**, below this plugin's
+  declared floor, so every supported host has them. A non-graceful exit (SIGKILL, OOM) still bypasses
+  `onDisable`, so rows buffered since the last flush (at most `flushIntervalSec` worth) are lost.
 
 ### Per-session config
 
@@ -239,9 +239,12 @@ evaluates a cell as a formula. As defense-in-depth for CSV export/re-import, cel
 single quote (`'`) when they start with a formula trigger:
 
 - **ID / enum fields** (chatId, from, to, messageId, status, type): full guard — `=` `+` `-` `@` `\t` `\r`.
-- **Free-text fields** (body, senderName, error): guard `=` `@` `\t` `\r`, plus a leading `+`/`-` that
-  is not the start of a number — so a formula like `-IMPORTXML(…)` / `+ HYPERLINK(…)` is quoted while a
-  phone number (`+62812…`) or a negative number (`-5°C`) is left readable.
+- **Free-text fields** (body, senderName, error): guard `=` `@` `\t` `\r`, plus a leading `+`/`-` unless
+  what follows is a plain number or ordinary prose. `-IMPORTXML(…)`, `+ HYPERLINK(…)` and
+  `-1+IMPORTXML(…)` are all quoted (a digit after the sign is not a free pass), while a phone number
+  (`+62 (812) 3456-7890`), a negative number (`-1.5`) and a message that merely opens with one
+  (`+62812 call me`) stay readable. The discriminator is formula machinery: `(` for a call, `&` for the
+  string-building an exfiltration needs, `!` for a sheet reference.
 
 Every cell is also capped at 50 000 characters (Google Sheets' per-cell limit), so a single oversized
 message can't fail an append batch and stall logging.

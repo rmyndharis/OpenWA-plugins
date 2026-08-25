@@ -86,6 +86,15 @@ export default class ChatwootAdapter implements IPlugin {
   private draining = false;
   private lastSeenPruneAt = 0;
   private seenPruning = false;
+  // The resolved config of every session this worker has dispatched an event for. ctx.config resolves
+  // the firing session's slice only INSIDE a hook or webhook dispatch (the host scopes it with an
+  // AsyncLocalStorage); on the retry timer it falls back to the base slice, and no capability resolves
+  // another session's config. Re-posting a queued message with the base slice puts one tenant's
+  // customer message in another tenant's helpdesk, and for a chat whose mapping did not exist yet it
+  // mints the Chatwoot conversation in that account and stores the mapping for good. So the drain
+  // relays only for sessions whose own slice is in here. In memory, per worker: an enable/disable
+  // cycle empties it and that session's next message refills it.
+  private sessionConfigs = new Map<string, ChatwootFullConfig>();
 
   private onBackfillExhausted = (chatId: string): void => {
     this.backfillExhausted.add(chatId);
@@ -97,14 +106,15 @@ export default class ChatwootAdapter implements IPlugin {
     const lock = new KeyedAsyncLock();
     const store = new MappingStore(ctx.storage, ctx.mappings);
     this.store = store;
-    // Re-read config per event so a per-session/instance override (PR E) is picked up live.
-    const clientFor = () => new ChatwootClient(ctx.net.fetch.bind(ctx.net), readConfig(ctx.config));
-
     // Shared per-event dependency bag for the inbound and own-send relays (both render into Chatwoot the
     // same way). instanceId = sessionId (a session-scoped instance is 1:1 with its session).
+    //
+    // The client is built from the `cfg` the CALLER resolved, never from a second read of ctx.config:
+    // that getter returns the firing session's slice only inside a dispatch, so on the retry timer it
+    // handed every session's queued messages the base tenant's origin, token, account and inbox.
     const buildDeps = (cfg: ChatwootFullConfig, sessionId: string) => ({
       lock,
-      client: clientFor(),
+      client: new ChatwootClient(ctx.net.fetch.bind(ctx.net), cfg),
       store,
       engine: ctx.engine,
       instanceId: sessionId,
@@ -128,6 +138,7 @@ export default class ChatwootAdapter implements IPlugin {
         const msg = h.data as IncomingMessage;
         if (sessionId && msg) {
           const cfg = readConfig(ctx.config);
+          this.sessionConfigs.set(sessionId, cfg); // a dispatch is the only place this slice resolves
           const deps = buildDeps(cfg, sessionId);
           // Fire-and-forget off the hook so a slow/failing Chatwoot API never blocks the WA pipeline. The
           // mapping mirror is keyed on sessionId (a session-scoped instance is 1:1 with its session).
@@ -154,6 +165,9 @@ export default class ChatwootAdapter implements IPlugin {
         const msg = h.data as IncomingMessage;
         if (sessionId && msg) {
           const cfg = readConfig(ctx.config);
+          // Captured BEFORE the relayOwnMessages gate: the retry drain needs this session's slice even
+          // for a session whose own-send mirror is switched off.
+          this.sessionConfigs.set(sessionId, cfg);
           if (cfg.relayOwnMessages) {
             void handleSent(buildDeps(cfg, sessionId), sessionId, h.source, msg).catch(e =>
               ctx.logger.error('sent hook failed', e),
@@ -182,8 +196,10 @@ export default class ChatwootAdapter implements IPlugin {
 
     // Retry failed inbound relays (at-least-once). The durable, storage-backed queue is drained on a timer:
     // each queued message is re-posted via the same inbound path, and a message that keeps failing is
-    // dead-lettered after MAX_RETRY_ATTEMPTS. Retries use the base config (per-session overrides aren't
-    // re-resolved outside a hook). .unref() so the timer never keeps the worker alive; cleared on disable.
+    // dead-lettered after MAX_RETRY_ATTEMPTS. The queue is plugin-global (ctx.storage is not per session),
+    // so a tick sees every session's entries; each is re-posted with THAT session's captured slice, never
+    // with what ctx.config resolves to out here, which is the base one. .unref() so the timer never keeps
+    // the worker alive; cleared on disable.
     const drain = (): Promise<void> => {
       // Single-flight: a slow drain (large backlog) must not overlap the next tick, or two runs would
       // snapshot the same entries and double-post. Skip the tick if a drain is still in progress.
@@ -198,9 +214,13 @@ export default class ChatwootAdapter implements IPlugin {
       this.draining = true;
       return drainRetries(
         { store, lock, log: (m, e) => ctx.logger.error(m, e) },
+        // The canRelay predicate below admitted this session, so its slice is present.
         (sessionId, _chatId, msg) =>
-          relayInbound(buildDeps(readConfig(ctx.config), sessionId), sessionId, msg, { recoverOn404: false }),
+          relayInbound(buildDeps(this.sessionConfigs.get(sessionId)!, sessionId), sessionId, msg, {
+            recoverOn404: false,
+          }),
         MAX_RETRY_ATTEMPTS,
+        sessionId => this.sessionConfigs.has(sessionId),
       )
         .then(
           ({ deadLettered }) => void (this.deadLetterCount += deadLettered),

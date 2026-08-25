@@ -37,13 +37,28 @@ function strId(value: unknown): string {
   return cap(/^[=+\-@\t\r]/.test(s) ? `'${s}` : s);
 }
 
-// `strText` is for free-text fields (message body, sender name, error). A leading `+`/`-` is quoted
-// only when it is NOT the start of a number (`(?![\d.])`), so a phone number "+62812…" or "-5°C" stays
-// readable while a formula like "-IMPORTXML(…)" / "+ HYPERLINK(…)" is neutralized. `=` and `@` (plus
-// tab/CR) never start normal prose and are always guarded.
+// `strText` is for free-text fields (message body, sender name, error). `=` and `@` (plus tab/CR) never
+// start normal prose and are always guarded. A leading `+`/`-` is the awkward one, because a phone
+// number and a formula both start that way, so it is decided by what FOLLOWS the sign:
+//
+//   pure number punctuation  ->  never quoted   "+62 (812) 3456-7890", "-1.5"
+//   starts with a non-digit  ->  quoted         "-IMPORTXML(…)", "+ HYPERLINK(…)"
+//   digit, then ( & or !     ->  quoted         "-1+IMPORTXML(…)", "+1+HYPERLINK(…)"
+//   digit, then plain prose  ->  never quoted   "+62812 call me", "-5 degrees today"
+//
+// Testing only the single character after the sign passed anything that began with a digit, so
+// "-1+IMPORTXML(…)" was written unquoted: a live formula that merely starts like a number. Requiring
+// the whole remainder to be numeric would have closed that but quoted ordinary messages beginning with
+// a phone number, which two earlier changes deliberately made readable. Formula machinery is the
+// discriminator instead: a call needs `(`, exfiltration needs `&` to build its URL, and `!` is a sheet
+// reference. None of the three appears in a phone number that is not already all digits and brackets.
 function strText(value: unknown): string {
   const s = value == null ? '' : String(value);
-  return cap(/^[=@\t\r]/.test(s) || /^[+\-](?![\d.])/.test(s) ? `'${s}` : s);
+  if (/^[=@\t\r]/.test(s)) return cap(`'${s}`);
+  if (!/^[+\-]/.test(s)) return cap(s);
+  const rest = s.slice(1);
+  if (/^[\d\s().\-]*$/.test(rest)) return cap(s); // a number or a phone, never a formula
+  return cap(/^[^\d.]/.test(rest) || /[(&!]/.test(rest) ? `'${s}` : s);
 }
 
 export function buildRow(ctx: HookContext): string[] {

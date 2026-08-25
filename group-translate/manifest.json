@@ -18,7 +18,7 @@
     "openwa"
   ],
   "status": "stable",
-  "minOpenWAVersion": "0.7.0",
+  "minOpenWAVersion": "0.8.0",
   "testedOpenWAVersion": "0.23.3",
   "provides": [
     "translation"

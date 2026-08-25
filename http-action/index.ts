@@ -209,6 +209,18 @@ export default class HttpActionPlugin implements IPlugin {
       return { continue: !mine };
     }, HOOK_PRIORITY);
 
+    // Per-action request headers have no `secret: true` home. The host redacts plugin config per schema
+    // FIELD, and every action lives inside the single `actions` textarea, so a credential typed into an
+    // action header comes back verbatim on GET /plugins while `authToken` is masked. Marking the whole
+    // textarea secret would hide the action definitions themselves, so say it once here and name the
+    // actions, rather than let an operator assume this plugin masks every credential in its config.
+    const headerActions = cfg.actions.filter(a => a.request.headers).map(a => a.id);
+    if (headerActions.length) {
+      ctx.logger.warn(
+        `${PLUGIN}: action request headers are stored and returned unmasked by the plugins API; put a credential in the Token / API key field (authType 'apikey' names the header) rather than in an action header`,
+        { actions: headerActions },
+      );
+    }
     ctx.logger.log(`${PLUGIN} enabled (${cfg.actions.length} action(s), ${cfg.baseUrl})`);
   }
 

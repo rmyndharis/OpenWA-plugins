@@ -75,6 +75,9 @@ export function shardOf(logicalId: string): number {
 // One bucket: logical marker id -> first-seen wall-clock ms.
 type SeenBucket = Record<string, number>;
 
+// One mapping bucket: the standalone storage key a mapping used to live under -> its value.
+type MapBucket = Record<string, unknown>;
+
 /** The unscoped reverse mapping: a session's chat, or a marker that two sessions claim this id. */
 type LegacyRev = { sessionId: string; chatId: string } | { ambiguous: true };
 
@@ -124,8 +127,67 @@ export class MappingStore {
     return `seenb:s${shard}`;
   }
 
+  // Chat mappings are sharded for the same reason the dedup markers are: the host re-measures its 50 MiB
+  // quota on EVERY `set` by readdir-ing the plugin's data directory and stat-ing every key, synchronously,
+  // on the gateway's own event loop. This store writes THREE keys per chat (forward, session-scoped
+  // reverse, unscoped reverse) and prunes none of them, because a mapping IS the link between a WhatsApp
+  // chat and its Chatwoot thread and there is no safe moment to drop one. So an install that had relayed
+  // 10k chats made every storage write in the whole plugin stat 30k files, and it only got worse with use.
+  // Bucketing holds the key count constant while every mapping is still kept forever.
+  //
+  // One pool for all three families, and a bucket entry is keyed by the SAME string the standalone key
+  // used, so a mapping written before bucketing is found by the same lookup (readMapped) and needs no
+  // migration pass. Reuses shardOf, so the two pools share a hash and a shard count but not a key
+  // namespace (`mapb:` against `seenb:`).
+  private mapBucketKey(shard: number): string {
+    return `mapb:s${shard}`;
+  }
+
+  // Read one mapping: its bucket first, then the standalone key an earlier version wrote. Unlike hasSeen's
+  // legacy read this is not a per-message cost: any chat this version has written has a bucket entry, so
+  // only a chat with no mapping at all pays the second read.
+  private async readMapped<T>(key: string): Promise<T | null> {
+    const bucket = await this.storage.get<MapBucket>(this.mapBucketKey(shardOf(key)));
+    const hit = bucket?.[key];
+    if (hit !== undefined) return hit as T;
+    return this.storage.get<T>(key);
+  }
+
+  // Write one mapping into its bucket, then retire the standalone key it used to live under so an
+  // upgraded install actually sheds those files instead of carrying their stat cost forever. The retire
+  // is best-effort: the value is already durable in the bucket and readMapped consults the bucket first,
+  // so a leftover can never shadow it.
+  private async writeMapped(key: string, value: unknown): Promise<void> {
+    const bucketKey = this.mapBucketKey(shardOf(key));
+    // Serialized per bucket, exactly like markSeen and for the same reason: a bucket is a
+    // read-modify-write shared across chats and every await inside it is a round-trip to the host, so two
+    // chats that hash together would interleave and the later write would erase the earlier chat's
+    // mapping. A lost mapping re-creates that chat's Chatwoot conversation and splits its thread. The
+    // per-chat locks cannot prevent it: they are keyed by chat, and a shard is shared across chats.
+    await this.bucketLock.run(bucketKey, async () => {
+      const bucket = (await this.storage.get<MapBucket>(bucketKey)) ?? {};
+      bucket[key] = value;
+      await this.storage.set(bucketKey, bucket);
+    });
+    await this.storage.delete(key).catch(() => undefined);
+  }
+
+  // Drop one mapping from its bucket AND the standalone key. Both: readMapped falls back to the
+  // standalone key, so emptying only the bucket would leave an unlinked mapping still readable and the
+  // 404 recovery would keep resolving the conversation it just dropped.
+  private async deleteMapped(key: string): Promise<void> {
+    const bucketKey = this.mapBucketKey(shardOf(key));
+    await this.bucketLock.run(bucketKey, async () => {
+      const bucket = await this.storage.get<MapBucket>(bucketKey);
+      if (!bucket || !(key in bucket)) return;
+      delete bucket[key];
+      await this.storage.set(bucketKey, bucket);
+    });
+    await this.storage.delete(key);
+  }
+
   getByChat(sessionId: string, chatId: string): Promise<ChatLink | null> {
-    return this.storage.get<ChatLink>(this.fwdKey(sessionId, chatId));
+    return this.readMapped<ChatLink>(this.fwdKey(sessionId, chatId));
   }
 
   // Resolve the WA chat for a Chatwoot conversation. With a `sessionId` (a delivery that carries its
@@ -136,10 +198,10 @@ export class MappingStore {
     sessionId?: string,
   ): Promise<{ sessionId: string; chatId: string } | null> {
     if (sessionId) {
-      const scoped = await this.storage.get<{ sessionId: string; chatId: string }>(this.revKey(sessionId, conversationId));
+      const scoped = await this.readMapped<{ sessionId: string; chatId: string }>(this.revKey(sessionId, conversationId));
       if (scoped) return scoped;
     }
-    const legacy = await this.storage.get<LegacyRev>(this.legacyRevKey(conversationId));
+    const legacy = await this.readMapped<LegacyRev>(this.legacyRevKey(conversationId));
     // Marked once a second session claimed the same conversation id. A scope-less delivery carries
     // nothing that says which tenant it belongs to, so there is no right answer to pick here.
     if (!legacy || 'ambiguous' in legacy) return null;
@@ -147,19 +209,19 @@ export class MappingStore {
   }
 
   async link(sessionId: string, chatId: string, instanceId: string, link: ChatLink): Promise<void> {
-    await this.storage.set(this.fwdKey(sessionId, chatId), link);
+    await this.writeMapped(this.fwdKey(sessionId, chatId), link);
     const rev = { sessionId, chatId };
-    await this.storage.set(this.revKey(sessionId, link.conversationId), rev); // tenant-scoped lookup
+    await this.writeMapped(this.revKey(sessionId, link.conversationId), rev); // tenant-scoped lookup
     // The unscoped key exists only so mappings written before scoping keep resolving. A Chatwoot
     // conversation id is unique per ACCOUNT, not per gateway, so two relayed accounts collide on it as
     // a matter of course — and whoever linked last used to win the key. Claim it only while it is
     // unclaimed, and mark it unusable once a second session claims the same id.
     const legacyKey = this.legacyRevKey(link.conversationId);
-    const legacy = await this.storage.get<LegacyRev>(legacyKey);
+    const legacy = await this.readMapped<LegacyRev>(legacyKey);
     if (!legacy) {
-      await this.storage.set(legacyKey, rev);
+      await this.writeMapped(legacyKey, rev);
     } else if (!('ambiguous' in legacy) && legacy.sessionId !== sessionId) {
-      await this.storage.set(legacyKey, { ambiguous: true });
+      await this.writeMapped(legacyKey, { ambiguous: true });
     }
     await this.mappings.upsert({ sessionId, chatId, instanceId }, String(link.conversationId));
   }
@@ -167,7 +229,7 @@ export class MappingStore {
   async patch(sessionId: string, chatId: string, patch: Partial<ChatLink>): Promise<void> {
     const existing = await this.getByChat(sessionId, chatId);
     if (!existing) return;
-    await this.storage.set(this.fwdKey(sessionId, chatId), { ...existing, ...patch });
+    await this.writeMapped(this.fwdKey(sessionId, chatId), { ...existing, ...patch });
   }
 
   // Idempotency markers, split so the caller controls WHEN the mark lands (outbound marks only AFTER a
@@ -323,16 +385,16 @@ export class MappingStore {
   }
 
   async unlinkByChatId(sessionId: string, chatId: string) {
-    await this.storage.delete(this.fwdKey(sessionId, chatId));
+    await this.deleteMapped(this.fwdKey(sessionId, chatId));
   }
 
   async unlinkByConversationId(sessionId: string, conversationId: number) {
-    await this.storage.delete(this.revKey(sessionId, conversationId));
+    await this.deleteMapped(this.revKey(sessionId, conversationId));
     // Only if it is ours. Deleting it unconditionally removed another tenant's fallback along with
     // our own, silently dropping their agent replies until their next inbound message rebuilt it.
-    const legacy = await this.storage.get<LegacyRev>(this.legacyRevKey(conversationId));
+    const legacy = await this.readMapped<LegacyRev>(this.legacyRevKey(conversationId));
     if (legacy && !('ambiguous' in legacy) && legacy.sessionId === sessionId) {
-      await this.storage.delete(this.legacyRevKey(conversationId));
+      await this.deleteMapped(this.legacyRevKey(conversationId));
     }
   }
 }

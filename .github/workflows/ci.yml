@@ -15,8 +15,16 @@ jobs:
   build:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # Nothing in this job reaches the repository through git or the API: it installs, type-checks,
+    # tests, packages and loads bundles. Without these two lines it inherits the repository default
+    # token scope and actions/checkout writes that token into .git/config, where the next step,
+    # `npm ci`, runs dependency lifecycle scripts (esbuild has a postinstall) with it on disk.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: 22

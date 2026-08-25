@@ -218,3 +218,28 @@ test('a nullable group does not break a run of adjacent unbounded quantifiers', 
   // A group that must consume still breaks the run, which is what makes these patterns safe.
   assert.equal(isSafeRegexPattern('.*(x).*(y).*!'), true);
 });
+
+test('an ambiguous repeated alternation is rejected, an unambiguous one is kept', () => {
+  // Two branches that can consume the SAME text give the engine more than one way forward at each
+  // position, and it must try them all on failure. Measured on the real engine: `^([a-z]|[a-z0-9])+$`
+  // takes 259 ms against 23 characters and over a minute against 31, well inside the 1000-char body cap,
+  // and JS regex execution cannot be interrupted. One short message from a stranger pinned the worker,
+  // and every later message queued behind it, so the plugin silently stopped answering.
+  for (const pattern of ['(a|a)*$', '^([a-z]|[a-z0-9])+$', '^(\\w|\\d)+$', '(a|ab)+', '(x|xy|xyz)+']) {
+    assert.equal(isSafeRegexPattern(pattern), false, `should reject: ${pattern}`);
+  }
+  // Sharing a first character is NOT enough: `two` and `three` both start with `t` but diverge at the
+  // next character, so no input can split two ways. Rejecting these would break ordinary keyword rules.
+  for (const pattern of ['(one|two|three)+', '(cat|dog)', '^(yes|no)$', '(foo|bar)*', '(ya|tidak)+', 'hal(o|lo)']) {
+    assert.equal(isSafeRegexPattern(pattern), true, `should accept: ${pattern}`);
+  }
+});
+
+test('an accepted alternation stays fast at the full input cap', () => {
+  // The guard rail for the test above: proving a pattern is accepted is only meaningful if accepting it
+  // is actually safe.
+  const re = new RegExp('^(one|two|three)+$');
+  const started = performance.now();
+  re.test('one'.repeat(333) + 'x');
+  assert.ok(performance.now() - started < 100, 'an accepted alternation must not backtrack');
+});

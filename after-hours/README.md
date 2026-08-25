@@ -33,18 +33,25 @@
   `cooldownSec`, so a customer sending several after-hours messages isn't spammed.
 - **Direct-chat by default** — group chats are ignored unless `respondInGroups` is enabled.
 - **Least privilege** — declares only `messages:send`.
-- **Fail-fast config** — a malformed schedule (bad day/time, `open >= close`, all-closed) or an unknown
-  timezone shows as `ERROR` in the dashboard rather than misbehaving silently.
+- **Fail-fast config** — a malformed schedule (bad day/time, an open equal to its close, all-closed) or
+  an unknown timezone shows as `ERROR` in the dashboard rather than misbehaving silently.
+- **Health check**: `GET /api/plugins/after-hours/health` reports the live timezone and cooldown, and
+  turns unhealthy when a config edit made after enable fails validation. The plugin answers nothing in
+  that state and nothing else surfaces it.
 
 ## Schedule
 
 `schedule` is a JSON object mapping `mon`..`sun` to a `"HH:MM-HH:MM"` window or `null` (closed); an
-absent day is also closed. Times are 24-hour, `open < close` (same-day):
+absent day is also closed. Times are 24-hour and local to `timezone`:
 
 ```json
 { "mon": "09:00-17:00", "tue": "09:00-17:00", "wed": "09:00-17:00",
   "thu": "09:00-17:00", "fri": "09:00-17:00", "sat": "09:00-13:00", "sun": null }
 ```
+
+A window belongs to the day it **opens** on, so `"22:00-06:00"` under `mon` runs from Monday 22:00
+until **Tuesday** 06:00. `"00:00-00:00"` means open all day; any other window whose open equals its
+close is rejected.
 
 ## Setup
 

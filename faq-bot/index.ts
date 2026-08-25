@@ -43,8 +43,17 @@ export function parseConfig(raw: Record<string, unknown>): {
 // a command prefix.
 const HOOK_PRIORITY = 80;
 
+// Minimum gap between two answers to the SAME rule in the same chat. Hardcoded, like the retry cadence
+// in the other plugins: it exists to stop a runaway exchange, not to be tuned. A rule whose own reply
+// matches its own pattern is a fixed point, and a colliding autoresponder on the other end then answers
+// each of this plugin's replies forever, at full message rate. Per RULE, not per chat, so a contact who
+// asks two different questions in a row still gets both answers.
+const MATCHED_REPLY_COOLDOWN_MS = 10_000;
+
 export default class FaqBot implements IPlugin {
   private readonly fallbackAt = new Map<string, number>();
+  /** `${sessionId}:${chatId}:${pattern}` -> last answer for that rule, for MATCHED_REPLY_COOLDOWN_MS. */
+  private readonly matchedAt = new Map<string, number>();
 
   async onEnable(ctx: PluginContext): Promise<void> {
     this.warnSkipped(ctx); // fail-fast + surface any invalid regex rules at enable
@@ -102,7 +111,18 @@ export default class FaqBot implements IPlugin {
     const rule = matchRule(cfg.rules, m.body);
     try {
       if (rule) {
-        await ctx.messages.reply(sessionId, m.chatId, m.id, rule.reply);
+        // Claimed either way: this message is addressed to this plugin's rule set, and letting a
+        // sibling responder answer a message this one is deliberately staying quiet about would defeat
+        // the throttle.
+        const key = `${sessionId}:${m.chatId}:${rule.pattern}`;
+        if (!allowCooldown(this.matchedAt, key, Date.now(), MATCHED_REPLY_COOLDOWN_MS)) return true;
+        try {
+          await ctx.messages.reply(sessionId, m.chatId, m.id, rule.reply);
+        } catch (e) {
+          // Release the window: a reply that never arrived must not silence the next identical question.
+          this.matchedAt.delete(key);
+          throw e;
+        }
         return true;
       }
       if (cfg.config.fallbackReply) {

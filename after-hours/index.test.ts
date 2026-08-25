@@ -234,6 +234,45 @@ test('a failed away reply is throttled, not retried on every message', async () 
 // Regression: the backoff must not be expressible in terms of the CURRENT cooldown. Encoding it as a
 // rewound cooldown timestamp meant an operator lowering cooldownSec in the dashboard — config is re-read
 // per message — turned the stored value into "long past" and handed back the un-throttled retry storm.
+test('a blank cooldownSec falls back to the default instead of disabling the throttle', () => {
+  // `Number('')` is 0, and 0 is the documented "reply every time" value, so a blank field silently
+  // turned the per-chat throttle off rather than defaulting to 3600.
+  const base = { schedule, awayMessage: 'closed' };
+  assert.equal(parseConfig({ ...base }).config.cooldownSec, 3600, 'absent means default');
+  assert.equal(parseConfig({ ...base, cooldownSec: '' }).config.cooldownSec, 3600, 'empty means default');
+  assert.equal(parseConfig({ ...base, cooldownSec: '   ' }).config.cooldownSec, 3600, 'blank means default');
+  // An explicit 0 is a real setting and must still disable the throttle.
+  assert.equal(parseConfig({ ...base, cooldownSec: 0 }).config.cooldownSec, 0, 'explicit 0 is honoured');
+  assert.equal(parseConfig({ ...base, cooldownSec: '0' }).config.cooldownSec, 0, 'explicit "0" is honoured');
+  assert.equal(parseConfig({ ...base, cooldownSec: 60 }).config.cooldownSec, 60);
+});
+
+test('healthCheck turns unhealthy when the live config stops parsing', async () => {
+  // The host reports a plugin with no healthCheck as healthy, so a config edit that fails validation
+  // after enable would leave the dashboard green while the plugin answered nothing at all.
+  const { default: AfterHours } = await import('./index.ts');
+  let live: Record<string, unknown> = { schedule, awayMessage: 'closed', timezone: 'Asia/Jakarta' };
+  const ctx = {
+    get config() {
+      return live;
+    },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    messages: { reply: async () => ({ messageId: 'x', timestamp: 0 }) },
+    registerHook: () => {},
+  } as never;
+
+  const plugin = new AfterHours();
+  assert.equal((await plugin.healthCheck()).healthy, false, 'not enabled yet');
+
+  await plugin.onEnable(ctx);
+  const ok = await plugin.healthCheck();
+  assert.equal(ok.healthy, true);
+  assert.match(ok.message ?? '', /Asia\/Jakarta/);
+
+  live = { schedule: '{ not json', awayMessage: 'closed' };
+  assert.equal((await plugin.healthCheck()).healthy, false, 'a config edit that stops parsing is surfaced');
+});
+
 test('lowering cooldownSec mid-backoff does not release the retry storm', async () => {
   const attempts: string[] = [];
   let handler: ((h: unknown) => Promise<unknown>) | undefined;

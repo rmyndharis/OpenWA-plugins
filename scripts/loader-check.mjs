@@ -3,7 +3,8 @@
 // needs. So a bundle that throws on require — or default-exports the wrong shape — is first discovered
 // by the host at install, after the tag and the GitHub Release are already published. Run after a build.
 import { createRequire } from 'node:module';
-import { existsSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { discoverPluginDirs } from './run-tests.mjs';
@@ -46,6 +47,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.exit(1);
   }
 
+  // Bundles are loaded from a copy OUTSIDE this repository. Node resolves a bare `require` by walking
+  // up from the requiring FILE's own directory, so a bundle loaded where it was built reaches
+  // <repo>/node_modules and every dev dependency in it. The operator's gateway requires the same file
+  // from its own plugin directory, where no such tree exists, so an accidental unbundled import would
+  // pass this gate and then throw MODULE_NOT_FOUND at install.
+  const staging = mkdtempSync(join(tmpdir(), 'openwa-loader-'));
+
   const failures = [];
   let handles = process.getActiveResourcesInfo().length;
   for (const id of dirs) {
@@ -53,11 +61,15 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     // and it is the one package.mjs asserts is in the archive. Checking a different file would leave
     // the published entry point untested while reporting success.
     const main = JSON.parse(readFileSync(join(ROOT, id, 'manifest.json'), 'utf8')).main;
-    const bundle = join(ROOT, id, main);
-    if (!existsSync(bundle)) {
+    if (!existsSync(join(ROOT, id, main))) {
       failures.push(`${id}: ${main} is missing — run \`npm run build\` first`);
       continue;
     }
+    // Copy the directory `main` sits in, so the whole built tree travels with it, notably
+    // dist/package.json with its {"type":"commonjs"} pin, which is what makes the copy parse the same
+    // way the archive member does.
+    cpSync(join(ROOT, id, dirname(main)), join(staging, id, dirname(main)), { recursive: true });
+    const bundle = join(staging, id, main);
     // require() is separated from the shape check so a bundle that throws on load is still reported
     // against the plugin it belongs to — a bare "missing dependency" names nothing across ten plugins.
     let mod;
@@ -83,6 +95,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     }
     handles = now;
   }
+
+  rmSync(staging, { recursive: true, force: true });
 
   if (failures.length) {
     for (const f of failures) console.error(`✗ ${f}`);

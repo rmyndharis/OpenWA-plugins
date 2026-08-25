@@ -96,7 +96,9 @@ export class FlowEngine {
     const input = messageBody.trim();
     const stateKey = `state__${sessionId}__${conversation}`.replace(/:/g, '_');
     let state = await context.storage.get<UserState>(stateKey);
-    context.logger.debug('[FlowEngine] Loaded state', { stateKey, state });
+    // Never the state itself: `path` is the trail of options this contact picked, which is message
+    // content by another name. A stored row can be malformed, so read its depth defensively.
+    context.logger.debug('[FlowEngine] Loaded state', { stateKey, hasState: !!state, pathDepth: state?.path?.length ?? 0 });
 
     // Check expiration
     if (state && Date.now() - state.lastActive > this.TIMEOUT_MS) {
@@ -107,7 +109,7 @@ export class FlowEngine {
 
     const trigger = flow.trigger.trim();
     const isTriggerWord = trigger !== '' && input.toLowerCase() === trigger.toLowerCase();
-    context.logger.debug('[FlowEngine] Trigger check', { trigger, input, isTriggerWord });
+    context.logger.debug('[FlowEngine] Trigger check', { trigger, isTriggerWord });
 
     // If no active flow state, check if we should start one
     if (!state) {
@@ -116,23 +118,28 @@ export class FlowEngine {
         return false;
       }
       context.logger.debug('[FlowEngine] Starting new flow', { greeting: flow.greeting });
-      await context.messages.reply(sessionId, chatId, messageId, flow.greeting);
+      // Store the state BEFORE the greeting goes out. A write that fails after a delivered greeting
+      // leaves the flow unstarted, and with the documented empty `trigger` the next message reads as
+      // another first message and greets again: one outbound message per inbound message, uncapped.
+      // The other order is self-healing, because state whose greeting never arrived answers the next
+      // message with the fallback at the bottom of this method, which repeats the greeting text.
       await context.storage.set(stateKey, { path: [], lastActive: Date.now() });
+      await context.messages.reply(sessionId, chatId, messageId, flow.greeting);
       return true;
     }
 
     // If trigger word is received while in flow, restart the flow
     if (isTriggerWord) {
       context.logger.debug('[FlowEngine] Trigger word received during active flow. Restarting flow.');
-      await context.messages.reply(sessionId, chatId, messageId, flow.greeting);
       await context.storage.set(stateKey, { path: [], lastActive: Date.now() });
+      await context.messages.reply(sessionId, chatId, messageId, flow.greeting);
       return true;
     }
 
     // Traverse the configuration options according to the user's path
     let currentNode: FlowNode | undefined = { text: flow.greeting, options: flow.options };
 
-    context.logger.debug('[FlowEngine] Traversing path', { path: state.path });
+    context.logger.debug('[FlowEngine] Traversing path', { pathDepth: state.path.length });
     for (const key of state.path) {
       if (currentNode && currentNode.options && Object.hasOwn(currentNode.options, key)) {
         currentNode = currentNode.options[key];
@@ -161,11 +168,12 @@ export class FlowEngine {
       currentNode.options && Object.hasOwn(currentNode.options, input) ? currentNode.options[input] : undefined;
 
     if (nextNode) {
-      context.logger.debug('[FlowEngine] Input matched option', { input, text: nextNode.text });
+      context.logger.debug('[FlowEngine] Input matched option');
       state.path.push(input);
       state.lastActive = Date.now();
-      await context.messages.reply(sessionId, chatId, messageId, nextNode.text);
-
+      // Record the move before the reply goes out, for the same reason as the greeting above. Sending a
+      // sub-menu the stored path never moved to means the contact's next answer is matched against the
+      // menu they were shown a level up, where the same key usually names a different option.
       if (nextNode.options && Object.keys(nextNode.options).length > 0) {
         context.logger.debug('[FlowEngine] Next node has sub-options. Saving updated path.');
         await context.storage.set(stateKey, state);
@@ -173,6 +181,7 @@ export class FlowEngine {
         context.logger.debug('[FlowEngine] Leaf node reached. Clearing flow state.');
         await context.storage.delete(stateKey);
       }
+      await context.messages.reply(sessionId, chatId, messageId, nextNode.text);
       return true;
     } else if (!currentNode.options || Object.keys(currentNode.options).length === 0) {
       // The resolved node is a leaf with no way forward (config changed under the user). End the flow

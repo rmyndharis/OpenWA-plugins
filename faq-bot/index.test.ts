@@ -256,3 +256,38 @@ test('a failed fallback send releases the cooldown slot instead of silencing the
   await fire('m2');
   assert.equal(delivered, 1, 'the next message must be able to retry the fallback');
 });
+
+test('the same rule is not answered twice in a row, but a different question still is', async () => {
+  // A rule whose reply matches its own pattern is a fixed point, and a colliding autoresponder on the
+  // other end then answers each of this plugin's replies forever, at full message rate. The throttle is
+  // per RULE so a contact asking two different questions still gets both answers.
+  const replies: string[] = [];
+  const rules = [
+    { mode: 'contains', pattern: 'harga', reply: 'Harga mulai 50rb' },
+    { mode: 'contains', pattern: 'jam', reply: 'Buka 09.00-17.00' },
+  ];
+  const first = await runHook({ rules }, 'berapa harga?', t => replies.push(t));
+  const repeat = await runHook({ rules }, 'harga lagi', t => replies.push(t));
+  assert.equal(first.continue, false);
+  assert.equal(repeat.continue, false, 'the message is still claimed: it is addressed to this rule set');
+
+  // Each runHook builds a fresh plugin instance, so drive one instance directly for the throttle.
+  const sent: string[] = [];
+  let handler: ((h: unknown) => Promise<{ continue: boolean }>) | undefined;
+  const ctx = makeCtx({
+    config: { rules: JSON.stringify(rules) },
+    registerHook: (_e, h) => { handler = h as (hook: unknown) => Promise<{ continue: boolean }>; },
+    reply: async (_s, _c, _q, text) => { sent.push(text); return { messageId: 'x', timestamp: 0 }; },
+  });
+  const { default: FaqBot } = await import('./index.ts');
+  await new FaqBot().onEnable(ctx as never);
+  const fire = (body: string, id: string) =>
+    handler!({ source: 'Engine', sessionId: 's1', timestamp: new Date(),
+               data: { id, chatId: 'c@x', body, type: 'text', fromMe: false, isGroup: false } });
+
+  await fire('berapa harga?', 'm1');
+  await fire('harga berapa ya', 'm2');
+  assert.deepEqual(sent, ['Harga mulai 50rb'], 'the same rule answers once inside the window');
+  await fire('jam berapa buka', 'm3');
+  assert.deepEqual(sent, ['Harga mulai 50rb', 'Buka 09.00-17.00'], 'a different rule is unaffected');
+});

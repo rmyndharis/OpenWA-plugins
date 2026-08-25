@@ -50,6 +50,35 @@ function readTimeoutMs(cfg: Record<string, unknown>): number {
   return Math.min(30_000, Math.max(500, readNumber(cfg, "timeoutMs", 4000)));
 }
 
+// The host resolves this plugin's outbound allowlist from the RAW config value, refuses the fetch at
+// the capability boundary when it cannot use that value, and says nothing on this side. detect() then
+// throws, the coordinator skips the message, and an unusable URL is indistinguishable from a group with
+// nothing to translate. Name the problem where the value is read. The value itself is left alone:
+// rewriting it here would change what this plugin calls without changing what the host admits.
+//
+// Deliberately NOT an https-only rule, even though the host admits a config-supplied host over https
+// only. The shipped default is loopback over http, and a plain-http backend on a non-loopback host is a
+// supported install (its host:port added to the manifest net.allow, then repackaged). A plugin cannot
+// see its own effective allowlist, so it must not second-guess it.
+function backendUrlProblem(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return "is not a URL";
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return "is not an http(s) URL";
+  }
+  // A credentialed value is dropped from the config-derived allowlist outright, so a non-loopback
+  // backend named this way is refused on every single call.
+  if (parsed.username || parsed.password) return "carries embedded credentials";
+  // The endpoint path is appended to this value, so a query or fragment lands in the middle of the
+  // request path: "http://host/?lang=en" becomes "http://host/?lang=en/detect".
+  if (parsed.search || parsed.hash) return "carries a query string or fragment";
+  return null;
+}
+
 function readNumber(
   cfg: Record<string, unknown>,
   key: string,
@@ -124,8 +153,17 @@ export class TranslationPlugin implements IPlugin {
       info: (m, meta) => context.logger.log(m, meta),
       warn: (m, meta) => context.logger.warn(m, meta),
     };
+    const url = readString(cfg, "libretranslateUrl", "http://localhost:7001");
+    const problem = backendUrlProblem(url);
+    if (problem) {
+      // Never the value itself: this is the one config field an operator may have put a password in.
+      context.logger.warn(
+        `libretranslateUrl ${problem}; every translate call will be refused`,
+        { action: "translation_backend_url_invalid" },
+      );
+    }
     const translator = new LibreTranslateClient({
-      url: readString(cfg, "libretranslateUrl", "http://localhost:7001"),
+      url,
       apiKey: readOptionalString(cfg, "libretranslateApiKey"),
       timeoutMs: readTimeoutMs(cfg),
       net: context.net,

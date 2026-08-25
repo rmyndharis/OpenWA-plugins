@@ -43,6 +43,17 @@ test('parseConfig floors a sub-second flush interval to >=1s (setInterval hot-lo
   assert.equal(parseConfig({ ...base, flushIntervalSec: 10 }).config.flushIntervalSec, 10); // sane values unchanged
 });
 
+test('parseConfig caps the flush interval below the 32-bit setInterval ceiling', () => {
+  // setInterval takes a 32-bit millisecond delay. Past 2_147_483s the delay overflows, Node warns, and
+  // the timer silently fires at ~1ms instead: the same hot-loop the floor above exists to prevent,
+  // reached from the other end. The host never validates configSchema bounds, so this is the plugin's
+  // job even though the manifest advertises a max.
+  const base = { spreadsheetId: 'sid', serviceAccountJson: validSa };
+  assert.equal(parseConfig({ ...base, flushIntervalSec: 2_147_483 }).config.flushIntervalSec, 2_147_483);
+  assert.equal(parseConfig({ ...base, flushIntervalSec: 3_000_000_000 }).config.flushIntervalSec, 2_147_483);
+  assert.ok(parseConfig({ ...base, flushIntervalSec: 3e9 }).config.flushIntervalSec * 1000 <= 2_147_483_647);
+});
+
 test('flushBuffer clears the buffer on success', async () => {
   const buffer = [['a'], ['b']];
   await flushBuffer(buffer, async () => {});

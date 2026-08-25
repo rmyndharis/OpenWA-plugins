@@ -4,6 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { validateManifest } from './catalog.mjs';
 
 // Three of the checks below iterate a list that can come back empty — no plugin directories, no stable
 // entries, no catalog entries at all — and an empty loop is indistinguishable from a passing one. Proven
@@ -154,4 +155,49 @@ test('every catalog download URL pins the artifact digest', () => {
       `${e.id}: download URL must end in #sha256=<64 hex> (unpinned URLs fail production installs)`,
     );
   }
+});
+
+// ── Manifest gates that must mirror the host, or a release is published and then refused at install ──
+
+const OK = {
+  id: 'demo',
+  repository: 'https://github.com/rmyndharis/OpenWA-plugins',
+  homepage: 'https://github.com/rmyndharis/OpenWA-plugins/tree/main/demo',
+  sessionScoped: true,
+  status: 'beta',
+  permissions: ['messages:send'],
+};
+
+test('a reserved id is refused however it is cased', () => {
+  // The host lowercases before its reserved lookup, so `Auto-Reply` installs as a plugin that shadows
+  // the built-in `auto-reply`. Case-sensitive here, it passed every gate, took a tag and a published
+  // artifact, and was refused on the operator's gateway with the release already public.
+  for (const id of ['auto-reply', 'Auto-Reply', 'AUTO-REPLY', 'Baileys', 'Translation']) {
+    assert.throws(
+      () => validateManifest(id, { ...OK, id }),
+      /is a reserved id/,
+      `${id}: must be refused as reserved`,
+    );
+  }
+  assert.doesNotThrow(() => validateManifest('demo', { ...OK }));
+});
+
+test('an id containing ".." is refused, as the host refuses it', () => {
+  assert.throws(() => validateManifest('a..b', { ...OK, id: 'a..b' }), /does not match/);
+});
+
+test('a homepage outside the declared repository is refused', () => {
+  // Each plugin README renders this link labelled with THIS repository's name, so an ungated homepage
+  // publishes a link that says one repository and goes somewhere else.
+  assert.throws(
+    () => validateManifest('demo', { ...OK, homepage: 'https://example.com/demo' }),
+    /homepage must be a URL under/,
+  );
+  // A sibling repository under the same owner must not prefix-match.
+  assert.throws(
+    () => validateManifest('demo', { ...OK, homepage: 'https://github.com/rmyndharis/OpenWA-plugins-evil' }),
+    /homepage must be a URL under/,
+  );
+  // Absent is allowed: nothing requires it, and the table falls back to the repository URL.
+  assert.doesNotThrow(() => validateManifest('demo', { ...OK, homepage: undefined }));
 });

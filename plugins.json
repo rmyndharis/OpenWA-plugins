@@ -22,7 +22,7 @@
     "repoPath": "after-hours",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/after-hours",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/after-hours-v0.2.6/after-hours.zip#sha256=44f50a705af04f01a027ad322f5158bf827ec79bda24b7b1d675b815d347535a",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/after-hours-v0.2.6/after-hours.zip#sha256=745b298c89ddd88ef5a0d961cf096a3a4fffdbca335afe733770594dfeecc613",
     "permissions": [
       "messages:send"
     ],
@@ -224,7 +224,7 @@
     "repoPath": "chat-flow",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/chat-flow",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chat-flow-v1.1.7/chat-flow.zip#sha256=366f56451bad85f8e2e6de560aa0e3dfdf5190ceae6e8520a801cb9250ffe13b",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chat-flow-v1.1.7/chat-flow.zip#sha256=11ea855b29886357f3a70386ea8b3018a92093661cfc4abb4dd9824865671aa5",
     "permissions": [
       "messages:send",
       "storage:use"
@@ -404,7 +404,7 @@
     "repoPath": "chatwoot-adapter",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chatwoot-adapter-v0.9.6/chatwoot-adapter.zip#sha256=13373722601d380f0a9c1146f3c26380fcb67387ffcfe42bf1e5490ca86cc503",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chatwoot-adapter-v0.9.6/chatwoot-adapter.zip#sha256=f9bfc9c2b4e3cf5ee8804b117f28eeb8661e03731f57f64f4706fdf374e051cb",
     "permissions": [
       "net:fetch",
       "conversation:send",
@@ -715,7 +715,7 @@
     "repoPath": "faq-bot",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.2.6/faq-bot.zip#sha256=f52932cd0a4507ddbe8cc63254a73f12902b445c7b88cc0b013a5e88ea61e71b",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.2.6/faq-bot.zip#sha256=943413c5db9ddddb4577b4e8c73085a8e4b870ac75361e1b52c9322a63601fda",
     "permissions": [
       "messages:send"
     ],
@@ -886,13 +886,13 @@
       "whatsapp",
       "openwa"
     ],
-    "minOpenWAVersion": "0.7.0",
+    "minOpenWAVersion": "0.8.0",
     "testedOpenWAVersion": "0.23.3",
     "releasedAt": "2026-08-25",
     "repoPath": "group-translate",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/group-translate-v1.3.6/group-translate.zip#sha256=5a13e11217548e5bfe72ba68e7e88d3c194b2cc69780e422be8c376a4b9e5b26",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/group-translate-v1.3.6/group-translate.zip#sha256=fcae195d62982c2f6ef4e61cb917963a008aef549b49ec23c5fed93f33642e3c",
     "permissions": [
       "messages:send",
       "engine:read",
@@ -1176,7 +1176,7 @@
     "repoPath": "gsheets-logger",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/gsheets-logger-v0.3.8/gsheets-logger.zip#sha256=e11faaeed0191179a9b5156e94b0d550711ac5f33bdf535430b8191c3db3bf85",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/gsheets-logger-v0.3.8/gsheets-logger.zip#sha256=5a00723c497b08c609964116608c351fa3edae32fa6d252eb69ed3df71d3b9cb",
     "permissions": [
       "net:fetch",
       "storage:use"
@@ -1383,7 +1383,7 @@
     "repoPath": "http-action",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/http-action-v0.2.7/http-action.zip#sha256=0ac3143c96c6cdc1d66e46a2fe1fd99cd836518cec4207ed1754df0d903e71e9",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/http-action-v0.2.7/http-action.zip#sha256=f7bde991df69a98e2f6e766875b3e0f57a727cc880590800f362804156ce9897",
     "permissions": [
       "net:fetch",
       "conversation:send",
@@ -1665,7 +1665,7 @@
     "repoPath": "supabase-otp-hook",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/supabase-otp-hook",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/supabase-otp-hook-v0.3.5/supabase-otp-hook.zip#sha256=40cf951f531f594ba32e59cc489c30cf69d33cf2afd7a3ee4645b2607498fb85",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/supabase-otp-hook-v0.3.5/supabase-otp-hook.zip#sha256=8fa1de12eb34b89f92675523ff847f033c7a282ca6457cff61a036f087727b9c",
     "permissions": [
       "webhook:ingress",
       "messages:send"
@@ -1850,7 +1850,7 @@
     "repoPath": "typebot-connector",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/typebot-connector",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/typebot-connector-v0.2.7/typebot-connector.zip#sha256=f55f046c1483a62e46180a3db7ec49805f1e1cfaeff4d60b6c438bcfad02aecf",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/typebot-connector-v0.2.7/typebot-connector.zip#sha256=d687203372c7cf3348b95d43f091985495a0ad56aa7840130f37cc4af31c72dc",
     "permissions": [
       "net:fetch",
       "conversation:send",
@@ -2103,13 +2103,13 @@
       "whatsapp",
       "openwa"
     ],
-    "minOpenWAVersion": "0.7.0",
+    "minOpenWAVersion": "0.8.0",
     "testedOpenWAVersion": "0.23.3",
     "releasedAt": "2026-08-25",
     "repoPath": "voice-transcription",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/voice-transcription",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/voice-transcription-v1.2.8/voice-transcription.zip#sha256=1f6fe925649a49694e93f5fb9102d4189911d8040eb639b0e37188bf2f725e4c",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/voice-transcription-v1.2.8/voice-transcription.zip#sha256=1c3718b5927c539dc21c632020f829c021bd997dda52d8f2111a59e67fda5ede",
     "permissions": [
       "net:fetch",
       "messages:send",

@@ -77,7 +77,7 @@ plugin:
 
 - declares `sessionScoped` explicitly (`true` or `false`);
 - declares `testedOpenWAVersion` when `status` is `"stable"`;
-- ships a `CHANGELOG.md` carrying a released `## [x.y.z] — YYYY-MM-DD` heading;
+- ships a `CHANGELOG.md` carrying a released `## [x.y.z] - YYYY-MM-DD` heading;
 - has a `manifest.json` `version` equal to that heading's version.
 
 `catalog.mjs` only *warns* about i18n — a missing block, or a missing locale — but the test suite does
@@ -240,8 +240,11 @@ correct plugins and were each learned the hard way. Re-verify against OpenWA cor
    fails the typecheck instead of at runtime.
 2. **Hook handlers are bounded to ~5 s.** Never await slow work (HTTP calls, media processing) inside a
    hook: return `{ continue: true }` synchronously and float the promise
-   (`void handle().catch(log)`). The same applies to ingress handlers (see supabase-otp-hook's
-   fire-and-forget send).
+   (`void handle().catch(log)`). An ingress handler is bounded the same way, but floating the whole send
+   there hides a failure nobody else sees: the provider was acked before the handler ran, so a send that
+   rejects instantly is a lost message with no retry anywhere. Race it against a short deadline and throw
+   when the send loses (see supabase-otp-hook), which retries and dead-letters that delivery while a
+   merely slow send still finishes in the background.
 3. **Hosts declared via config (`net.allowConfigHosts`) must be required, non-empty config** — the net
    gate reads the RAW `ctx.config`, so a **code-side** default host is invisible to the gate and every
    fetch silently no-ops. Fail fast in `readConfig` when the host field is empty. A **manifest**
@@ -285,7 +288,8 @@ correct plugins and were each learned the hard way. Re-verify against OpenWA cor
    dedupe ids, and caps the result at 1 MiB). Treat a `webhook:before` subscription in a submitted
    plugin with the same scrutiny as an ingress route.
 9. **Host bounds, none of them visible from the types:** 30 s per lifecycle phase; 30 s per capability
-   call, except the send verbs (`messages.sendText`, `messages.reply`, `conversations.send`) at 120 s;
+   call, except the send verbs (`ctx.messages.sendText`, `ctx.messages.reply`, `ctx.conversations.send`)
+   at 120 s; 5 s per ingress webhook dispatch and 5 s for `healthCheck`;
    5 s per hook dispatch, after which the host fails **open** with `{ continue: true }` and discards
    your result; 32 concurrent capability calls per plugin (the 33rd throws); 16 concurrent `net.fetch` calls
    **globally** — that one is shared across all plugins and workers, not per plugin; 50 MiB storage; 10 MiB
@@ -362,8 +366,9 @@ actually smoke-tested against.
 
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) + [SemVer](https://semver.org/):
 
-- An `## [Unreleased]` section at the top, then `## [MAJOR.MINOR.PATCH] — YYYY-MM-DD` headings in
-  descending order, with `### Added / Changed / Fixed / Removed / Security` subsections.
+- An `## [Unreleased]` section at the top, then `## [MAJOR.MINOR.PATCH] - YYYY-MM-DD` headings in
+  descending order, with `### Added / Changed / Fixed / Removed / Security` subsections. Older entries
+  use a longer dash; `scripts/catalog.mjs` accepts either, so leave those as they are.
 - **The top released heading's version MUST equal `manifest.json`'s `version`** — enforced by
   `scripts/catalog.mjs --check` in CI.
 - SemVer: **MAJOR** = breaking change for operators, **MINOR** = new capability, **PATCH** = fixes.
@@ -418,8 +423,11 @@ alongside uploads.
 | Script | What it does |
 | ------ | ------------ |
 | `node package.mjs <id>` | Validate manifest (required fields + `version` == top CHANGELOG heading), bundle to `dist/index.js`, zip to `<id>.zip` with the built-in STORE writer (`scripts/zip-store.mjs` — no external `zip` CLI needed), print size + sha256. |
+| `npm run build` | Run `node package.mjs` over every top-level directory that has a `manifest.json`, in one pass. |
+| `npm run loader:check` | `require()` every built `dist/index.js` from outside the repo tree and assert it default-exports a constructible plugin. Run it after a build: nothing else here proves a bundle actually loads on the operator's gateway. |
 | `npm run catalog` | Regenerate `plugins.json`, the root README catalog table, and every plugin README **Details** block. |
 | `npm run catalog:check` | Same, in-memory; fail if the committed files are out of date, a version↔changelog drift exists, or a manifest gate fails (CI). |
+| `npm run catalog:live` | Fetch every `download` URL in `plugins.json` and verify the bytes against its `#sha256=` pin, catching unpushed tags and stale digests that `catalog:check` cannot see. |
 | `npm test` | Run the full suite (`scripts/run-tests.mjs` auto-discovers every plugin dir by its `manifest.json`, plus `scripts/`) with `node --test` + `tsx`. |
 | `npm run test:coverage` | Same, with Node's built-in coverage report. |
 | `npm run typecheck` | `tsc --noEmit` over every `*/**/*.ts` (plugin dirs are not hardcoded). |

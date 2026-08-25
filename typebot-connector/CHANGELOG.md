@@ -10,6 +10,11 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ### Fixed
 
+- A rejected session-state write no longer costs the contact the whole turn. The Typebot server has
+  already advanced by that point, so the bubbles are the only thing left to deliver; the write failure
+  is now logged and the turn is sent. Losing the row costs one restart on the next message, where
+  throwing cost that restart and the turn.
+
 - A shared contact card or a poll no longer answers the current step. OpenWA 0.23.2 fills the message
   body for both, so a vCard holding a bare in-range digit (a street number, an extension) could silently
   select a numbered choice. The contact is asked to type instead and the flow stays where it is; sharing

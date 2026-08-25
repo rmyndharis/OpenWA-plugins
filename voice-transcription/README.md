@@ -5,7 +5,7 @@
 
 ![type: extension](https://img.shields.io/badge/type-extension-blue.svg)
 ![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)
-![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.7.0-25D366.svg)
+![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.8.0-25D366.svg)
 [![downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Frmyndharis%2FOpenWA-plugins%2Fbadges%2Fdownloads%2Fvoice-transcription.json)](https://github.com/rmyndharis/OpenWA-plugins/releases?q=voice-transcription)
 
 ## Details
@@ -20,7 +20,7 @@
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.23.3) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.23.3) |
 | **Keywords** | transcription, speech-to-text, stt, whisper, voice, audio, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/voice-transcription](https://github.com/rmyndharis/OpenWA-plugins/tree/main/voice-transcription) |
 <!-- END DETAILS -->
@@ -133,6 +133,9 @@ curl -X POST http://localhost:2785/api/plugins/voice-transcription/enable \
 
 ## Compatibility
 
+- Requires OpenWA **≥ 0.8.0**, the release that introduced `net.allowConfigHosts`. Both `sttBaseUrl` and
+  `deliveryWebhookUrl` are resolved through it, so on a 0.7.x host every call to a configured host is
+  refused and neither transcription nor delivery works at all.
 - Engine-neutral: both Baileys and whatsapp-web.js materialize the audio before the hook fires, so the
   plugin works on either.
 - **Best-effort by design (no core changes).** Because a sandboxed plugin has no host-managed background

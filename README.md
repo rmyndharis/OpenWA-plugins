@@ -53,7 +53,8 @@ metadata standard every plugin follows.
 ## Per-session config support
 
 OpenWA's `sessionScoped` plugins (the default) may carry per-session config **overrides** set via the
-dashboard — so two WhatsApp sessions under one plugin instance can run different settings. A plugin
+dashboard or `PUT /api/plugins/:id/config/:sessionId` — so two WhatsApp sessions under one plugin
+instance can run different settings. A plugin
 honors overrides only if it re-reads `ctx.config` inside its hook (not a cached snapshot from enable).
 The table below is the status for each plugin in this repo. See each plugin's README **Compatibility →
 Per-session config** for details and caveats.
@@ -111,16 +112,23 @@ curl -X POST "https://your-openwa-host/api/plugins/gsheets-logger/enable" \
 
 ### Management endpoints
 
-All routes require an ADMIN role.
+All routes require an ADMIN role. Every one of them also rejects a session-scoped API key outright,
+except `PUT /api/plugins/:id/config/:sessionId`, which a scoped key may call.
 
 | Method & path | Purpose |
 | ------------- | ------- |
 | `GET /api/plugins` | List installed plugins and their status |
+| `GET /api/plugins/catalog` | The remote catalog, annotated with what is already installed |
 | `GET /api/plugins/:id` | Inspect one plugin (config secrets redacted) |
 | `POST /api/plugins/install` | Upload and install a `.zip` (multipart field `file`) |
+| `POST /api/plugins/install-url` | Install by downloading a `.zip` from a URL (SSRF-guarded, `#sha256=` pinned) |
 | `POST /api/plugins/:id/enable` | Run the plugin (`onLoad` → `onEnable`) |
 | `POST /api/plugins/:id/disable` | Stop the plugin and unregister its hooks |
-| `PUT /api/plugins/:id/config` | Update config (`{ "config": { ... } }`); fires `onConfigChange` if enabled |
+| `POST /api/plugins/:id/update` | Replace an installed plugin in place from a URL, keeping its config and enabled state |
+| `PUT /api/plugins/:id/config` | Update the base config (`{ "config": { ... } }`); fires `onConfigChange` if enabled |
+| `PUT /api/plugins/:id/config/:sessionId` | Set one session's config override, shallow-merged over the base; an empty object clears it |
+| `PUT /api/plugins/:id/sessions` | Replace the whole set of sessions a session-scoped plugin is active for |
+| `GET /api/plugins/:id/config-ui` | The plugin's sandboxed-iframe config editor, when it ships one |
 | `DELETE /api/plugins/:id` | Uninstall and remove files (built-ins are protected) |
 | `GET /api/plugins/:id/health` | Plugin-reported health check |
 
@@ -209,7 +217,7 @@ React to activity with `ctx.registerHook(event, handler, priority?)`. Handlers a
 
 ### Capabilities
 
-The `PluginContext` exposes a deliberately small surface. Every capability below with a permission in the last column is gated by `manifest.permissions` — calling one you didn't declare throws `PluginCapabilityError`, at the call rather than at load, so an undeclared capability fails mid-run and not at install.
+The `PluginContext` exposes a deliberately small surface. Every permission in the last column except `webhook:ingress` is checked at the call: invoking a capability you didn't declare throws `PluginCapabilityError` mid-run, not at install. `webhook:ingress` is the exception, in both directions. Calling `ctx.registerWebhook` without it never throws and never logs: the host drops the subscription and the route simply never fires. But declaring `ingress` in the manifest without it is a hard load failure for the whole plugin, not just that route: install answers HTTP 400, and at boot the directory is skipped and the plugin comes up ERROR.
 
 | Capability | Methods | Permission |
 | ---------- | ------- | ---------- |

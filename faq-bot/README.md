@@ -111,11 +111,21 @@ rule sets.
 
 `regex` patterns are operator-authored (trusted) and tested against at most the first 1000 characters
 of a message. At parse time every pattern is screened for catastrophic-backtracking shapes — nested,
-adjacent-overlapping, and repeated-variable-width quantifiers (e.g. `(a+)+`, `.*.*.*`, `(a?){40}`) — and
-an unsafe one is skipped with a warning. This parse-time screen is the real safeguard: the sandbox hook
+adjacent-overlapping, and repeated-variable-width quantifiers (e.g. `(a+)+`, `.*.*.*`, `(a?){40}`), plus
+ambiguous repeated alternations (`(a|a)*`, `(a|ab)+`, `^([a-z]|[a-z0-9])+$`, `^(\w|\d)+$`) — and an
+unsafe one is skipped with a warning. This parse-time screen is the real safeguard: the sandbox hook
 timeout lets the host proceed but cannot interrupt a synchronous regex already running in the plugin
-worker, so a pattern that slips through would still pin that worker. Overlapping-alternation patterns
-(e.g. `(a|a)*`) are a known class the screen does not yet cover.
+worker, so a pattern that slips through would still pin that worker.
+
+An alternation is only rejected when two branches can consume the same text, so ordinary keyword sets
+like `(one|two|three)+` and `^(ya|tidak)$` are unaffected even where two branches share a first letter.
+The screen is a heuristic rather than a decision procedure: it covers the shapes that occur in real rule
+sets, and the 1000-character body cap remains as the second line of defence.
+
+A matched rule answers the same chat at most once every 10 seconds. A rule whose reply also matches its
+own pattern is a fixed point, and a third-party autoresponder on the other end would otherwise trade
+messages with it indefinitely. Different rules are throttled independently, so a contact asking two
+different questions still gets both answers.
 
 ## Changelog
 

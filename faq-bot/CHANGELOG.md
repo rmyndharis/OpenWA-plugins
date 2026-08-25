@@ -12,6 +12,18 @@ The version here always matches `manifest.json`'s `version`.
 
 ### Fixed
 
+- **Ambiguous repeated alternations are rejected at parse time.** `(a|a)*`, `(a|ab)+`,
+  `^([a-z]|[a-z0-9])+$` and `^(\w|\d)+$` all let the regex engine consume the same text more than one
+  way, which is exponential: the third takes 259 ms against 23 characters and over a minute against 31,
+  well inside the body cap. One short message from any stranger pinned the plugin worker, and because a
+  running regex cannot be interrupted, every later message queued behind it and the plugin stopped
+  answering. Unambiguous alternations such as `(one|two|three)+` are unaffected, including where two
+  branches share a first letter.
+- A matched rule now answers the same chat at most once every 10 seconds. A rule whose reply also
+  matches its own pattern is a fixed point, and a colliding autoresponder on the other end traded
+  messages with it at full rate. Rules are throttled independently, so different questions still get
+  their own answers.
+
 - A shared contact card or a poll no longer matches a rule or draws `fallbackReply`. OpenWA 0.23.2 fills
   the message body for both, and a vCard is free text (name, organization, notes, numbers) that readily
   matches a `contains` or `regex` rule. Business button and list replies are still answered.

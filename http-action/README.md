@@ -138,7 +138,11 @@ allowlist via `allowConfigHosts`.
   in-memory per-chat cooldown (fail-open). The handler returns `{ continue: true }` immediately and
   floats the fetch/render/send, so a slow upstream never stalls the inbound hook.
 - **Secrets.** `authToken` is marked `secret` in `configSchema`, so the dashboard masks it and preserves
-  the stored value on save.
+  the stored value on save. Per-action `request.headers` values are **not** masked: the host redacts
+  config per schema field, and every action lives inside the single `actions` textarea, so marking that
+  field secret would hide the action definitions themselves. Put a credential in `authToken` (with
+  `authType: apikey` naming the header) rather than in an action header; enabling the plugin logs a
+  warning naming any action that sets one.
 - **Redirects.** Cross-host redirect and private-IP filtering are the host proxy's responsibility —
   `ctx.net.fetch` exposes no `redirect` option — so the plugin makes no redirect guarantee.
 

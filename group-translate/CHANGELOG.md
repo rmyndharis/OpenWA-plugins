@@ -10,7 +10,26 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [1.3.6] - 2026-08-25
 
+### Changed
+
+- **`minOpenWAVersion` raised to 0.8.0.** The plugin resolves the operator's backend host through
+  `net.allowConfigHosts`, which first shipped in OpenWA 0.8.0. On a 0.7.x host it installed and enabled
+  cleanly and then translated nothing, because only the shipped loopback entries were reachable.
+- **`/tr status` is now admin-only.** It prints the participant roster (who is ignored, who holds
+  delegated control, the language recorded for each member), which is the plugin's own access-control
+  state, and it answered any group member on every attempt.
+- **`/tr help` is answered at most once a minute per group.** It is the only reply an unauthorized user
+  can draw, so repeating it was a way to make the bot post into the group indefinitely; the denial
+  reply is opt-in for exactly that reason.
+
 ### Fixed
+
+- A `libretranslateUrl` the host cannot use is now named at enable time. A value with no scheme,
+  embedded credentials, or a query string is refused by the host at the capability boundary, which
+  surfaced only as translation silently never happening. The URL itself is never logged.
+- A failed language detection records why. An unreachable backend, a refused fetch and an SSRF-blocked
+  address all returned without writing anything, so a group that had stopped being translated left no
+  trace of the cause.
 
 - A shared contact card is no longer translated. OpenWA 0.23.2 fills the message body with the card's
   vCard, which sent a third party's name and number to the translation backend, posted a

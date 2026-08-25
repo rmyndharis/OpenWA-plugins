@@ -206,3 +206,27 @@ test('one failed part does not silence the rest of the turn', async () => {
   assert.equal(calls, 2, 'every part was attempted');
   assert.deepEqual(sent.map(s => s.text), ['masih terkirim'], 'the part after the failure still went out');
 });
+
+test('a rejected state write still delivers the turn the server has already advanced past', async () => {
+  // startChat/continueChat advance the Typebot server irreversibly before this write. If the write
+  // throwing aborted the turn, the contact would receive none of the bubbles for a step the server has
+  // already taken, and their next message would silently restart the flow. Losing the row costs them one
+  // restart; losing the bubbles too costs them the restart AND this turn.
+  const storage = fakeStorage();
+  storage.set = async () => {
+    throw new Error('storage quota exceeded');
+  };
+  const startChat: NormalizedResponse = {
+    sessionId: 'S1',
+    bubbles: [{ kind: 'text', markdown: 'Halo, ada yang bisa dibantu?' }],
+    input: { kind: 'text', blockId: 'b', attachmentsEnabled: false },
+  };
+  const logged: string[] = [];
+  const { d, sent } = deps({ startChat }, storage);
+  d.log = (m: string) => void logged.push(m);
+
+  await handleTurn(d, 'sess', 'Engine', msg());
+
+  assert.deepEqual(sent.map(s => s.text), ['Halo, ada yang bisa dibantu?'], 'the turn is still delivered');
+  assert.ok(logged.some(l => /state write failed/i.test(l)), 'and the lost row is recorded, not silent');
+});

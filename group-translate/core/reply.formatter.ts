@@ -32,7 +32,7 @@ export function buildHelpText(prefix: string): string {
     `${prefix} auto [me|@user|number] — go back to auto-detect`,
     `${prefix} ignore <@user|number> / ${prefix} unignore <@user|number>`,
     `${prefix} grant <@user|number> / ${prefix} revoke <@user|number> — delegate control (admins)`,
-    `${prefix} status — show settings`,
+    `${prefix} status — show settings (admins)`,
     `${prefix} help — this message`,
   ].join('\n');
 }

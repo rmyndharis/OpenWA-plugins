@@ -20,7 +20,7 @@
     "openwa"
   ],
   "status": "beta",
-  "minOpenWAVersion": "0.7.0",
+  "minOpenWAVersion": "0.8.0",
   "testedOpenWAVersion": "0.23.3",
   "provides": [
     "transcription"
@@ -129,7 +129,7 @@
         "title": "Delivery timeout (ms)",
         "default": 5000,
         "min": 1000,
-        "max": 30000
+        "max": 25000
       },
       "chatDelivery": {
         "type": "string",

@@ -8,7 +8,27 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [0.9.6] - 2026-08-25
 
+### Fixed
+
+- **A queued message is never re-posted to another tenant's Chatwoot.** A session's config resolves only
+  while OpenWA is dispatching an event for that session, but the retry queue is plugin-global and drained
+  on a timer, so every queued entry was re-posted with the base account's origin, token, account id and
+  inbox. On a multi-tenant install that put one tenant's customer message into another tenant's helpdesk
+  when the conversation id happened to exist there, and dead-lettered it after five attempts when it did
+  not; for a chat with no mapping yet it created the conversation in the wrong account and stored that
+  mapping permanently. The drain now re-posts only for sessions whose own config the plugin has captured,
+  and leaves the rest queued without spending a retry attempt.
+- The per-event dependency bag now builds its Chatwoot client from the config the caller resolved,
+  instead of re-reading `ctx.config` a second time. The live paths were correct only by virtue of running
+  inside the dispatch that resolves it.
+
 ### Changed
+
+- Conversation mappings are stored in a fixed number of sharded keys rather than three keys per chat.
+  The host re-measures its storage quota by stat-ing every key on every write, synchronously, on the
+  gateway event loop, so an install that had relayed ten thousand chats made every write in the plugin
+  stat thirty thousand files. Existing mappings are read from their old keys and moved across on their
+  next write, so nothing is orphaned and no Chatwoot conversation is re-created.
 
 - On the Baileys engine a poll question, a shared event name, a tapped button label and a shared
   contact's vCard now appear as the Chatwoot message text instead of the type marker, matching what the

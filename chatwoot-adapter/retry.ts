@@ -40,11 +40,13 @@ export interface DrainDeps {
 // serializes with a concurrent live inbound for the same chat). Success drops the entry; a failure bumps
 // its attempt count, and once attempts reach `maxAttempts` the message is dead-lettered (logged + dropped)
 // rather than retried forever. `relay` re-posts the message and throws on failure. Returns how many were
-// dead-lettered this run, for the plugin health check.
+// dead-lettered this run, for the plugin health check. `canRelay` gates an entry before any of that:
+// see the note at the skip below.
 export async function drainRetries(
   deps: DrainDeps,
   relay: (sessionId: string, chatId: string, msg: IncomingMessage) => Promise<void>,
   maxAttempts: number,
+  canRelay: (sessionId: string) => boolean = () => true,
 ): Promise<{ deadLettered: number }> {
   // Stream by key so a large media backlog is never fully resident: fetch one entry at a time.
   const keys = await deps.store.listRetryKeys();
@@ -52,6 +54,13 @@ export async function drainRetries(
   for (const key of keys) {
     const e = await deps.store.getRetry(key);
     if (!e) continue; // key vanished since the scan (already drained/dropped) — nothing to do
+    // ctx.storage is plugin-GLOBAL, so this queue holds EVERY session's entries while the tick that
+    // drains it runs outside any hook dispatch, the one place a per-session config resolves. An entry
+    // whose session the caller cannot resolve a config for is left exactly as it is: not relayed (that
+    // would post it to whichever Chatwoot the base config names) and not bumped (the message cannot fix
+    // the condition, and maxAttempts ticks of that would dead-letter it). It drains on a later tick,
+    // once that session has dispatched a hook again.
+    if (!canRelay(e.sessionId)) continue;
     // Lock on the RAW chatId, same deterministic key live inbound uses for this chat. @lid canonicalization
     // is a lookup concern handled inside relayInbound (best-effort), not a lock concern.
     await deps.lock.run(`${e.sessionId}:${e.chatId}`, async () => {

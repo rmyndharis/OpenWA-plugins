@@ -218,3 +218,35 @@ test('sweepExpired does not delete a state refreshed between the scan and the de
   assert.equal(removed, 0);        // the re-read saw fresh state → the live flow is not wiped
   assert.equal(deleted, false);
 });
+
+test('a rejected write on the greeting path does not deliver a greeting the flow never started', async () => {
+  // With the documented empty `trigger`, a greeting delivered without its state reads the NEXT message
+  // as another first message and greets again: one outbound WhatsApp message per inbound message, with
+  // no cap, at a real contact. Storing first is self-healing instead, because state whose greeting never
+  // arrived answers the next message with the fallback, which repeats the greeting text.
+  const { ctx, replies } = makeCtx();
+  ctx.storage.set = async () => {
+    throw new Error('storage quota exceeded');
+  };
+  await assert.rejects(
+    FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'hello', 'm1'),
+    /storage quota exceeded/,
+  );
+  assert.deepEqual(replies, [], 'nothing may be sent when the flow could not be recorded');
+});
+
+test('a rejected write on the advance path does not deliver a sub-menu the state never moved to', async () => {
+  // Option "2" has sub-options. Delivering its text while the stored path stays at the root matches the
+  // contact's next answer against the root menu, where the same key names a different option.
+  const { ctx, replies } = makeCtx();
+  await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'hello', 'm1'); // greeting, path []
+  assert.equal(replies.length, 1);
+  ctx.storage.set = async () => {
+    throw new Error('storage quota exceeded');
+  };
+  await assert.rejects(
+    FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', '2', 'm2'),
+    /storage quota exceeded/,
+  );
+  assert.equal(replies.length, 1, 'the sub-menu must not be sent when the move could not be recorded');
+});

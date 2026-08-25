@@ -9,7 +9,27 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [0.3.5] - 2026-08-25
 
+### Fixed
+
+- **A send that fails immediately no longer loses the OTP silently.** The send was fired and forgotten
+  to stay inside the ingress worker's 5s dispatch budget, which is right for a slow send but also
+  swallowed instant rejections: no live engine for the session, the plugin not activated for it, or the
+  concurrent-capability limit. Supabase had already been acked 200 and never retries such a delivery,
+  so the code was simply gone with one warn line behind it. The send is now raced against a short
+  deadline and a failure inside that window fails the delivery, so the host retries it with backoff and
+  dead-letters it for redrive. A send that is merely slow still finishes in the background.
+
+### Added
+
+- A `healthCheck` reporting the last failed send, including one that fails after the delivery has been
+  acknowledged, which reaches no retry and no dead-letter row. The host reports a plugin without a
+  health check as healthy, so a dropped OTP left the dashboard green.
+
 ### Changed
+
+- The documented ack is corrected to **200** with the body `{"ok":true}`. The manifest declares
+  `application/json` and hosts below 0.20.0 return it, but 0.20.0 and later force `text/plain` on every
+  ingress response as an XSS guard on the reflected body, so nothing should match on the content type.
 
 - **Verified against OpenWA v0.23.3** (testedOpenWAVersion 0.23.0 → 0.23.3).
 

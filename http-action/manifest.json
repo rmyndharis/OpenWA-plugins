@@ -91,7 +91,7 @@
         "type": "textarea",
         "title": "Actions (JSON array)",
         "required": true,
-        "description": "JSON array of actions. Example: [{\"id\":\"check-order\",\"match\":{\"type\":\"prefix\",\"value\":\"cek-order \"},\"request\":{\"method\":\"GET\",\"path\":\"/orders/{{args.0}}\"},\"replyTemplate\":\"Order {{response.orderId}}: {{response.status}}\"}]. Parsed at config time."
+        "description": "JSON array of actions. Example: [{\"id\":\"check-order\",\"match\":{\"type\":\"prefix\",\"value\":\"cek-order \"},\"request\":{\"method\":\"GET\",\"path\":\"/orders/{{args.0}}\"},\"replyTemplate\":\"Order {{response.orderId}}: {{response.status}}\"}]. Parsed at config time. Values inside request.headers are NOT masked: this field holds every action as one JSON string, and marking it secret would hide the action definitions themselves, so anything typed into an action header is returned in plaintext by GET /plugins. Put credentials in Token / API key."
       }
     }
   },
