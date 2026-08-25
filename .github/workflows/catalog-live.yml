@@ -1,0 +1,35 @@
+name: catalog-live
+
+# Proves the PUBLISHED catalog is installable: every `download` URL in plugins.json resolves and its
+# bytes match the pinned `#sha256=`. The `catalog:check` gate in ci.yml cannot see this, it only proves
+# plugins.json is regenerable from the working tree, so a version bump merged without its tags stays
+# green there while every dashboard install answers 404.
+#
+# Deliberately NOT run on push or pull_request. A release lands as merge-then-tag, so between those two
+# moments the catalog genuinely does point at releases that do not exist yet, and a push-triggered run
+# is red by construction on every release. A gate that is routinely red for a known-benign reason is a
+# gate people learn to ignore, which costs more than the window it covers. Nightly still catches tags
+# that are never pushed at all, and workflow_dispatch covers the one case where the answer is wanted
+# immediately: run it by hand right after pushing a set of release tags.
+on:
+  schedule:
+    # The catalog can also rot with nobody pushing: a release asset deleted, a tag moved, a repository
+    # renamed. Once a day is enough for a condition measured in hours-to-notice, not minutes.
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+jobs:
+  catalog-live:
+    runs-on: ubuntu-latest
+    # Reads public release assets over HTTPS and nothing else: no git writes, no API calls.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 22
+      - name: Every catalog download resolves and matches its sha256 pin
+        run: node scripts/catalog-live-check.mjs

@@ -13,7 +13,12 @@
 //      new bytes while the URL still names the old tag, and installs fail on a sha256 mismatch.
 //
 // Neither is visible to any other check in this repo, and both are invisible until a user tries to
-// install. Run this on push to `main` and nightly. No token: these are public release assets.
+// install. No token: these are public release assets.
+//
+// Wired to run nightly and on demand (.github/workflows/catalog-live.yml), NOT on push. A release
+// lands as merge-then-tag, so a push-triggered run is red by construction in the window between the
+// two, and a gate that is routinely red for a benign reason gets ignored. Run it by hand right after
+// pushing a set of release tags, which is exactly when the answer is wanted.
 //
 // Usage:  node scripts/catalog-live-check.mjs [path/to/plugins.json]
 // Exit 0 when every entry resolves and matches; exit 1 listing each entry that does not.
