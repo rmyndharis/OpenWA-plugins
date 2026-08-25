@@ -43,11 +43,12 @@ export function parseConfig(raw: Record<string, unknown>): {
 // a command prefix.
 const HOOK_PRIORITY = 80;
 
-// Minimum gap between two answers to the SAME rule in the same chat. Hardcoded, like the retry cadence
-// in the other plugins: it exists to stop a runaway exchange, not to be tuned. A rule whose own reply
-// matches its own pattern is a fixed point, and a colliding autoresponder on the other end then answers
-// each of this plugin's replies forever, at full message rate. Per RULE, not per chat, so a contact who
-// asks two different questions in a row still gets both answers.
+// Minimum gap before the SAME inbound text is answered again in the same chat. Hardcoded, like the retry
+// cadence in the other plugins: it exists to stop a runaway exchange, not to be tuned. A rule whose own
+// reply matches its own pattern is a fixed point, and an autoresponder on the other end then answers each
+// of this plugin's replies forever, at full message rate, repeating one canned message as it goes.
+// Keyed on the text rather than the rule or the chat, so two different questions are both answered even
+// when they match the same rule.
 const MATCHED_REPLY_COOLDOWN_MS = 10_000;
 
 export default class FaqBot implements IPlugin {
@@ -111,10 +112,14 @@ export default class FaqBot implements IPlugin {
     const rule = matchRule(cfg.rules, m.body);
     try {
       if (rule) {
-        // Claimed either way: this message is addressed to this plugin's rule set, and letting a
-        // sibling responder answer a message this one is deliberately staying quiet about would defeat
-        // the throttle.
-        const key = `${sessionId}:${m.chatId}:${rule.pattern}`;
+        // Keyed on the INBOUND TEXT, not on the rule. A runaway exchange repeats the same message: the
+        // other end's autoresponder sends one canned reply, this plugin answers, and that same canned
+        // reply arrives again. Keying on the rule instead would have suppressed a customer's second,
+        // genuinely different question whenever it happened to match the same rule ("berapa harga paket
+        // A?" then "kalau harga paket B?"), which costs far more than the loop it prevents.
+        // Claimed either way: the message matched a rule, so it is this plugin's, and the standard
+        // allows a claim to resolve to silence.
+        const key = `${sessionId}:${m.chatId}:${m.body.trim().toLowerCase().slice(0, 200)}`;
         if (!allowCooldown(this.matchedAt, key, Date.now(), MATCHED_REPLY_COOLDOWN_MS)) return true;
         try {
           await ctx.messages.reply(sessionId, m.chatId, m.id, rule.reply);

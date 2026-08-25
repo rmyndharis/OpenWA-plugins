@@ -122,10 +122,11 @@ like `(one|two|three)+` and `^(ya|tidak)$` are unaffected even where two branche
 The screen is a heuristic rather than a decision procedure: it covers the shapes that occur in real rule
 sets, and the 1000-character body cap remains as the second line of defence.
 
-A matched rule answers the same chat at most once every 10 seconds. A rule whose reply also matches its
-own pattern is a fixed point, and a third-party autoresponder on the other end would otherwise trade
-messages with it indefinitely. Different rules are throttled independently, so a contact asking two
-different questions still gets both answers.
+The same inbound text is answered at most once every 10 seconds per chat. A rule whose reply also
+matches its own pattern is a fixed point, and an autoresponder on the other end would otherwise trade
+messages with it indefinitely, repeating one canned line as it goes. The throttle keys on that repeated
+text rather than on the rule, so two different questions are both answered even when they match the same
+rule.
 
 ## Changelog
 

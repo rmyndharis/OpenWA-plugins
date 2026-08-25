@@ -257,21 +257,16 @@ test('a failed fallback send releases the cooldown slot instead of silencing the
   assert.equal(delivered, 1, 'the next message must be able to retry the fallback');
 });
 
-test('the same rule is not answered twice in a row, but a different question still is', async () => {
-  // A rule whose reply matches its own pattern is a fixed point, and a colliding autoresponder on the
-  // other end then answers each of this plugin's replies forever, at full message rate. The throttle is
-  // per RULE so a contact asking two different questions still gets both answers.
-  const replies: string[] = [];
+test('the same repeated text is answered once, but different questions are all answered', async () => {
+  // A rule whose reply matches its own pattern is a fixed point, and an autoresponder on the other end
+  // then answers each of this plugin's replies forever, repeating one canned message. The throttle is
+  // keyed on that repeated TEXT, not on the rule: keying on the rule would silence a customer's second,
+  // genuinely different question whenever it happened to match the same rule, which costs more than the
+  // loop it prevents.
   const rules = [
     { mode: 'contains', pattern: 'harga', reply: 'Harga mulai 50rb' },
     { mode: 'contains', pattern: 'jam', reply: 'Buka 09.00-17.00' },
   ];
-  const first = await runHook({ rules }, 'berapa harga?', t => replies.push(t));
-  const repeat = await runHook({ rules }, 'harga lagi', t => replies.push(t));
-  assert.equal(first.continue, false);
-  assert.equal(repeat.continue, false, 'the message is still claimed: it is addressed to this rule set');
-
-  // Each runHook builds a fresh plugin instance, so drive one instance directly for the throttle.
   const sent: string[] = [];
   let handler: ((h: unknown) => Promise<{ continue: boolean }>) | undefined;
   const ctx = makeCtx({
@@ -285,9 +280,23 @@ test('the same rule is not answered twice in a row, but a different question sti
     handler!({ source: 'Engine', sessionId: 's1', timestamp: new Date(),
                data: { id, chatId: 'c@x', body, type: 'text', fromMe: false, isGroup: false } });
 
-  await fire('berapa harga?', 'm1');
-  await fire('harga berapa ya', 'm2');
-  assert.deepEqual(sent, ['Harga mulai 50rb'], 'the same rule answers once inside the window');
-  await fire('jam berapa buka', 'm3');
-  assert.deepEqual(sent, ['Harga mulai 50rb', 'Buka 09.00-17.00'], 'a different rule is unaffected');
+  // The loop shape: one canned message arriving over and over.
+  const canned = 'Terima kasih, cek harga di katalog kami';
+  const first = await fire(canned, 'm1');
+  await fire(canned, 'm2');
+  await fire(canned, 'm3');
+  assert.equal(first.continue, false, 'a matched message is claimed');
+  assert.deepEqual(sent, ['Harga mulai 50rb'], 'the repeat is answered once, so the exchange cannot run away');
+
+  // Two DIFFERENT customer questions that both match the `harga` rule must both be answered.
+  await fire('berapa harga paket A?', 'm4');
+  await fire('kalau harga paket B?', 'm5');
+  assert.deepEqual(
+    sent,
+    ['Harga mulai 50rb', 'Harga mulai 50rb', 'Harga mulai 50rb'],
+    'a different question matching the same rule is still answered',
+  );
+
+  await fire('jam berapa buka', 'm6');
+  assert.equal(sent.length, 4, 'and a different rule is unaffected');
 });

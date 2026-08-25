@@ -715,7 +715,7 @@
     "repoPath": "faq-bot",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.2.6/faq-bot.zip#sha256=943413c5db9ddddb4577b4e8c73085a8e4b870ac75361e1b52c9322a63601fda",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.2.6/faq-bot.zip#sha256=aea70a68bbf7057ce755f2e10f4a085e54741399aede6dd8c197dd2197c9b635",
     "permissions": [
       "messages:send"
     ],
