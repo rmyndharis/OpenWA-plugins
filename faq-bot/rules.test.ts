@@ -129,6 +129,33 @@ test('an unbounded-quantified GROUP counts toward the adjacency run, like an ato
   }
 });
 
+test('a transparent group splices its body into the run instead of hiding it', () => {
+  // Parentheses that carry no quantifier are not a boundary, they are punctuation: `(a*)(a*)(a*)` is
+  // `a*a*a*` with three pairs of them. The run was PARKED at `(` and RESTORED at `)`, so whatever the
+  // body ended with was discarded and the same shape escaped however it was grouped. Measured against
+  // 140 characters and O(n^3) from there: `(a*)(a*)(a*)$` 87 ms, `((a|b)*(a|b)*)(a|b)*$` 334 ms,
+  // `(a*){1}(a*){1}(a*){1}$` 407 ms, i.e. tens of seconds at the 1000-character body cap.
+  for (const pattern of [
+    '(a*)(a*)(a*)$',
+    '(a)*(a)*(a)*$',
+    '((a|b)*(a|b)*)(a|b)*$',
+    '(a|b)*((a|b)*(a|b)*)$',
+    '((a|b)*(a|b)*(a|b)*)$',
+    '(.*)(.*)(.*)x',
+    '(a*){1}(a*){1}(a*){1}$', // `{1}` is transparent too
+  ]) {
+    assert.equal(isSafeRegexPattern(pattern), false, `should reject: ${pattern}`);
+  }
+  // Splicing must not invent a run where none exists. A mandatory atom between the groups breaks the
+  // chain, disjoint bodies never form one, and a group with nothing unbounded in it is untouched.
+  for (const pattern of ['(a*)(b*)(c*)', '(a*)x(a*)x(a*)', '(a*)', '((a*))', 'x*(y?)z*w*', '.*(x).*(y).*!']) {
+    assert.equal(isSafeRegexPattern(pattern), true, `should accept: ${pattern}`);
+    const started = Date.now();
+    new RegExp(pattern, 'i').test('a'.repeat(1000));
+    assert.ok(Date.now() - started < 200, `${pattern} is slow at the input cap`);
+  }
+});
+
 test('parseRules allows two adjacent overlapping quantifiers (O(n^2) is safe under the 1000-char cap)', () => {
   const { skipped } = parseRules(
     JSON.stringify([

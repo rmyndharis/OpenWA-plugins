@@ -12,13 +12,17 @@ The version here always matches `manifest.json`'s `version`.
 
 ### Fixed
 
-- **A group carrying an unbounded quantifier now counts toward the adjacent-quantifier limit, as a
-  bare atom always has.** The screen refused `.*.*.*done` but accepted `(a|b)*(a|b)*(a|b)*$`, the
-  same shape written with groups, because a group restored the run parked when it opened instead of
-  joining it. An accepted pattern of that shape is O(n^3): 380 ms against 150 characters, and roughly
-  113 s at the 1000-character body cap, which a running regex cannot be interrupted to honour. Two
-  adjacent quantifiers remain allowed, and groups competing for different characters (`(x)*(y)*(z)*`)
-  never form a run, so ordinary rules are unaffected.
+- **Parentheses no longer hide a run of adjacent unbounded quantifiers from the regex screen.** The
+  screen refused `.*.*.*done` but accepted every grouped spelling of the same shape, because the
+  adjacency run was parked at `(` and restored at `)`, so both the group itself and whatever its body
+  ended with were discarded. Two forms escaped: a group carrying the quantifier
+  (`(a|b)*(a|b)*(a|b)*$`), and a transparent group around one (`(a*)(a*)(a*)$`,
+  `((a|b)*(a|b)*)(a|b)*$`, and the `{1}` spelling). A group with a quantifier now counts as one
+  element, and a transparent group splices its body into the enclosing run. Each accepted form was
+  O(n^3): measured against 140 characters, 87 ms to 407 ms, so tens of seconds at the 1000-character
+  body cap, which a running regex cannot be interrupted to honour. Two adjacent quantifiers remain
+  allowed, a mandatory atom or a `|` still breaks the chain, and groups competing for different
+  characters (`(x)*(y)*(z)*`, `(a*)(b*)(c*)`) never form a run, so ordinary rules are unaffected.
 
 ## [0.2.7] - 2026-09-05
 

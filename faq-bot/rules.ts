@@ -188,9 +188,11 @@ const REPEAT_THRESHOLD = 10;
  *  1. an unbounded quantifier on a group that itself contains one — `(a+)+`, `((a+))+`, `(\w+\s?)*`;
  *  2. THREE OR MORE adjacent unbounded quantifiers over overlapping elements in one concatenation —
  *     `.*.*.*`, `\w*\w*\w*`, `(a|b)*(a|b)*(a|b)*` (O(n^3)+); TWO adjacent (`.*.*`, `.*\d+`) is only
- *     O(n^2), safe under the 1000-char input cap, so it is allowed; a mandatory atom breaks the chain.
- *     An element is a bare atom OR an unbounded-quantified group: counting only atoms left the group
- *     form of the same shape accepted, at ~113 s on a 1000-character input;
+ *     O(n^2), safe under the 1000-char input cap, so it is allowed; a mandatory atom or a `|` breaks
+ *     the chain. An element is a bare atom OR an unbounded-quantified group, and a TRANSPARENT group
+ *     (no quantifier, or `{1}`) splices its body into the enclosing run rather than hiding it, so
+ *     `(a*)(a*)(a*)` and `((a|b)*(a|b)*)(a|b)*` count as three. Counting only bare atoms left every
+ *     one of those accepted, at tens of seconds on a 1000-character input;
  *  3. an unbounded or ≥REPEAT_THRESHOLD repeat of a group whose body has a variable-width quantifier —
  *     `(a?){40}`, `(a?)+` (exponential); a small bounded repeat of a VARIABLE body like `(ab?){2}` is
  *     allowed, but any repeat of an UNBOUNDED body is not — see (1).
@@ -226,6 +228,10 @@ export function isSafeRegexPattern(p: string): boolean {
     sawAtom: boolean;
     savedPrev: RunElement | null;
     savedRun: number;
+    // Rule 2, transparent-group support. `savedLead` / `savedUnbroken` park the ENCLOSING
+    // concatenation's leading-run state, the way savedPrev/savedRun park its trailing state.
+    savedLead: RunElement | null;
+    savedUnbroken: boolean;
     // One record per top-level branch of THIS group; see Branch.
     branches: Branch[];
   }[] = [];
@@ -233,12 +239,19 @@ export function isSafeRegexPattern(p: string): boolean {
   // after a mandatory atom / `|` / group boundary (which break adjacency).
   let prevUnbounded: RunElement | null = null;
   let adjacentRun = 0; // length of the current run of adjacent overlapping unbounded-quantified atoms
+  // The element the CURRENT run starts at, and whether that run reaches back to the very beginning of
+  // the current concatenation. Together they let a TRANSPARENT group (no quantifier, or `{1}`) splice
+  // its body into the enclosing run instead of discarding it: `(a*)(a*)(a*)` is `a*a*a*` with three
+  // pairs of parentheses, and counting it as three is the whole point of rule 2.
+  let leadElement: RunElement | null = null;
+  let unbroken = true;
   let i = 0;
   while (i < p.length) {
     const c = p[i];
 
     if (c === '|') {
-      prevUnbounded = null; adjacentRun = 0;
+      // A new branch is a new concatenation: nothing before the `|` is adjacent to anything after it.
+      prevUnbounded = null; adjacentRun = 0; leadElement = null; unbroken = false;
       if (stack.length) stack[stack.length - 1].branches.push({ literal: '', first: null });
       i++; continue;
     }
@@ -255,9 +268,10 @@ export function isSafeRegexPattern(p: string): boolean {
       stack.push({
         hasUnbounded: false, hasVariable: false, hasAmbiguous: false, sawAtom: false,
         savedPrev: prevUnbounded, savedRun: adjacentRun,
+        savedLead: leadElement, savedUnbroken: unbroken,
         branches: [{ literal: '', first: null }],
       });
-      prevUnbounded = null; adjacentRun = 0;
+      prevUnbounded = null; adjacentRun = 0; leadElement = null; unbroken = true;
       i++;
       if (p[i] === '?') { i++; if (p[i] === '<') i++; if (p[i] === ':' || p[i] === '=' || p[i] === '!') i++; }
       continue;
@@ -265,7 +279,7 @@ export function isSafeRegexPattern(p: string): boolean {
     if (c === ')') {
       const frame = stack.pop() ?? {
         hasUnbounded: false, hasVariable: false, hasAmbiguous: false, sawAtom: false,
-        savedPrev: null, savedRun: 0,
+        savedPrev: null, savedRun: 0, savedLead: null as RunElement | null, savedUnbroken: true,
         branches: [] as Branch[],
       };
       const q = quantifierAt(p, i + 1);
@@ -300,7 +314,7 @@ export function isSafeRegexPattern(p: string): boolean {
       // An UNBOUNDED-quantified group is itself a run element, exactly like an unbounded-quantified
       // atom. Restoring the parked run here instead (which is what a nullable group did) meant rule 2
       // only ever counted bare atoms, so `.*.*.*done` was refused while `(a|b)*(a|b)*(a|b)*$` was
-      // accepted and then ran O(n^3): 162 ms at 120 characters, and ~90 s at the 1000-character body
+      // accepted and then ran O(n^3): 380 ms at 150 characters, and ~113 s at the 1000-character body
       // cap, which a regex cannot be interrupted to honour.
       if (q.unbounded) {
         const here: RunElement = { kind: 'group', chars: branchFirstChars(frame.branches) };
@@ -308,21 +322,49 @@ export function isSafeRegexPattern(p: string): boolean {
         // prevUnbounded so the body starts its own concatenation, so the live value here belongs to
         // the group's last inner atom and says nothing about what precedes the group.
         let run = frame.savedRun;
+        leadElement = frame.savedLead;
+        unbroken = frame.savedUnbroken;
         if (frame.savedPrev !== null && runOverlaps(frame.savedPrev, here)) {
           if (++run >= 3) return false; // (2) 3+ adjacent overlapping unbounded quantifiers
         } else {
+          if (run > 0) unbroken = false;
           run = 1;
+          leadElement = here;
         }
         adjacentRun = run;
         prevUnbounded = here;
         i += 1 + q.len;
         continue;
       }
+      // A TRANSPARENT group (no quantifier, or `{1}`) is just parentheses: its body belongs to the
+      // enclosing concatenation. Restoring the parked run here discarded whatever the body ended with,
+      // so `a*a*a*` was refused while `(a*)(a*)(a*)` and `((a|b)*(a|b)*)(a|b)*` sailed through, at
+      // 72 ms and 285 ms against 140 characters and O(n^3) from there. Splice instead: the body's own
+      // trailing run joins the parked one when it reaches back to the body's first element AND that
+      // element competes for the same characters as what preceded the group.
+      const transparent = !q.present || (q.min === 1 && q.count === 1 && !q.variable);
+      if (transparent && leadElement !== null) {
+        const joins = unbroken && frame.savedPrev !== null && runOverlaps(frame.savedPrev, leadElement);
+        const combined = joins ? frame.savedRun + adjacentRun : adjacentRun;
+        if (combined >= 3) return false; // (2) 3+ adjacent overlapping unbounded quantifiers
+        adjacentRun = combined;
+        // `prevUnbounded` already holds the body's trailing element, which is what follows this group.
+        // The lead belongs to the enclosing concatenation once one exists there; when it does not, the
+        // body's lead becomes it, and only stays start-anchored if both sides were.
+        if (frame.savedLead !== null) { leadElement = frame.savedLead; unbroken = frame.savedUnbroken; }
+        else { unbroken = frame.savedUnbroken && unbroken; }
+        i += 1 + q.len;
+        continue;
+      }
       // A group breaks flat adjacency only if it MUST consume something. `(x?)` can match empty, so
       // `.*(x?).*` is `.*.*` in disguise; resume the parked run rather than pretending it ended.
       const nullable = frame.hasVariable || (q.present && q.min === 0);
-      if (nullable) { prevUnbounded = frame.savedPrev; adjacentRun = frame.savedRun; }
-      else { prevUnbounded = null; adjacentRun = 0; }
+      if (nullable) {
+        prevUnbounded = frame.savedPrev; adjacentRun = frame.savedRun;
+        leadElement = frame.savedLead; unbroken = frame.savedUnbroken;
+      } else {
+        prevUnbounded = null; adjacentRun = 0; leadElement = null; unbroken = false;
+      }
       i += 1 + q.len;
       continue;
     }
@@ -348,11 +390,18 @@ export function isSafeRegexPattern(p: string): boolean {
       if (prevUnbounded !== null && runOverlaps(prevUnbounded, here)) {
         if (++adjacentRun >= 3) return false; // (2) 3+ adjacent overlapping unbounded quantifiers
       } else {
+        // A new run starts here. If anything preceded it in this concatenation, the run no longer
+        // reaches back to the start, so a transparent group around it cannot splice it onto the
+        // enclosing run.
+        if (adjacentRun > 0) unbroken = false;
         adjacentRun = 1;
+        leadElement = here;
       }
       prevUnbounded = here;
     } else if (!q.present || q.min >= 1) {
-      prevUnbounded = null; adjacentRun = 0; // a mandatory (non-skippable) atom breaks adjacency
+      // A mandatory (non-skippable) atom breaks adjacency, and with it any claim that the run reaches
+      // back to the start of this concatenation.
+      prevUnbounded = null; adjacentRun = 0; leadElement = null; unbroken = false;
     }
     i += atom.len + q.len;
   }
