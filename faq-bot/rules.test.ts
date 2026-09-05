@@ -108,6 +108,27 @@ test('parseRules rejects 3+ adjacent overlapping unbounded quantifiers (sibling 
   assert.deepEqual(skipped, ['.*.*.*done', '\\w*\\w*\\w*\\w*\\w*!']);
 });
 
+test('an unbounded-quantified GROUP counts toward the adjacency run, like an atom', () => {
+  // Rule 2 only ever tracked bare atoms, so `.*.*.*done` was refused while the same shape written with
+  // groups sailed through: a group restored the run parked when it opened instead of joining it.
+  // Measured on the real engine, `(a|b)*(a|b)*(a|b)*$` takes 380 ms against 150 characters and is
+  // O(n^3), i.e. ~113 s at the 1000-character body cap, which a regex cannot be interrupted to honour.
+  for (const pattern of [
+    '(a|b)*(a|b)*(a|b)*$',
+    '(a)*(a)*(a)*$',
+    '(a|b)+(a|b)+(a|b)+$',
+    '(\\w)*(\\w)*(\\w)*!',
+    '.*(a|b)*.*x', // mixed: a group between two wildcards is still three in a row
+  ]) {
+    assert.equal(isSafeRegexPattern(pattern), false, `should reject: ${pattern}`);
+  }
+  // Two adjacent is O(n^2) and stays allowed, exactly as for atoms, and groups that compete for
+  // DIFFERENT characters never form a run however many of them there are.
+  for (const pattern of ['(a|b)*(a|b)*$', '(x)*(y)*(z)*$', '(ab)*(cd)*(ef)*$']) {
+    assert.equal(isSafeRegexPattern(pattern), true, `should accept: ${pattern}`);
+  }
+});
+
 test('parseRules allows two adjacent overlapping quantifiers (O(n^2) is safe under the 1000-char cap)', () => {
   const { skipped } = parseRules(
     JSON.stringify([

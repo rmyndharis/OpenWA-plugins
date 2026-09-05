@@ -8,6 +8,18 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.8] - 2026-09-05
+
+### Fixed
+
+- **A group carrying an unbounded quantifier now counts toward the adjacent-quantifier limit, as a
+  bare atom always has.** The screen refused `.*.*.*done` but accepted `(a|b)*(a|b)*(a|b)*$`, the
+  same shape written with groups, because a group restored the run parked when it opened instead of
+  joining it. An accepted pattern of that shape is O(n^3): 380 ms against 150 characters, and roughly
+  113 s at the 1000-character body cap, which a running regex cannot be interrupted to honour. Two
+  adjacent quantifiers remain allowed, and groups competing for different characters (`(x)*(y)*(z)*`)
+  never form a run, so ordinary rules are unaffected.
+
 ## [0.2.7] - 2026-09-05
 
 ### Fixed
