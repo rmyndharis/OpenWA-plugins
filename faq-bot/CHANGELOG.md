@@ -31,6 +31,15 @@ The version here always matches `manifest.json`'s `version`.
   form a run, so `a*b*c*`, `order\s+\d+`, `(x)*(y)*(z)*` and `(a*)(b*)(c*)` are unaffected. A rule of
   the widened shape, such as `.*(word)*.*`, is dropped with a warning at enable, so re-check the log
   after upgrading.
+- **The screen no longer depends on the alphabet, or on how an escape is written.** Its character scan
+  covers printable ASCII only, so a class of CJK, Arabic or accented Latin characters was seen as
+  matching nothing and a chain of three read as non-competing: `[\u4e00-\u9fff]*` repeated three times
+  cost ~85 s at the input cap. Identical spellings are now always treated as competing, which is what
+  the screen did before this release and what covers those. Separately, a fixed-length escape
+  (`\x61`, `\u0061`, `\u{1F600}`, `\cJ`, `\p{L}`) is now one atom rather than a backslash pair
+  followed by stray characters, and a named group `(?<name>...)` has its name skipped instead of walked
+  as atoms; both mis-readings inserted fake mandatory atoms that broke the run, letting the same shapes
+  through at ~35 s to ~46 s.
 
 ## [0.2.7] - 2026-09-05
 

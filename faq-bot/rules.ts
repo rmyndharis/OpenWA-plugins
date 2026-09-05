@@ -19,7 +19,24 @@ const MAX_PATTERN_LENGTH = 1000;
  *  atom. Two atoms "overlap" when they can match a common character. */
 function atomAt(p: string, i: number): { key: string; len: number } {
   const c = p[i];
-  if (c === '\\') return { key: p.slice(i, i + 2), len: 2 };
+  if (c === '\\') {
+    // Fixed-length escapes are ONE atom. Taking only `\\` + one character left the rest as separate
+    // atoms (`\\x61` walked as `\\x`, `6`, `1`), and those fake mandatory atoms broke the adjacency
+    // run: `\\x61*\\x61*\\x61*$` was accepted and ran ~41 s at the input cap.
+    const n = p[i + 1];
+    if (n === 'x' && /^[0-9a-f]{2}$/i.test(p.slice(i + 2, i + 4))) return { key: p.slice(i, i + 4), len: 4 };
+    if (n === 'u' && p[i + 2] === '{') {
+      const close = p.indexOf('}', i + 3);
+      if (close !== -1) return { key: p.slice(i, close + 1), len: close + 1 - i };
+    }
+    if (n === 'u' && /^[0-9a-f]{4}$/i.test(p.slice(i + 2, i + 6))) return { key: p.slice(i, i + 6), len: 6 };
+    if (n === 'c' && /^[a-z]$/i.test(p[i + 2] ?? '')) return { key: p.slice(i, i + 3), len: 3 };
+    if ((n === 'p' || n === 'P') && p[i + 2] === '{') {
+      const close = p.indexOf('}', i + 3);
+      if (close !== -1) return { key: p.slice(i, close + 1), len: close + 1 - i };
+    }
+    return { key: p.slice(i, i + 2), len: 2 };
+  }
   if (c === '[') {
     let j = i + 1;
     if (p[j] === '^') j++;
@@ -105,10 +122,21 @@ function runChars(e: RunElement): Set<string> | null {
  * (~103 s) and `[a-z]*[a-z0-9]*[a-z]*z` (~117 s) escaped the same way. The alternation spelling of the
  * very same regex was refused, so the verdict turned on notation rather than on cost.
  *
- * An undecidable set (`.`, or an atom that will not compile alone) is null and counts as overlapping,
- * which fails closed and preserves the old `ANY` behaviour.
+ * Two elements spelled IDENTICALLY always compete, which is exact and skips the scan.
+ *
+ * That identity check is load-bearing, not an optimisation. firstCharSet only scans printable ASCII,
+ * so a class of CJK, Arabic or accented Latin characters comes back EMPTY, and an empty set intersects
+ * nothing: without the identity check `[\u4e00-\u9fff]*[\u4e00-\u9fff]*[\u4e00-\u9fff]*$` reads as
+ * three non-competing quantifiers and runs ~85 s on a 1000-character message, which is exactly the
+ * traffic this plugin serves. Key equality is what the screen used for atoms before, so this keeps that
+ * verdict exactly and adds the character comparison on top of it.
+ *
+ * A `null` set (`.`, or an atom that will not compile alone) is undecidable and fails closed. An empty
+ * one deliberately does NOT: `[\u4e00-\u9fff]*\s*[\u4e00-\u9fff]*` is a real rule, its classes
+ * genuinely do not compete, and treating unseen as competing refused it.
  */
 function runOverlaps(a: RunElement, b: RunElement): boolean {
+  if (a.kind === 'atom' && b.kind === 'atom' && a.key === b.key) return true;
   const sa = runChars(a);
   const sb = runChars(b);
   if (sa === null || sb === null) return true;
@@ -277,7 +305,20 @@ export function isSafeRegexPattern(p: string): boolean {
       });
       prevUnbounded = null; adjacentRun = 0; leadElement = null; unbroken = true;
       i++;
-      if (p[i] === '?') { i++; if (p[i] === '<') i++; if (p[i] === ':' || p[i] === '=' || p[i] === '!') i++; }
+      if (p[i] === '?') {
+        i++;
+        if (p[i] === '<' && p[i + 1] !== '=' && p[i + 1] !== '!') {
+          // Named group `(?<name>`. Only lookbehind (`(?<=`, `(?<!`) continues below; a NAME has to be
+          // skipped up to its `>`, or its letters are walked as ordinary atoms. Those fake mandatory
+          // atoms then break the adjacency run, which is how `(?<n>a*)(?<m>a*)(?<o>a*)$` was accepted
+          // and ran ~46 s at the input cap.
+          const close = p.indexOf('>', i);
+          i = close === -1 ? p.length : close + 1;
+        } else {
+          if (p[i] === '<') i++;
+          if (p[i] === ':' || p[i] === '=' || p[i] === '!') i++;
+        }
+      }
       continue;
     }
     if (c === ')') {

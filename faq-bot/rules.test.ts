@@ -145,6 +145,43 @@ test('adjacency is judged on the characters an atom matches, not on how it is sp
   }
 });
 
+test('adjacency sees characters outside printable ASCII, and the walker parses the escapes that carry them', () => {
+  // firstCharSet only scans printable ASCII, so a class of CJK, Arabic or accented Latin characters
+  // comes back EMPTY, and an empty set intersects nothing. Comparing spellings for equality is what
+  // catches those, and it is why that check is not an optimisation: without it each of these reads as
+  // three non-competing quantifiers. Measured against 250 characters that all match, failing on the
+  // last, then O(n^3) to the cap: 0.9 s to 1.3 s, i.e. 57 s to 85 s at 1000 characters. This is the
+  // traffic the plugin actually serves, so it must not depend on the alphabet.
+  for (const pattern of [
+    '[\\u4e00-\\u9fff]*[\\u4e00-\\u9fff]*[\\u4e00-\\u9fff]*$',
+    '[\\u0600-\\u06ff]*[\\u0600-\\u06ff]*[\\u0600-\\u06ff]*$',
+    '[\\u00e0-\\u00ff]*[\\u00e0-\\u00ff]*[\\u00e0-\\u00ff]*$',
+    // Fixed-length escapes are one atom. Read as `\\x` + `6` + `1`, the stray digits looked like
+    // mandatory atoms and broke the run, so these escaped at ~35 s to ~41 s at the cap.
+    '\\x61*\\x61*\\x61*$',
+    '\\u0061*\\u0061*\\u0061*$',
+    '\\cJ*\\cJ*\\cJ*$',
+    // A named group is not a lookbehind: its NAME has to be skipped, or its letters walk as atoms.
+    '(?<n>a*)(?<m>a*)(?<o>a*)$',
+  ]) {
+    assert.equal(isSafeRegexPattern(pattern), false, `should reject: ${pattern}`);
+  }
+  // Unseen is not the same as competing. A CJK class and `\\s` genuinely do not overlap, and refusing
+  // that pair would break an ordinary rule for exactly the operators this matters most to.
+  for (const pattern of [
+    '[\\u4e00-\\u9fff]*\\s*[\\u4e00-\\u9fff]*',
+    '[\\u4e00-\\u9fff]+',
+    '^[\\u4e00-\\u9fff]{2,}$',
+    '^(你好|您好)$',
+    '[àéîõü]+',
+    '(?<=a)b',
+    '(?<!a)b',
+    '(?<n>a)+',
+  ]) {
+    assert.equal(isSafeRegexPattern(pattern), true, `should accept: ${pattern}`);
+  }
+});
+
 test('a transparent group splices its body into the run instead of hiding it', () => {
   // Parentheses that carry no quantifier are not a boundary, they are punctuation: `(a*)(a*)(a*)` is
   // `a*a*a*` with three pairs of them. The run was PARKED at `(` and RESTORED at `)`, so whatever the
