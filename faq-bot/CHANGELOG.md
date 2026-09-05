@@ -8,6 +8,39 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.8] - 2026-09-05
+
+### Fixed
+
+- **Parentheses no longer hide a run of adjacent unbounded quantifiers from the regex screen.** The
+  screen refused `.*.*.*done` but accepted every grouped spelling of the same shape, because the
+  adjacency run was parked at `(` and restored at `)`, so both the group itself and whatever its body
+  ended with were discarded. Two forms escaped: a group carrying the quantifier
+  (`(a|b)*(a|b)*(a|b)*$`), and a transparent group around one (`(a*)(a*)(a*)$`,
+  `((a|b)*(a|b)*)(a|b)*$`, and the `{1}` spelling). A group with a quantifier now counts as one
+  element, and a transparent group splices its body into the enclosing run. Each accepted form was
+  O(n^3): measured against 140 characters, 87 ms to 407 ms, so tens of seconds at the 1000-character
+  body cap, which a running regex cannot be interrupted to honour.
+- **Adjacency is judged on the characters an atom matches, not on how it is spelled.** The run compared
+  atoms by atom key, so `[ab]` and `[bc]` looked unrelated although both match `b`, and
+  `[ab]*[bc]*[cd]*$` was accepted while the alternation spelling of the same regex was refused. Against
+  600 characters it costs 8.9 s, and `\w*\d*\w*x` 22 s, so roughly 41 s and 103 s at the input cap.
+  A group form is now refused exactly where the same shape written with bare atoms already was, so the
+  screen's paths agree instead of the verdict turning on notation. Two adjacent quantifiers remain
+  allowed, a mandatory atom or a `|` still breaks the chain, and elements sharing no character never
+  form a run, so `a*b*c*`, `order\s+\d+`, `(x)*(y)*(z)*` and `(a*)(b*)(c*)` are unaffected. A rule of
+  the widened shape, such as `.*(word)*.*`, is dropped with a warning at enable, so re-check the log
+  after upgrading.
+- **The screen no longer depends on the alphabet, or on how an escape is written.** Its character scan
+  covers printable ASCII only, so a class of CJK, Arabic or accented Latin characters was seen as
+  matching nothing and a chain of three read as non-competing: `[\u4e00-\u9fff]*` repeated three times
+  cost ~85 s at the input cap. Identical spellings are now always treated as competing, which is what
+  the screen did before this release and what covers those. Separately, a fixed-length escape
+  (`\x61`, `\u0061`, `\u{1F600}`, `\cJ`, `\p{L}`) is now one atom rather than a backslash pair
+  followed by stray characters, and a named group `(?<name>...)` has its name skipped instead of walked
+  as atoms; both mis-readings inserted fake mandatory atoms that broke the run, letting the same shapes
+  through at ~35 s to ~46 s.
+
 ## [0.2.7] - 2026-09-05
 
 ### Fixed
