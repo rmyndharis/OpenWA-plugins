@@ -112,7 +112,7 @@ rule sets.
 `regex` patterns are operator-authored (trusted) and tested against at most the first 1000 characters
 of a message. At parse time every pattern is screened for catastrophic-backtracking shapes — nested,
 adjacent-overlapping, and repeated-variable-width quantifiers (e.g. `(a+)+`, `.*.*.*`,
-`(a|b)*(a|b)*(a|b)*`, `(a*)(a*)(a*)`, `(a?){40}`), plus
+`(a|b)*(a|b)*(a|b)*`, `(a*)(a*)(a*)`, `[ab]*[bc]*[cd]*`, `(a?){40}`), plus
 ambiguous repeated alternations (`(a|a)*`, `(a|ab)+`, `^([a-z]|[a-z0-9])+$`, `^(\w|\d)+$`) — and an
 unsafe one is skipped with a warning. This parse-time screen is the real safeguard: the sandbox hook
 timeout lets the host proceed but cannot interrupt a synchronous regex already running in the plugin

@@ -20,9 +20,17 @@ The version here always matches `manifest.json`'s `version`.
   `((a|b)*(a|b)*)(a|b)*$`, and the `{1}` spelling). A group with a quantifier now counts as one
   element, and a transparent group splices its body into the enclosing run. Each accepted form was
   O(n^3): measured against 140 characters, 87 ms to 407 ms, so tens of seconds at the 1000-character
-  body cap, which a running regex cannot be interrupted to honour. Two adjacent quantifiers remain
-  allowed, a mandatory atom or a `|` still breaks the chain, and groups competing for different
-  characters (`(x)*(y)*(z)*`, `(a*)(b*)(c*)`) never form a run, so ordinary rules are unaffected.
+  body cap, which a running regex cannot be interrupted to honour.
+- **Adjacency is judged on the characters an atom matches, not on how it is spelled.** The run compared
+  atoms by atom key, so `[ab]` and `[bc]` looked unrelated although both match `b`, and
+  `[ab]*[bc]*[cd]*$` was accepted while the alternation spelling of the same regex was refused. Against
+  600 characters it costs 8.9 s, and `\w*\d*\w*x` 22 s, so roughly 41 s and 103 s at the input cap.
+  A group form is now refused exactly where the same shape written with bare atoms already was, so the
+  screen's paths agree instead of the verdict turning on notation. Two adjacent quantifiers remain
+  allowed, a mandatory atom or a `|` still breaks the chain, and elements sharing no character never
+  form a run, so `a*b*c*`, `order\s+\d+`, `(x)*(y)*(z)*` and `(a*)(b*)(c*)` are unaffected. A rule of
+  the widened shape, such as `.*(word)*.*`, is dropped with a warning at enable, so re-check the log
+  after upgrading.
 
 ## [0.2.7] - 2026-09-05
 

@@ -129,6 +129,22 @@ test('an unbounded-quantified GROUP counts toward the adjacency run, like an ato
   }
 });
 
+test('adjacency is judged on the characters an atom matches, not on how it is spelled', () => {
+  // The run used to compare atoms by atom KEY (equal keys, or `.`), which is a different question from
+  // "can these compete for the same character". `[ab]` and `[bc]` are different keys and both match
+  // `b`, so a chain of overlapping classes read as three non-competing quantifiers. Measured against
+  // 600 characters chosen to match every class and fail at the end, then O(n^3) to the 1000-char cap:
+  // `[ab]*[bc]*[cd]*$` 8.9 s (~41 s), `\\w*\\d*\\w*x` 22 s (~103 s), `[a-z]*[a-z0-9]*[a-z]*z` 25 s (~117 s).
+  // The alternation spelling of the same regex was already refused, so the verdict turned on notation.
+  for (const pattern of ['[ab]*[bc]*[cd]*$', '\\w*\\d*\\w*x', '\\d*\\w*\\d*y', '[a-z]*[a-z0-9]*[a-z]*z']) {
+    assert.equal(isSafeRegexPattern(pattern), false, `should reject: ${pattern}`);
+  }
+  // Classes that share no character still never form a run, which is what keeps ordinary rules alive.
+  for (const pattern of ['a*b*c*', 'order\\s+\\d+', '\\s*\\d+', '[^0-9]*x', '\\d{3}-\\d{4}']) {
+    assert.equal(isSafeRegexPattern(pattern), true, `should accept: ${pattern}`);
+  }
+});
+
 test('a transparent group splices its body into the run instead of hiding it', () => {
   // Parentheses that carry no quantifier are not a boundary, they are punctuation: `(a*)(a*)(a*)` is
   // `a*a*a*` with three pairs of them. The run was PARKED at `(` and RESTORED at `)`, so whatever the

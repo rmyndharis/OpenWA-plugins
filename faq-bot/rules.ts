@@ -63,8 +63,6 @@ function quantifierAt(
   return none;
 }
 
-const overlaps = (a: string, b: string): boolean => a === 'ANY' || b === 'ANY' || a === b;
-
 /**
  * One element of a rule-2 adjacency run: a bare atom, or an unbounded-quantified GROUP.
  *
@@ -100,12 +98,17 @@ function runChars(e: RunElement): Set<string> | null {
 /**
  * Do two adjacent unbounded-quantified elements compete for the same characters?
  *
- * Two ATOMS are compared exactly as before, by atom key, so no pattern that passed this screen on the
- * atom path changes verdict. A group on either side falls back to comparing character sets, which is
- * the only comparison available for something with no single key; an undecidable set fails closed.
+ * Compared by the characters each can START with, for atoms and groups alike. Atoms used to be
+ * compared by atom KEY instead (equal keys, or `.`), which is not the same question: `[ab]` and `[bc]`
+ * are different keys and both match `b`, so `[ab]*[bc]*[cd]*$` was read as three non-competing
+ * quantifiers and accepted, at 8.9 s against 600 characters and ~41 s at the input cap. `\w*\d*\w*x`
+ * (~103 s) and `[a-z]*[a-z0-9]*[a-z]*z` (~117 s) escaped the same way. The alternation spelling of the
+ * very same regex was refused, so the verdict turned on notation rather than on cost.
+ *
+ * An undecidable set (`.`, or an atom that will not compile alone) is null and counts as overlapping,
+ * which fails closed and preserves the old `ANY` behaviour.
  */
 function runOverlaps(a: RunElement, b: RunElement): boolean {
-  if (a.kind === 'atom' && b.kind === 'atom') return overlaps(a.key, b.key);
   const sa = runChars(a);
   const sb = runChars(b);
   if (sa === null || sb === null) return true;
@@ -189,10 +192,11 @@ const REPEAT_THRESHOLD = 10;
  *  2. THREE OR MORE adjacent unbounded quantifiers over overlapping elements in one concatenation —
  *     `.*.*.*`, `\w*\w*\w*`, `(a|b)*(a|b)*(a|b)*` (O(n^3)+); TWO adjacent (`.*.*`, `.*\d+`) is only
  *     O(n^2), safe under the 1000-char input cap, so it is allowed; a mandatory atom or a `|` breaks
- *     the chain. An element is a bare atom OR an unbounded-quantified group, and a TRANSPARENT group
- *     (no quantifier, or `{1}`) splices its body into the enclosing run rather than hiding it, so
- *     `(a*)(a*)(a*)` and `((a|b)*(a|b)*)(a|b)*` count as three. Counting only bare atoms left every
- *     one of those accepted, at tens of seconds on a 1000-character input;
+ *     the chain. An element is a bare atom OR an unbounded-quantified group, a TRANSPARENT group (no
+ *     quantifier, or `{1}`) splices its body into the enclosing run rather than hiding it, and two
+ *     elements compete when the CHARACTERS they can start with intersect, not when they are spelled
+ *     the same. So `(a*)(a*)(a*)`, `((a|b)*(a|b)*)(a|b)*` and `[ab]*[bc]*[cd]*` all count as three.
+ *     Each of those was accepted before, at tens of seconds on a 1000-character input;
  *  3. an unbounded or ≥REPEAT_THRESHOLD repeat of a group whose body has a variable-width quantifier —
  *     `(a?){40}`, `(a?)+` (exponential); a small bounded repeat of a VARIABLE body like `(ab?){2}` is
  *     allowed, but any repeat of an UNBOUNDED body is not — see (1).
@@ -314,8 +318,11 @@ export function isSafeRegexPattern(p: string): boolean {
       // An UNBOUNDED-quantified group is itself a run element, exactly like an unbounded-quantified
       // atom. Restoring the parked run here instead (which is what a nullable group did) meant rule 2
       // only ever counted bare atoms, so `.*.*.*done` was refused while `(a|b)*(a|b)*(a|b)*$` was
-      // accepted and then ran O(n^3): 380 ms at 150 characters, and ~113 s at the 1000-character body
-      // cap, which a regex cannot be interrupted to honour.
+      // accepted and then ran O(n^3). Timings here and below are steady-state on this machine, the
+      // pattern compiled with the `i` flag parseRules uses, against an input that matches throughout
+      // and fails on the last character (the worst case, and the one a stranger can send): 380 ms at
+      // 150 characters of `a`, so tens of seconds at the 1000-character body cap, which a running
+      // regex cannot be interrupted to honour.
       if (q.unbounded) {
         const here: RunElement = { kind: 'group', chars: branchFirstChars(frame.branches) };
         // Compared against the run PARKED when this group opened, not the live one: `(` resets
