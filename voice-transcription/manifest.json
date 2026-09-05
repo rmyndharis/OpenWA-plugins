@@ -1,7 +1,7 @@
 {
   "id": "voice-transcription",
   "name": "Voice Note Transcription",
-  "version": "1.2.8",
+  "version": "1.2.9",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Transcribes inbound WhatsApp voice notes to text via an OpenAI-compatible speech-to-text backend (self-hosted Speaches/faster-whisper or hosted Groq/OpenAI) and delivers a `message.transcription` event to your webhook \u2014 so bots and AI can read and reply to audio. Off the message-delivery path; disabled until enabled.",
@@ -21,7 +21,7 @@
   ],
   "status": "beta",
   "minOpenWAVersion": "0.8.0",
-  "testedOpenWAVersion": "0.23.3",
+  "testedOpenWAVersion": "0.23.4",
   "provides": [
     "transcription"
   ],
@@ -116,7 +116,7 @@
       "deliveryWebhookUrl": {
         "type": "string",
         "title": "Delivery webhook URL",
-        "description": "Your endpoint that receives the message.transcription event (the bot/AI integration channel). Must be https \u2014 an https host you set here is allowed automatically. Optional if you only use in-chat delivery."
+        "description": "Your endpoint that receives the message.transcription event (the bot/AI integration channel). An https host is added to this plugin's outbound allowlist automatically. A plain-http one is not, so http works only for localhost/127.0.0.1, which are already allowed, and that also needs the gateway's SSRF_ALLOWED_HOSTS. Optional if you only use in-chat delivery."
       },
       "deliverySecret": {
         "type": "string",

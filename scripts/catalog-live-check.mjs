@@ -25,8 +25,12 @@
 
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 
-const CATALOG = process.argv[2] ?? new URL('../plugins.json', import.meta.url).pathname;
+// fileURLToPath, not `.pathname`: a file: URL keeps its percent-encoding, so a checkout under a path
+// with a space resolved to ".../My%20Code/plugins.json" and this check died with ENOENT before it
+// fetched anything. It is the nightly job, so the failure reads as "the catalog is broken".
+const CATALOG = process.argv[2] ?? fileURLToPath(new URL('../plugins.json', import.meta.url));
 const TIMEOUT_MS = 30_000;
 
 /** Split "https://host/x.zip#sha256=abc..." into its parts. The pin is what the host verifies. */

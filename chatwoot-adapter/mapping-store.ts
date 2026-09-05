@@ -208,8 +208,19 @@ export class MappingStore {
     return legacy;
   }
 
+  // Ordering is the durability contract, not a style choice: the FORWARD key is written LAST, as the
+  // commit marker for the whole link.
+  //
+  // It is the key `ensureConversation` short-circuits on, so writing it first (as this did) meant a
+  // worker restart, or a storage quota rejection, between the two writes left a chat that looked
+  // linked but had no reverse entry. Inbound kept relaying, `getByConversation` kept returning null,
+  // and every agent reply for that chat was dropped, forever, because nothing re-links a chat whose
+  // forward key is present. Written last, the same interruption simply leaves the chat unlinked, and
+  // the next inbound message re-runs `ensureConversation`, which resolves the SAME contact and the
+  // SAME open conversation from Chatwoot before creating anything, so the retry is idempotent and
+  // costs no duplicate. A reverse entry with no forward key is inert until then, and points at the
+  // chat it always did.
   async link(sessionId: string, chatId: string, instanceId: string, link: ChatLink): Promise<void> {
-    await this.writeMapped(this.fwdKey(sessionId, chatId), link);
     const rev = { sessionId, chatId };
     await this.writeMapped(this.revKey(sessionId, link.conversationId), rev); // tenant-scoped lookup
     // The unscoped key exists only so mappings written before scoping keep resolving. A Chatwoot
@@ -224,6 +235,7 @@ export class MappingStore {
       await this.writeMapped(legacyKey, { ambiguous: true });
     }
     await this.mappings.upsert({ sessionId, chatId, instanceId }, String(link.conversationId));
+    await this.writeMapped(this.fwdKey(sessionId, chatId), link); // commit marker, see above
   }
 
   async patch(sessionId: string, chatId: string, patch: Partial<ChatLink>): Promise<void> {

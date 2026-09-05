@@ -5,6 +5,21 @@ and the top entry's version must match `manifest.json`.
 
 ## [Unreleased]
 
+## [0.2.8] - 2026-09-05
+
+### Fixed
+
+- **A WhatsApp Channel or broadcast-list post can no longer fire a backend request.** The only
+  chat-scope gate was the group flag, and a `@newsletter` post arrives flagged as a non-group chat, so
+  a channel this account merely follows could match an action and perform a real, irreversible write
+  on behalf of a sender the operator has no relationship with.
+- The README described the handler as always returning `{ continue: true }`; it claims a message that
+  matched an action, so a keyword bot or a flow does not answer the same command.
+
+### Changed
+
+- **Verified against OpenWA v0.23.4** (testedOpenWAVersion 0.23.3 -> 0.23.4).
+
 ## [0.2.7] - 2026-08-25
 
 ### Changed

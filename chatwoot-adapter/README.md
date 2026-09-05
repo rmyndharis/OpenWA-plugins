@@ -15,13 +15,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chatwoot-adapter` |
-| **Version** | 0.9.6 |
-| **Released** | 2026-08-25 |
+| **Version** | 0.9.7 |
+| **Released** | 2026-09-05 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.7 (tested 0.23.3) |
+| **Requires OpenWA** | ≥ 0.8.7 (tested 0.23.4) |
 | **Keywords** | chatwoot, helpdesk, inbox, handover, two-way, agent, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/chatwoot-adapter](https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter) |
 <!-- END DETAILS -->
@@ -163,8 +163,9 @@ instance id or route — so re-copy the ingress URL from the mint response.
   carries no text. In a group these messages now also carry the `*Sender:*` prefix.
 - **Agent replies containing a link look plainer from OpenWA 0.14.0 on the Baileys engine.** WhatsApp used
   to draw a preview card for a URL in an agent's reply. From 0.14.0 Baileys only generates that card when
-  the sender asks for it, and a plugin has no way to ask, so those replies arrive as plain links. Delivery
-  is unaffected. The whatsapp-web.js engine is unaffected.
+  the sender asks for it. A plugin can ask, via the send envelope's `linkPreview` flag (host 0.14.1+),
+  and this adapter deliberately leaves it unset so an agent's reply renders the same way on both
+  engines. Delivery is unaffected; the whatsapp-web.js engine is unaffected.
 - **`@lid` migration** — when a contact migrates to WhatsApp's `@lid` addressing, their conversation is kept
   from splitting as long as the lid→phone mapping is known (after any reply to them). To resolve it on
   every inbound too — closing the gap for a contact you've only ever received from — set

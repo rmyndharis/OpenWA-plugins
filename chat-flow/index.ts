@@ -1,5 +1,6 @@
 import type { IPlugin, PluginContext, HookContext, HookResult, IncomingMessage } from '../types/openwa';
 import { FlowEngine, FlowNode, SessionFlow } from './flow-engine.ts';
+import { isBroadcastJid } from './jid.ts';
 
 export interface MenuNode {
   key: string;
@@ -111,6 +112,13 @@ export default class ChatFlow implements IPlugin {
     }
 
     if (m.isGroup && !liveCfg.respondInGroups) return { continue: true };
+    // `isGroup` is a boolean over a five-way discriminator, so it cannot see a WhatsApp Channel: a
+    // `@newsletter` post arrives flagged as a non-group chat and reads exactly like a 1:1 message.
+    // Nothing filters it upstream (the host diverts only status broadcasts), so a channel this account
+    // merely FOLLOWS drew a reply into a chat it can never post to, burning the per-chat slot and
+    // logging a send failure per post. Broadcast-list ids are the same shape. Matched on the JID rather
+    // than `msg.kind`, which the host only stamps from 0.10.8, below every floor in this catalogue.
+    if (isBroadcastJid(m.chatId)) return { continue: true };
     try {
       // In a group, scope flow state to the sender so members don't clobber each other's menu position.
       const actor = m.isGroup ? m.author : undefined;

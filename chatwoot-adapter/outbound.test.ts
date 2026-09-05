@@ -299,3 +299,65 @@ test('handover guards a non-object changed_attributes element (no throw / retry 
   assert.deepEqual(r, { status: 200 });
   assert.deepEqual(handovers.map(h => h[1]), ['human']); // the valid element is still read
 });
+
+test('every attachment of a multi-attachment agent reply reaches WhatsApp', async () => {
+  // Chatwoot models attachments as a has_many on ONE message_created, so an agent sending three files
+  // produces one webhook carrying three. Relaying only the first dropped the rest with no log, and the
+  // 'cw' marker written straight after made the loss permanent: a re-delivery short-circuits as seen.
+  const { deps: d, sent } = deps();
+  await handleOutbound(
+    d,
+    req({
+      event: 'message_created', message_type: 'outgoing', private: false, id: 21, content: 'here are both',
+      inbox: { id: 7 }, conversation: { id: 55 },
+      attachments: [
+        { id: 1, file_type: 'image', data_url: 'https://chat.acme.com/blob/a.jpg' },
+        { id: 2, file_type: 'file', data_url: 'https://chat.acme.com/blob/b.pdf' },
+      ],
+    }),
+  );
+  assert.equal(sent.length, 2, 'one WhatsApp message per attachment');
+  // The caption rides the first only: repeating it would post the agent's text once per file.
+  assert.deepEqual(sent, [
+    { sessionId: 'sess', chatId: 'c@wa', type: 'image', mediaUrl: 'https://chat.acme.com/blob/a.jpg', text: 'here are both' },
+    { sessionId: 'sess', chatId: 'c@wa', type: 'file', mediaUrl: 'https://chat.acme.com/blob/b.pdf', text: undefined },
+  ]);
+});
+
+test('a mid-reply send failure still leaves the attachments that landed echo-guarded', async () => {
+  // The echo guard is claimed per send, not after the whole reply. Without that, a reply whose second
+  // attachment fails would leave the first one sent but unguarded: the retry re-sends it (the
+  // documented duplicate-over-loss posture) AND its first copy's message:sent would be mirrored back
+  // into Chatwoot as a fresh message.
+  const marks: string[] = [];
+  const { deps: d, sent } = deps({
+    store: { markSeen: async (kind: string, id: string) => void marks.push(`${kind}:${id}`) },
+  });
+  let calls = 0;
+  (d as unknown as { conversations: unknown }).conversations = {
+    send: async (env: Record<string, unknown>) => {
+      calls++;
+      if (calls === 2) throw new Error('engine refused');
+      sent.push(env as never);
+      return { messageId: `WA${calls}` };
+    },
+  };
+
+  await assert.rejects(() =>
+    handleOutbound(
+      d,
+      req({
+        event: 'message_created', message_type: 'outgoing', private: false, id: 31, inbox: { id: 7 },
+        conversation: { id: 55 },
+        attachments: [
+          { id: 1, file_type: 'image', data_url: 'https://chat.acme.com/blob/a.jpg' },
+          { id: 2, file_type: 'image', data_url: 'https://chat.acme.com/blob/b.jpg' },
+        ],
+      }),
+    ));
+
+  assert.equal(sent.length, 1, 'only the first attachment went out');
+  assert.ok(marks.includes('wa:WA1'), `the first send must still be echo-guarded, saw ${JSON.stringify(marks)}`);
+  // The Chatwoot-side marker must NOT be written: the reply did not complete, so the retry must run.
+  assert.equal(marks.some((m) => m.startsWith('cw:')), false, JSON.stringify(marks));
+});

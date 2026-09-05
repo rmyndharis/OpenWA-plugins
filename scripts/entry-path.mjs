@@ -41,7 +41,13 @@ export function collectEntryFiles(base, rel) {
     throw new Error(`"${rel}" is a symlink — an archive member must be a real file inside the plugin`);
   }
   if (stat.isDirectory()) {
-    return readdirSync(abs, { withFileTypes: true }).flatMap((e) => collectEntryFiles(base, `${rel}/${e.name}`));
+    return readdirSync(abs, { withFileTypes: true })
+      // Dotfiles are never plugin content, and the OS writes them into a working tree without asking:
+      // a `.DS_Store` beside a configUi entry shipped inside the release zip and changed its sha256,
+      // which is the digest plugins.json pins. The build stayed green and the pin stopped matching.
+      // An entry named explicitly in the manifest is unaffected; this filters only a directory walk.
+      .filter((e) => !e.name.startsWith('.'))
+      .flatMap((e) => collectEntryFiles(base, `${rel}/${e.name}`));
   }
   return [{ name: rel, data: readFileSync(abs) }];
 }
@@ -50,10 +56,15 @@ export function collectEntryFiles(base, rel) {
 // each file once. They do overlap: configUiMember returns the TOP-LEVEL name, so a configUi entry of
 // 'dist/ui.html' adds 'dist' to a list that already names 'dist/index.js' and 'dist/package.json'.
 // A member's name determines its content, so collapsing by name cannot lose anything.
+// Sorted by archive path, because the member order IS the zip's byte order and a directory walk
+// inherits readdirSync order, which is filesystem-dependent (APFS and ext4 disagree). Every configUi
+// directory holds a single file today, so the advertised cross-platform byte-determinism has been
+// true by accident; a second file would have made a local build and the CI build differ, and the
+// release job compares the built artifact against the digest plugins.json pins.
 export function collectMembers(base, entries) {
   const byName = new Map();
   for (const entry of entries) {
     for (const file of collectEntryFiles(base, entry)) byName.set(file.name, file);
   }
-  return [...byName.values()];
+  return [...byName.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }

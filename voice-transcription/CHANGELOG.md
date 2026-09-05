@@ -6,6 +6,21 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+## [1.2.9] - 2026-09-05
+
+### Fixed
+
+- `deliveryWebhookUrl` is documented accurately: the plugin accepts http or https, but only an https
+  host is auto-added to the outbound allowlist, so a plain-http receiver works for `localhost` /
+  `127.0.0.1` (already allowed) and needs `SSRF_ALLOWED_HOSTS` too. The manifest and README had called
+  the field https-only, which contradicted the code and the plugin's own install example.
+
+### Changed
+
+- **Verified against OpenWA v0.23.4** (testedOpenWAVersion 0.23.3 -> 0.23.4). A failed inbound media
+  download now arrives as the omitted marker instead of no media at all; this plugin already treated
+  an omitted blob as unavailable and reports it cause-neutrally, so its behaviour is unchanged.
+
 ## [1.2.8] - 2026-08-25
 
 ### Fixed

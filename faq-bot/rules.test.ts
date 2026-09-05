@@ -235,6 +235,59 @@ test('an ambiguous repeated alternation is rejected, an unambiguous one is kept'
   }
 });
 
+test('a wrapping group does not hide an ambiguous repeated alternation', () => {
+  // The rejection only ever inspected the branches of the group being closed, so moving the quantifier
+  // one level out left it looking at a single-branch frame and it stopped firing. Every pattern here is
+  // the accepted one above with nothing added but cover; measured on the real engine against a
+  // 27-character message, `((a|a))+$` took ~8.9 s and `^(([a-z]|[a-z0-9]))+$` ~4.9 s, both past the
+  // host's 5 s hook budget, which a regex cannot be interrupted to honour.
+  for (const pattern of [
+    '((a|a))+$',
+    '(?:(a|a))+$',
+    '((?:a|a))+$',
+    '(((a|a)))+$',
+    '^(([a-z]|[a-z0-9]))+$',
+    '((\\w|\\d))+$',
+    '^((ya|ya))+$',
+    '((a|a)){2}',
+    '((a|a)){3,}',
+  ]) {
+    assert.equal(isSafeRegexPattern(pattern), false, `should reject: ${pattern}`);
+  }
+  // An ambiguous alternation that is never repeated is linear, however deeply it is wrapped.
+  for (const pattern of ['(a|a)', '((a|a))', '((a|a)){1}', '((a|a))?', '((a|b))+$']) {
+    assert.equal(isSafeRegexPattern(pattern), true, `should accept: ${pattern}`);
+  }
+});
+
+test('a wrapper that adds a mandatory atom is not cover, so ordinary keyword rules still compile', () => {
+  // The guard rail for the test above, and the reason the propagation is limited to PURE cover. Every
+  // pattern here nests an alternation whose branches share a first character inside a repeated group,
+  // which is the shape the test above rejects. They are all linear anyway, because the wrapper also
+  // contributes a MANDATORY atom (a space, a comma, a colon) that realigns every iteration, so the
+  // branches can never consume the same text two ways. Each measures 0.0 ms against the 1000-character
+  // input cap, and each is a rule an operator really writes. Propagating the inner verdict through
+  // these wrappers refused all of them, which would silently stop an upgraded install from replying
+  // with no config change and no error the operator sees.
+  for (const pattern of [
+    '^((no|nope) )+$',
+    '^((thank|thanks) )+$',
+    '^((cek|cekresi):)+$',
+    '((ok|oke)\\s)+',
+    '^((ya|yaa),)+$',
+    '^((halo|(hai|hei)) )+$',
+    '^((satu|dua|(tiga|empat)),)+$',
+    '^((cs|(admin|support)):)+$',
+    '^((0|00),)+$',
+  ]) {
+    assert.equal(isSafeRegexPattern(pattern), true, `should accept: ${pattern}`);
+    // Accepting is only meaningful if accepting is safe, so prove each is fast at the full input cap.
+    const started = Date.now();
+    new RegExp(pattern, 'i').test('no '.repeat(333) + 'x');
+    assert.ok(Date.now() - started < 200, `${pattern} is slow at the input cap`);
+  }
+});
+
 test('an accepted alternation stays fast at the full input cap', () => {
   // The guard rail for the test above: proving a pattern is accepted is only meaningful if accepting it
   // is actually safe.

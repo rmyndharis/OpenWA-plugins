@@ -82,6 +82,41 @@ test('falls back to fallbackSessionId when the instance is not bound', async () 
   assert.equal(sent[0].chatId, '447911123456@c.us');
 });
 
+test('a wildcard scope is not a session id, so fallbackSessionId is used', async () => {
+  // An ingress instance left unscoped stores the host's wildcard '*' and hands it over as
+  // req.sessionId. Passing it through sent every OTP to a session that cannot exist, and since `??`
+  // only falls through on nullish it also skipped the fallback the operator configured for this case.
+  const { sent, deps } = makeDeps({ fallbackSessionId: 'fallback-sess' });
+  await handleSendSms(deps, makeReq({ user: { phone: '+447911123456' }, sms: { otp: '112233' } }, { sessionId: '*' }));
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].sessionId, 'fallback-sess');
+});
+
+test('a wildcard scope with no fallback sends nothing and reports it as unhealthy', async () => {
+  // Dropping the OTP must stay LOUD. healthCheck is the only surface the dashboard renders for a lost
+  // send, so a misconfiguration that loses every delivery must not look like a healthy plugin.
+  const results: Array<string | null> = [];
+  const { sent, logs, deps } = makeDeps();
+  await handleSendSms(
+    { ...deps, onSendResult: (e: string | null) => void results.push(e) },
+    makeReq({ user: { phone: '+447911123456' }, sms: { otp: '112233' } }, { sessionId: '*' }),
+  );
+  assert.deepEqual(sent, []);
+  assert.ok(logs.some((l) => /no session to send from/.test(l.message)), JSON.stringify(logs));
+  assert.equal(results.length, 1, 'the drop must reach the health surface');
+  assert.match(String(results[0]), /fallbackSessionId/);
+});
+
+test('an empty messageTemplate is refused at config time, not by a failed send', async () => {
+  // '' is not nullish, so it survived `?? default`, composed to an empty message, and the host's
+  // capability router refuses a zero-length text: every OTP dead-lettered with no config error.
+  assert.throws(
+    () => readConfig({ appName: 'Acme', messageTemplate: '   ' }),
+    /messageTemplate must not be empty/,
+  );
+  assert.doesNotThrow(() => readConfig({ appName: 'Acme' }));
+});
+
 test('prefers req.sessionId over fallbackSessionId', async () => {
   const { sent, deps } = makeDeps({ fallbackSessionId: 'fallback-sess' });
   await handleSendSms(deps, makeReq({ user: { phone: '+15559876543' }, sms: { otp: '000000' } }, { sessionId: 'bound-sess' }));

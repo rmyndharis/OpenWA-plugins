@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chat-flow` |
-| **Version** | 1.1.7 |
-| **Released** | 2026-08-25 |
+| **Version** | 1.1.8 |
+| **Released** | 2026-09-05 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.23.3) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.23.4) |
 | **Keywords** | menu, flow, interactive, auto-reply, chatbot, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/chat-flow](https://github.com/rmyndharis/OpenWA-plugins/tree/main/chat-flow) |
 <!-- END DETAILS -->
@@ -30,7 +30,9 @@
 - **Interactive menu tree** — a trigger word (or any message) sends a greeting + numbered menu; the user's
   reply selects an option; selections traverse a menu tree of arbitrary depth. Leaf nodes end the flow.
 - **Stateful per conversation** — each `(session, chat)` remembers its position; state expires after 15
-  minutes of inactivity, and re-sending the trigger word restarts an active flow.
+  minutes of inactivity, and re-sending the trigger word restarts an active flow. An unmatched reply is
+  answered with the menu again, up to three times in a row; after that the flow ends quietly rather than
+  answering every message from someone who has stopped following it. Any valid choice resets that budget.
 - **Visual flow editor** — design the whole tree (add / remove / nest options) in a built-in editor
   (`configUi`), no JSON by hand required.
 - **Per-session config** — the flow is the resolved per-session `ctx.config`; the platform owns which

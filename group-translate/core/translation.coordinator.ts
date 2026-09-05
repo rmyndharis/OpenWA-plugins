@@ -337,26 +337,32 @@ export class TranslationCoordinator {
       return;
     }
 
-    const targetsSelf = cmd.target?.kind === 'me';
-    const isSelfServe = (cmd.name === 'setlang' || cmd.name === 'auto') && targetsSelf;
-    if (!isSelfServe) {
-      const admins = await this.gateway.getGroupAdmins(sessionId, msg.chatId);
-      const { isAdmin, isController } = await this.authorize(sessionId, msg, state, admins);
-      const adminOnly = cmd.name === 'grant' || cmd.name === 'revoke';
-      if ((adminOnly && !isAdmin) || (!adminOnly && !isController)) {
-        // Reply on denial only when the operator opted in (denyReply). Default is silent, so an
-        // unauthorized user spamming a restricted command can't amplify replies out of the group.
-        if (this.opts.denyReply) {
-          await this.gateway.sendText(
-            sessionId,
-            msg.chatId,
-            adminOnly
-              ? '⛔ Only group admins can use that command.'
-              : '⛔ Only group admins or delegated users can use that command.',
-          );
-        }
-        return;
+    // Every state-changing command is authorized, with no self-serve exemption. `setlang`/`auto`
+    // targeting yourself used to skip this block entirely, which contradicted all three shipped
+    // descriptions of the plugin (README "every other command is admin-only" and its per-command
+    // table, and the manifest's "Admin-gated" that plugins.json publishes) and, because
+    // parseCommand defaults an absent target to `me`, made the plain `<prefix> setlang es` form open
+    // to anyone. The confirmation it sent is unconditional, so any member could draw a bot post into
+    // the group on every attempt: the same amplification `help` is explicitly bounded against a few
+    // lines up, but unbounded. Routing these through authorize is the fix rather than a second
+    // cooldown, because with the default denyReply:false an unauthorized attempt now says nothing at
+    // all, and it also puts the unvalidated-language write below behind an admin.
+    const admins = await this.gateway.getGroupAdmins(sessionId, msg.chatId);
+    const { isAdmin, isController } = await this.authorize(sessionId, msg, state, admins);
+    const adminOnly = cmd.name === 'grant' || cmd.name === 'revoke';
+    if ((adminOnly && !isAdmin) || (!adminOnly && !isController)) {
+      // Reply on denial only when the operator opted in (denyReply). Default is silent, so an
+      // unauthorized user spamming a restricted command can't amplify replies out of the group.
+      if (this.opts.denyReply) {
+        await this.gateway.sendText(
+          sessionId,
+          msg.chatId,
+          adminOnly
+            ? '⛔ Only group admins can use that command.'
+            : '⛔ Only group admins or delegated users can use that command.',
+        );
       }
+      return;
     }
 
     const targetWid = this.resolveTarget(msg, cmd.target);

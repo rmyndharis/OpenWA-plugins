@@ -313,3 +313,27 @@ test('bulk sweep does not record backfillDone when every post in the replay fail
   await backfillAllChats(deps, 'sess');
   assert.deepEqual(patches, [], 'a chat the sweep could not actually post into must not be marked imported');
 });
+
+test('the bulk sweep skips channel and broadcast chats', async () => {
+  // The engine's chat list carries followed channels alongside real conversations and neither adapter
+  // filters them, so the one-time sweep was a second door for the junk contacts and conversations the
+  // live relay already refuses, created in bulk on first enable.
+  const chats = [
+    { id: '628111@c.us', name: 'Real', isGroup: false },
+    { id: '120363000000000000@newsletter', name: 'Channel', isGroup: false },
+    { id: '628999-1@broadcast', name: 'Broadcast', isGroup: false },
+  ];
+  const touched: string[] = [];
+  const { deps, posts } = makeDeps({
+    engine: {
+      getChats: async () => chats,
+      getChatHistory: async (_s: string, chatId: string) => {
+        touched.push(chatId);
+        return [hist('m1', 10, false, 'hello')];
+      },
+    },
+  });
+  await backfillAllChats(deps, 's1');
+  assert.deepEqual(touched, ['628111@c.us'], 'only the real chat is fetched');
+  assert.equal(posts.length, 1);
+});

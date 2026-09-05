@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `faq-bot` |
-| **Version** | 0.2.6 |
-| **Released** | 2026-08-25 |
+| **Version** | 0.2.7 |
+| **Released** | 2026-09-05 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.6.1 (tested 0.23.3) |
+| **Requires OpenWA** | ≥ 0.6.1 (tested 0.23.4) |
 | **Keywords** | faq, auto-reply, chatbot, support, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/faq-bot](https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot) |
 <!-- END DETAILS -->
@@ -117,8 +117,11 @@ unsafe one is skipped with a warning. This parse-time screen is the real safegua
 timeout lets the host proceed but cannot interrupt a synchronous regex already running in the plugin
 worker, so a pattern that slips through would still pin that worker.
 
-An alternation is only rejected when two branches can consume the same text, so ordinary keyword sets
-like `(one|two|three)+` and `^(ya|tidak)$` are unaffected even where two branches share a first letter.
+An alternation is only rejected when two branches can consume the same text AND the repetition lands
+directly on it, including through a group that adds nothing but parentheses (`((a|a))+`). A wrapper that
+also contributes a mandatory atom is not that shape: the atom realigns every iteration, so ordinary
+keyword sets like `(one|two|three)+`, `^(ya|tidak)$` and `^((no|nope) )+$` are unaffected even where two
+branches share a first letter.
 The screen is a heuristic rather than a decision procedure: it covers the shapes that occur in real rule
 sets, and the 1000-character body cap remains as the second line of defence.
 

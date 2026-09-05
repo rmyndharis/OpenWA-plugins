@@ -33,7 +33,21 @@ export default class SupabaseSmsHook implements IPlugin {
 
     ctx.registerWebhook('send-sms', async req => {
       // Re-read config per delivery so edits (secret rotation, template tweak) apply live.
-      const config = readConfig(ctx.config);
+      //
+      // A config edit made after enable never re-runs the check above: the plugin declares no
+      // onConfigChange, and the host pushes config to the worker fire-and-forget. So an operator who
+      // clears a required field saves successfully and the breakage first appears HERE, on every
+      // delivery. Letting the throw escape would dead-letter each OTP while healthCheck stayed green,
+      // which is the one state this plugin's health surface exists to prevent; record it instead.
+      let config: ReturnType<typeof readConfig>;
+      try {
+        config = readConfig(ctx.config);
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        ctx.logger.warn(`supabase-otp-hook: config is invalid, OTP not sent: ${reason}`);
+        this.lastSendError = reason;
+        return;
+      }
       return handleSendSms(
         {
           config,

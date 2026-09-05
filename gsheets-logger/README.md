@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `gsheets-logger` |
-| **Version** | 0.3.8 |
-| **Released** | 2026-08-25 |
+| **Version** | 0.3.9 |
+| **Released** | 2026-09-05 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.23.3) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.23.4) |
 | **Keywords** | google-sheets, logging, audit, crm, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/gsheets-logger](https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger) |
 <!-- END DETAILS -->

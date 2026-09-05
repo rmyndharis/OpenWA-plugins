@@ -24,7 +24,10 @@ function discoverPlugins() {
     .sort();
 }
 
-const SUPPORTED_LOCALES = ['en', 'es', 'fr', 'it', 'ar', 'he', 'te', 'zh-CN', 'zh-HK'];
+// The host's dashboard locales (`supportedLanguages`, dashboard/src/i18n/index.ts). Duplicated in
+// package.mjs; move both together. This list drives the "i18n missing locale(s)" warning, so a stale
+// copy under-reports which translations a plugin still owes the dashboard.
+const SUPPORTED_LOCALES = ['en', 'de', 'es', 'he', 'tr', 'zh-CN', 'zh-HK', 'ar', 'te', 'fr', 'it', 'pt-BR', 'ko'];
 
 // Every permission the host actually enforces (core `PluginCapabilityPermission`). Nothing else in the
 // toolchain looked at these names: the array was passed straight through to plugins.json, which is what

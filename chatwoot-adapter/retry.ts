@@ -1,6 +1,7 @@
 import type { IncomingMessage } from '../types/openwa';
 import type { MappingStore } from './mapping-store.ts';
 import type { KeyedAsyncLock } from './chat-lock.ts';
+import { isBroadcastChat } from './filters.ts';
 
 // How often the retry queue is drained; how many times a message is retried before it's dead-lettered;
 // and the max pending entries kept (older ones are dropped on overflow to bound ctx.storage).
@@ -61,6 +62,16 @@ export async function drainRetries(
     // the condition, and maxAttempts ticks of that would dead-letter it). It drains on a later tick,
     // once that session has dispatched a hook again.
     if (!canRelay(e.sessionId)) continue;
+    // The drain calls relayInbound directly, so it does not pass through shouldRelayInbound. Live
+    // inbound now refuses channel and broadcast chats before enqueueing, but an entry queued by an
+    // earlier version is still sitting here, and relaying it would mint exactly the Chatwoot contact
+    // and conversation that exclusion exists to prevent. Deleted rather than skipped: it can never
+    // become relayable, and skipping would park it in the queue forever without ever dead-lettering,
+    // since the attempt counter only advances on a real attempt.
+    if (isBroadcastChat(e.chatId)) {
+      await deps.store.deleteRetry(e.key);
+      continue;
+    }
     // Lock on the RAW chatId, same deterministic key live inbound uses for this chat. @lid canonicalization
     // is a lookup concern handled inside relayInbound (best-effort), not a lock concern.
     await deps.lock.run(`${e.sessionId}:${e.chatId}`, async () => {

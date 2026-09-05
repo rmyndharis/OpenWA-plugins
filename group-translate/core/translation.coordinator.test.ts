@@ -699,6 +699,29 @@ test('/tr status is admin-gated: it publishes the participant roster', async () 
   assert.equal(mocks.sendText.calls.length, 1, 'an admin still gets it');
 });
 
+test('setlang and auto are admin-gated, so a member cannot make the bot reply on every attempt', async () => {
+  // These two skipped authorization entirely when they targeted the sender, and parseCommand defaults
+  // an absent target to `me`, so the plain `/tr setlang es` form was open to anyone. The confirmation
+  // is unconditional, so any member could draw a bot post into the group per attempt: the same
+  // amplification `/tr help` is bounded against, but unbounded, and it also let a non-admin pin their
+  // own language. All three shipped descriptions say every command but help is admin-only.
+  const state = freshState({ announced: true, active: true });
+  const { store, gateway, translator, mocks } = makeDeps(state);
+  const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+
+  mocks.getGroupAdmins.mockResolvedValue(['boss@c.us']); // the sender is not an admin
+  for (let i = 0; i < 5; i++) {
+    await c.handleMessage('s', msg({ body: '/tr setlang es', author: 'stranger@c.us' }));
+    await c.handleMessage('s', msg({ body: '/tr auto', author: 'stranger@c.us' }));
+  }
+  assert.equal(mocks.sendText.calls.length, 0, 'a non-admin draws no reply at all (denyReply defaults off)');
+  assert.equal(state.participants['stranger@c.us'], undefined, 'and pins nothing');
+
+  // Guard rail: an admin still gets both commands, so the gate is what is being proved.
+  await c.handleMessage('s', msg({ body: '/tr setlang es', author: 'boss@c.us' }));
+  assert.equal(mocks.sendText.calls.length, 1);
+});
+
 test('records why a message was left untranslated when detect fails', async () => {
   // A dead or unreachable backend used to be indistinguishable from a group with nothing to translate:
   // detect() threw, the catch returned, and nothing was written anywhere. The only symptom an operator

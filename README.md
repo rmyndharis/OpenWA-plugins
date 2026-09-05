@@ -34,16 +34,16 @@ This repository provides:
 <!-- BEGIN PLUGIN CATALOG -->
 | Plugin | Description | Version | Status |
 | ------ | ----------- | ------- | ------ |
-| [`after-hours`](./after-hours) | Auto-replies with a configurable away/closing message to messages received outside business hours. | 0.2.6 | stable |
-| [`chat-flow`](./chat-flow) | Interactive, stateful auto-reply: a trigger word starts a greeting + numbered menu, replies traverse a configurable menu tree, and per-chat state expires after 15 minutes. | 1.1.7 | stable |
-| [`chatwoot-adapter`](./chatwoot-adapter) | Two-way sync between a WhatsApp session and a Chatwoot inbox: relays WhatsApp messages (1:1 and groups, with media) into Chatwoot as an API-channel inbox, sends agent replies back to WhatsApp, and hands a chat over to a human agent — silencing other OpenWA bots — when an agent takes it in Chatwoot. First consumer of the OpenWA Integration SDK v1; runs sandboxed in the plugin worker. | 0.9.6 | stable |
-| [`faq-bot`](./faq-bot) | Auto-replies to inbound WhatsApp messages from configurable FAQ keyword/regex rules. | 0.2.6 | stable |
-| [`group-translate`](./group-translate) | Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled. | 1.3.6 | stable |
-| [`gsheets-logger`](./gsheets-logger) | Logs WhatsApp message events to a Google Sheet via a service account. | 0.3.8 | stable |
-| [`http-action`](./http-action) | Triggers safe REST API requests from WhatsApp commands and renders JSON responses back to chat. | 0.2.7 | stable |
-| [`supabase-otp-hook`](./supabase-otp-hook) | Deliver Supabase Auth phone OTPs over WhatsApp. | 0.3.5 | beta |
-| [`typebot-connector`](./typebot-connector) | Runs a Typebot flow as the brain of a WhatsApp bot: inbound messages drive a Typebot chat session via the live Chat API, and the bot's replies — text, media, and numbered-choice inputs — are sent back to WhatsApp. Auto-starts every chat, handles file-upload steps, and resets when the flow ends or after an idle timeout. Runs sandboxed in the plugin worker; no public URL or webhook required. | 0.2.7 | stable |
-| [`voice-transcription`](./voice-transcription) | Transcribes inbound WhatsApp voice notes to text via an OpenAI-compatible speech-to-text backend (self-hosted Speaches/faster-whisper or hosted Groq/OpenAI) and delivers a `message.transcription` event to your webhook — so bots and AI can read and reply to audio. Off the message-delivery path; disabled until enabled. | 1.2.8 | beta |
+| [`after-hours`](./after-hours) | Auto-replies with a configurable away/closing message to messages received outside business hours. | 0.2.7 | stable |
+| [`chat-flow`](./chat-flow) | Interactive, stateful auto-reply: a trigger word starts a greeting + numbered menu, replies traverse a configurable menu tree, and per-chat state expires after 15 minutes. | 1.1.8 | stable |
+| [`chatwoot-adapter`](./chatwoot-adapter) | Two-way sync between a WhatsApp session and a Chatwoot inbox: relays WhatsApp messages (1:1 and groups, with media) into Chatwoot as an API-channel inbox, sends agent replies back to WhatsApp, and hands a chat over to a human agent — silencing other OpenWA bots — when an agent takes it in Chatwoot. First consumer of the OpenWA Integration SDK v1; runs sandboxed in the plugin worker. | 0.9.7 | stable |
+| [`faq-bot`](./faq-bot) | Auto-replies to inbound WhatsApp messages from configurable FAQ keyword/regex rules. | 0.2.7 | stable |
+| [`group-translate`](./group-translate) | Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled. | 1.3.7 | stable |
+| [`gsheets-logger`](./gsheets-logger) | Logs WhatsApp message events to a Google Sheet via a service account. | 0.3.9 | stable |
+| [`http-action`](./http-action) | Triggers safe REST API requests from WhatsApp commands and renders JSON responses back to chat. | 0.2.8 | stable |
+| [`supabase-otp-hook`](./supabase-otp-hook) | Deliver Supabase Auth phone OTPs over WhatsApp. | 0.3.6 | beta |
+| [`typebot-connector`](./typebot-connector) | Runs a Typebot flow as the brain of a WhatsApp bot: inbound messages drive a Typebot chat session via the live Chat API, and the bot's replies — text, media, and numbered-choice inputs — are sent back to WhatsApp. Auto-starts every chat, handles file-upload steps, and resets when the flow ends or after an idle timeout. Runs sandboxed in the plugin worker; no public URL or webhook required. | 0.2.8 | stable |
+| [`voice-transcription`](./voice-transcription) | Transcribes inbound WhatsApp voice notes to text via an OpenAI-compatible speech-to-text backend (self-hosted Speaches/faster-whisper or hosted Groq/OpenAI) and delivers a `message.transcription` event to your webhook — so bots and AI can read and reply to audio. Off the message-delivery path; disabled until enabled. | 1.2.9 | beta |
 <!-- END PLUGIN CATALOG -->
 
 The table above is generated from each plugin's `manifest.json` + `CHANGELOG.md` by `npm run catalog`
@@ -63,7 +63,7 @@ Per-session config** for details and caveats.
 | ------ | :----------------: | ----- |
 | [`after-hours`](./after-hours) | ✅ Supported | All fields per session; takes effect on next message. |
 | [`chat-flow`](./chat-flow) | ✅ Supported | All fields per session; flow state is per `(session, chat)`. |
-| [`chatwoot-adapter`](./chatwoot-adapter) | ✅ Supported | All fields per session — first-class multi-tenant shape. |
+| [`chatwoot-adapter`](./chatwoot-adapter) | ⚠️ Supported, with caveat | All fields per session, the first-class multi-tenant shape; the failed-relay retry queue drains only once that session dispatches an event again. |
 | [`faq-bot`](./faq-bot) | ✅ Supported | All fields per session (different rule sets per number). |
 | [`group-translate`](./group-translate) | ⚠️ Supported, with caveat | Config-signature caching; multi-backend isolation needs one instance per session. |
 | [`gsheets-logger`](./gsheets-logger) | ❌ Not supported | Single-buffer single-sink design; use one instance per session. |
@@ -100,7 +100,7 @@ curl -X PUT "https://your-openwa-host/api/plugins/gsheets-logger/config" \
 ```
 
 **3. Enable it** — a freshly installed plugin is disabled and never enables itself. Once you have
-enabled it, that decision is remembered: OpenWA ≥ 0.12 re-enables it automatically on every host
+enabled it, that decision is remembered: OpenWA ≥ 0.10.5 re-enables it automatically on every host
 restart. An ERROR status does not exclude it — the host replays your enable decision, not the last
 runtime status. What is not automatic is a worker that crashed mid-run: nothing respawns it until the
 next restart or an explicit re-enable.
@@ -222,7 +222,7 @@ The `PluginContext` exposes a deliberately small surface. Every permission in th
 | Capability | Methods | Permission |
 | ---------- | ------- | ---------- |
 | `ctx.messages` | `sendText(session, chat, text)` · `reply(session, chat, quotedId, text)` | `messages:send` |
-| `ctx.engine` (read-only) | `getGroupInfo` · `getContacts` · `getContactById` · `checkNumberExists` · `getChats` · `getChatHistory` (0.8.5+) · `canonicalChatId` (0.8.7+) | `engine:read` |
+| `ctx.engine` (read-only) | `getGroupInfo` · `getContacts` · `getContactById` · `checkNumberExists` · `getChats` · `getChatHistory` (0.8.6+) · `canonicalChatId` (0.8.7+) | `engine:read` |
 | `ctx.net` | `fetch(url, init)` — host-proxied, SSRF-guarded outbound HTTP (0.7+) | `net:fetch` + manifest `net.allow` |
 | `ctx.conversations` | `send(envelope)` — normalized outbound (text/image/file/audio/video/voice/location) (v1) | `conversation:send` |
 | `ctx.handover` | `set(…, state)` — bot/human/closed handover for a mapped chat (v1) | `conversation:send` |

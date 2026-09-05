@@ -277,3 +277,70 @@ test('rows buffered for the old spreadsheet never cross into the new one', async
   assert.ok(parked, `the rows must be kept somewhere, stored keys: ${Object.keys(stored)}`);
   assert.deepEqual(parked?.[1], [['old-row-1'], ['old-row-2']]);
 });
+
+test('a config change that keeps the same sheet and credentials retains the rows for the timer', async () => {
+  // The paired guard for the test above. The host fires config-change on EVERY config write with no
+  // dirty check, so parking on "the buffer is non-empty" alone threw the backlog away when the
+  // operator only touched the flush interval. Nothing ever reads the parked key back, so those rows
+  // were gone for good, during precisely the Sheets outage the README promises they survive.
+  const logger = new GSheetsLogger();
+  const stored: Record<string, unknown> = {};
+  const warns: string[] = [];
+  const harness = logger as unknown as { client: unknown; ctx: unknown; buffer: string[][]; target: string };
+  const base = {
+    net: { fetch: async () => ({ ok: true, status: 200, body: '{}' }) },
+    storage: { get: async (k: string) => stored[k] ?? null, set: async (k: string, v: unknown) => void (stored[k] = v) },
+    logger: { warn: (m: string): void => void warns.push(m), error: (): void => {}, log: (): void => {} },
+    registerHook: (): void => {},
+  };
+
+  await logger.onEnable({ ...base, config: { spreadsheetId: 'SAME', serviceAccountJson: validSa, flushIntervalSec: 5 } } as never);
+  harness.client = { appendRows: async (): Promise<void> => { throw new Error('sheets unreachable'); } };
+  harness.buffer = [['row-1'], ['row-2']];
+
+  // Same spreadsheet, same credentials; only the flush interval moved.
+  await logger.onConfigChange(
+    { ...base, config: { spreadsheetId: 'SAME', serviceAccountJson: validSa, flushIntervalSec: 30 } } as never,
+    {},
+  );
+  await logger.onUnload();
+
+  assert.deepEqual(harness.buffer, [['row-1'], ['row-2']], 'rows for an unchanged target must stay queued');
+  assert.equal(
+    Object.keys(stored).some((k) => k.includes('undelivered')),
+    false,
+    `nothing may be parked when the target did not move, stored keys: ${Object.keys(stored)}`,
+  );
+});
+
+test('a credential rotation parks the rows, but re-pasting the same key reformatted does not', async () => {
+  // Two halves of the destination identity, each of which has to be right. Dropping the credentials
+  // from it would let a rotation send rows captured under the old account to the new one; comparing
+  // the raw JSON text instead of the parsed identity would treat a re-paste with different formatting
+  // as a rotation and park (lose) the backlog.
+  const run = async (nextSa: string) => {
+    const logger = new GSheetsLogger();
+    const stored: Record<string, unknown> = {};
+    const harness = logger as unknown as { client: unknown; buffer: string[][] };
+    const base = {
+      net: { fetch: async () => ({ ok: true, status: 200, body: '{}' }) },
+      storage: { get: async (k: string) => stored[k] ?? null, set: async (k: string, v: unknown) => void (stored[k] = v) },
+      logger: { warn: (): void => {}, error: (): void => {}, log: (): void => {} },
+      registerHook: (): void => {},
+    };
+    await logger.onEnable({ ...base, config: { spreadsheetId: 'SAME', serviceAccountJson: validSa } } as never);
+    harness.client = { appendRows: async (): Promise<void> => { throw new Error('sheets unreachable'); } };
+    harness.buffer = [['row-1']];
+    await logger.onConfigChange({ ...base, config: { spreadsheetId: 'SAME', serviceAccountJson: nextSa } } as never, {});
+    await logger.onUnload();
+    return { parked: Object.keys(stored).some((k) => k.includes('undelivered')), buffered: harness.buffer.length };
+  };
+
+  // Same credentials, re-serialised with the keys in the other order and extra whitespace.
+  const reformatted = JSON.stringify({ private_key: 'KEY', client_email: 'a@b.iam.gserviceaccount.com' }, null, 2);
+  assert.deepEqual(await run(reformatted), { parked: false, buffered: 1 }, 're-pasting the same key must not park');
+
+  // A genuinely different service account is a real destination change and must park.
+  const rotated = JSON.stringify({ client_email: 'other@b.iam.gserviceaccount.com', private_key: 'KEY2' });
+  assert.deepEqual(await run(rotated), { parked: true, buffered: 0 }, 'a rotation must park');
+});
