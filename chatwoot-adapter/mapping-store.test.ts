@@ -353,3 +353,41 @@ test('two chats sharing a bucket do not erase each other', async () => {
   assert.equal((await store.getByChat('sess', 'a@wa'))?.conversationId, 1);
   assert.equal((await store.getByChat('sess', partner))?.conversationId, 2);
 });
+
+test('an interrupted link leaves the chat unlinked, not half-linked', async () => {
+  // The forward key is what ensureConversation short-circuits on, so it must be the LAST write. When
+  // it went first, a worker restart or a storage quota rejection before the reverse write left a chat
+  // that looked linked but resolved no conversation: inbound kept relaying while every agent reply
+  // was dropped, permanently, because nothing re-links a chat whose forward key is present.
+  const inner = fakeStorage();
+  let failAfter = Infinity;
+  const flaky: PluginStorage = {
+    ...inner,
+    set: async (k: string, v: unknown) => {
+      if (failAfter-- <= 0) throw new Error('storage quota exceeded');
+      return inner.set(k, v);
+    },
+  };
+  const store = new MappingStore(flaky, fakeMappings());
+  const link = { conversationId: 42, contactId: 7, sourceId: 's', name: 'n', backfillDone: false };
+
+  // Fail on the very first write, then on each later one, and assert the same invariant every time:
+  // a chat is never reported as linked unless its conversation also resolves back.
+  for (let stopAt = 0; stopAt < 4; stopAt++) {
+    failAfter = stopAt;
+    await store.link('s1', 'c@wa', 'inst', link).catch(() => undefined);
+    const fwd = await store.getByChat('s1', 'c@wa');
+    if (fwd) {
+      assert.ok(
+        await store.getByConversation(42, 's1'),
+        `link reported at write ${stopAt} but the conversation does not resolve back`,
+      );
+    }
+  }
+
+  // And a complete run links both ways.
+  failAfter = Infinity;
+  await store.link('s1', 'c@wa', 'inst', link);
+  assert.equal((await store.getByChat('s1', 'c@wa'))?.conversationId, 42);
+  assert.deepEqual(await store.getByConversation(42, 's1'), { sessionId: 's1', chatId: 'c@wa' });
+});

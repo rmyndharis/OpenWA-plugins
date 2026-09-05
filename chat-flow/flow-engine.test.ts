@@ -93,6 +93,52 @@ test('invalid option replies with fallback and retains state', async () => {
   assert.deepEqual((storage.get(key) as { path: string[] }).path, []);
 });
 
+test('an unmatched input is answered a bounded number of times, then the flow ends silently', async () => {
+  // Every miss draws an "Invalid option" reply, so without a bound the bot answers a contact who has
+  // stopped following the menu on every message, forever, and two auto-repliers facing each other
+  // never stop. The bound is a miss budget, not a frozen clock.
+  const { ctx, storage, replies } = makeCtx();
+  await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'hi', 'm1');
+  const afterGreeting = replies.length;
+
+  let handled = true;
+  for (let i = 0; i < 10 && handled; i++) {
+    handled = await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'not a menu key', `miss${i}`);
+  }
+  assert.equal(replies.length - afterGreeting, 2, 'answers a couple of misses, then stops');
+  assert.equal(handled, false, 'the final miss is not claimed, so a sibling plugin may answer');
+  assert.equal(storage.has(key), false, 'the flow is dropped, so the next trigger starts clean');
+});
+
+test('a valid answer to the bot\'s own re-prompt is still honoured', async () => {
+  // The regression the miss budget exists to avoid: freezing lastActive on a miss expired the flow
+  // between the bot's "Invalid option" re-prompt and the contact's correct answer to it, so the bot
+  // asked for a choice and then silently ignored it.
+  const { ctx, storage, replies } = makeCtx();
+  await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'hi', 'm1');
+  // Nearly the whole TTL passes, then the contact mistypes and is re-prompted.
+  (storage.get(key) as { lastActive: number }).lastActive = Date.now() - 14 * 60 * 1000;
+  assert.equal(await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'helo', 'm2'), true);
+  assert.match(replies.at(-1)!.text, /Invalid option/);
+
+  // Answering that re-prompt a little later must work: the re-prompt reset the clock.
+  const handled = await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', '1', 'm3');
+  assert.equal(handled, true);
+  assert.equal(replies.at(-1)!.text, 'hosting https://abc.com');
+});
+
+test('misses are consecutive: progress restores the full budget', async () => {
+  const { ctx, replies } = makeCtx();
+  await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'go', 'm1'); // xyz triggers on any message
+  // Miss, then make real progress into the sub-menu, then miss again: the earlier miss must not count.
+  await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'nope', 'm2');
+  await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', '2', 'm3');
+  assert.equal(replies.at(-1)!.text, 'support https://xyz.com/support');
+  assert.equal(await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'nope', 'm4'), true);
+  assert.match(replies.at(-1)!.text, /Invalid option/);
+  assert.equal(await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'nope', 'm5'), true, 'budget was reset by the match');
+});
+
 test('trigger word during an active flow restarts it', async () => {
   const { ctx, storage, replies } = makeCtx();
   await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'hi', 'm1');

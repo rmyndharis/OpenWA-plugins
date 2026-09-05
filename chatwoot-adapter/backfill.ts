@@ -1,5 +1,6 @@
 import type { ChatSummary, IncomingMessage } from '../types/openwa';
 import { relayMessage, ensureConversation, resolvePhone, type InboundDeps } from './relay.ts';
+import { isBroadcastChat } from './filters.ts';
 
 // Media is inlined only for a window small enough to plausibly fit the host's 30 s per-capability budget.
 // Above it the host downloads every blob serially — one Puppeteer round trip each, each separately bounded
@@ -94,6 +95,11 @@ export async function backfillAllChats(deps: InboundDeps, sessionId: string): Pr
     }
     for (const chat of chats) {
       if (chat.isGroup && !deps.relayGroups) continue;
+      // The same exclusion the live relay makes, applied here too: the engine's chat list carries
+      // followed channels and broadcast entries alongside real conversations, and neither adapter
+      // filters them out. Without this the one-time sweep is a second door for exactly the junk
+      // contacts and conversations shouldRelayInbound refuses, created in bulk on first enable.
+      if (isBroadcastChat(chat.id)) continue;
       await deps.lock.run(`${sessionId}:${chat.id}`, async () => {
         try {
           const ordered = await fetchHistory(deps, sessionId, chat.id);

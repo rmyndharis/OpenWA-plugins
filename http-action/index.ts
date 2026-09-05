@@ -2,7 +2,7 @@ import type {
   IPlugin, PluginContext, HookContext, HookResult, IncomingMessage, ConversationSendEnvelope,
 } from '../types/openwa';
 import { readConfig, type HttpActionConfig } from './config.ts';
-import { phoneFromJid } from './jid.ts';
+import { phoneFromJid, isBroadcastJid } from './jid.ts';
 import { matchAction } from './matcher.ts';
 import { renderText, type TemplateContext } from './url-template.ts';
 import { HttpActionClient, type FetchLike } from './client.ts';
@@ -183,6 +183,14 @@ export default class HttpActionPlugin implements IPlugin {
         return { continue: true };
       }
       if (msg.isGroup && !liveCfg.respondInGroups) return { continue: true };
+      // `isGroup` is a boolean over a five-way discriminator, so it cannot see a WhatsApp Channel: a
+      // `@newsletter` post arrives with isGroup false and is indistinguishable here from a 1:1 chat.
+      // Nothing filters those upstream (the host diverts only status broadcasts, message-projector
+      // handleInboundMessage), so a channel this account merely FOLLOWS could match an action and fire
+      // a real, irreversible backend write on behalf of a sender the operator has no relationship with.
+      // Broadcast-list traffic is the same shape. Checked on the JID rather than `msg.kind`, which the
+      // host only stamps from 0.10.8 while this plugin supports 0.8.0.
+      if (isBroadcastJid(msg.chatId)) return { continue: true };
 
       // Decide ownership SYNCHRONOUSLY, before floating the request. The work runs off-dispatch to stay
       // inside the ~5 s hook budget, so the outcome is not knowable here — but whether the message is

@@ -8,6 +8,27 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-09-05
+
+### Fixed
+
+- **A wrapping group no longer hides an ambiguous alternation from the regex safety screen.** The
+  screen refused `(a|a)+$` but accepted `((a|a))+$`, because ambiguity was only ever checked against
+  the group being closed and was never propagated out of a nested one, unlike the other two hazards
+  it tracks. An accepted pattern of that shape spends seconds to minutes on a short message: measured
+  at ~8.9s for a 27-character message against a 5s hook budget, and a regex cannot be interrupted to
+  honour it, so the worker stalls and later messages queue behind it. Ambiguity now propagates the
+  same way, and patterns that are merely nested and unambiguous are unaffected.
+
+- **A WhatsApp Channel or broadcast-list post no longer draws a reply.** A `@newsletter` post arrives
+  flagged as a non-group chat, so the only chat-scope gate let it through and a channel this account
+  merely follows was answered into a chat it can never post to: a send that always fails, once per
+  post, after taking that chat's cooldown slot.
+
+### Changed
+
+- **Verified against OpenWA v0.23.4** (testedOpenWAVersion 0.23.3 -> 0.23.4).
+
 ## [0.2.6] - 2026-08-25
 
 ### Fixed

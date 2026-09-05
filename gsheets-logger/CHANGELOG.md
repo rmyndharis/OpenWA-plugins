@@ -8,6 +8,24 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-09-05
+
+### Fixed
+
+- **A config edit that does not change the spreadsheet or credentials no longer discards the buffer.**
+  The host fires a config-change on every config write, and any write with rows still buffered parked
+  them under a key nothing ever reads. Lowering the flush interval during a Sheets outage therefore
+  destroyed the backlog, which is the opposite of the README's promise that buffered rows flush on
+  their own once the API is reachable. Rows are parked only when the destination actually moved, and
+  an eviction from that parked set is now reported instead of being silent.
+- A capped cell no longer ends in half a surrogate pair. Truncating at a fixed code-unit count could
+  split an emoji, leaving a lone surrogate that is not valid Unicode and cannot survive the UTF-8
+  encoding of the request body, on exactly the oversized sender-controlled message the cap exists for.
+
+### Changed
+
+- **Verified against OpenWA v0.23.4** (testedOpenWAVersion 0.23.3 -> 0.23.4).
+
 ## [0.3.8] - 2026-08-25
 
 ### Fixed

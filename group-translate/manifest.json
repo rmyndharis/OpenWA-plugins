@@ -1,7 +1,7 @@
 {
   "id": "group-translate",
   "name": "Group Auto-Translation",
-  "version": "1.3.6",
+  "version": "1.3.7",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled.",
@@ -19,7 +19,7 @@
   ],
   "status": "stable",
   "minOpenWAVersion": "0.8.0",
-  "testedOpenWAVersion": "0.23.3",
+  "testedOpenWAVersion": "0.23.4",
   "provides": [
     "translation"
   ],

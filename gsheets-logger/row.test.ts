@@ -163,3 +163,25 @@ test('a bulk failure logs blank recipient columns rather than inventing one', ()
   assert.equal(row[COLUMNS.indexOf('type')], 'image');
   assert.equal(row[COLUMNS.indexOf('body')], 'promo');
 });
+
+test('a cell cap never splits a surrogate pair', () => {
+  // The cap lands mid-emoji when the 50 000th code unit is a high surrogate. A lone surrogate is not
+  // valid Unicode and cannot be encoded as UTF-8, which is what the host does to the request body, so
+  // the one row this cap exists to make safe was the row that corrupted the append.
+  const emoji = '\u{1F600}'; // one astral char = two UTF-16 code units
+  const row = buildRow({
+    event: 'message:received', sessionId: 's1', timestamp: T, source: 'Engine',
+    data: {
+      id: 'M1', from: '62811@c.us', to: 'me', chatId: '62811@c.us',
+      body: 'a'.repeat(49_999) + emoji + emoji,
+      type: 'text', fromMe: false, isGroup: false,
+    },
+  });
+  const cell = row[10]; // body column
+  assert.ok(cell.length <= 50_000);
+  assert.ok(cell.startsWith('a'.repeat(100)), 'the body cell, not a neighbour');
+  const tail = cell.charCodeAt(cell.length - 1);
+  assert.equal(tail >= 0xd800 && tail <= 0xdbff, false, 'must not end on a lone high surrogate');
+  // Well-formedness is the actual invariant, and it survives the UTF-8 round trip the host performs.
+  assert.equal(new TextDecoder().decode(new TextEncoder().encode(cell)), cell);
+});

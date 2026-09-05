@@ -11,7 +11,12 @@ export function mapReply(awaiting: Awaiting, msg: IncomingMessage): ReplyIntent 
       return { kind: 'file', mime: msg.media.mimetype, filename: msg.media.filename ?? 'file', data: msg.media.data };
     }
     if (msg.media?.omitted) {
-      return { kind: 'fallback', text: 'That file is too large to accept here. Please send a smaller file or type to continue.' };
+      // Cause-neutral on purpose: `omitted` carries no reason, and size is one of five (the byte cap,
+      // a download timeout, a disabled download, a failed download, a spent history media budget).
+      // Host 0.23.4 added the failed download on both engines, which is the retryable one, so naming
+      // size told most of these contacts to do the one thing that cannot help. The vendored contract
+      // says so directly: see the `omitted` note in types/openwa.d.ts.
+      return { kind: 'fallback', text: 'That attachment did not come through. Please try sending it again, or type to continue.' };
     }
     if (awaiting.kind === 'text') return { kind: 'text', message: text }; // attachment optional → plain text ok
     return { kind: 'fallback', text: 'Please send a file or photo to continue.' };

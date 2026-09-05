@@ -162,6 +162,18 @@ export function isSafeRegexPattern(p: string): boolean {
   const stack: {
     hasUnbounded: boolean;
     hasVariable: boolean;
+    // Rule 4 state. True when this group is, or purely WRAPS, an alternation whose branches can start
+    // with the same character. Without it the rule only saw the group it was closing, so one paren of
+    // cover moved the quantifier to a single-branch frame and the check went quiet: `(a|a)+$` was
+    // refused while `((a|a))+$` was accepted and then spent ~9 s on a 27-character message.
+    //
+    // Propagated ONLY through pure cover (see `sawAtom`). A wrapper that also contributes a mandatory
+    // atom is not cover: it anchors each repetition, so the branches can no longer consume the same
+    // text two ways. `((no|nope) )+$` is linear precisely because of that trailing space, and flagging
+    // it would silently disable an ordinary keyword rule on upgrade.
+    hasAmbiguous: boolean;
+    // Whether this group contributed an atom of its own, i.e. anything besides the nested group(s).
+    sawAtom: boolean;
     savedPrev: string | null;
     savedRun: number;
     // One record per top-level branch of THIS group; see Branch.
@@ -191,7 +203,8 @@ export function isSafeRegexPattern(p: string): boolean {
         if (cur) { cur.literal = null; if (cur.first === null) cur.first = null; }
       }
       stack.push({
-        hasUnbounded: false, hasVariable: false, savedPrev: prevUnbounded, savedRun: adjacentRun,
+        hasUnbounded: false, hasVariable: false, hasAmbiguous: false, sawAtom: false,
+        savedPrev: prevUnbounded, savedRun: adjacentRun,
         branches: [{ literal: '', first: null }],
       });
       prevUnbounded = null; adjacentRun = 0;
@@ -201,7 +214,8 @@ export function isSafeRegexPattern(p: string): boolean {
     }
     if (c === ')') {
       const frame = stack.pop() ?? {
-        hasUnbounded: false, hasVariable: false, savedPrev: null, savedRun: 0,
+        hasUnbounded: false, hasVariable: false, hasAmbiguous: false, sawAtom: false,
+        savedPrev: null, savedRun: 0,
         branches: [] as Branch[],
       };
       const q = quantifierAt(p, i + 1);
@@ -213,12 +227,25 @@ export function isSafeRegexPattern(p: string): boolean {
       // The engine then has two ways to consume each character and must try both on failure, which is
       // exponential: `^([a-z]|[a-z0-9])+$` needs over a minute on a 31-character input, well inside the
       // body cap, and JS regex execution cannot be interrupted.
-      if ((q.unbounded || q.count >= 2) && frame.branches.length >= 2 && branchesAmbiguous(frame.branches)) {
+      // This group's own alternation, OR one it purely wraps. Pure cover means the group added nothing
+      // but parentheses: no atom of its own and no alternation of its own. `((a|a))+$` is that shape,
+      // and the repetition lands on the inner ambiguity unchanged.
+      //
+      // A wrapper that DOES contribute an atom is deliberately not propagated through. The atom is
+      // mandatory in every iteration, so it realigns the match and the branches can no longer split
+      // the same text: `((no|nope) )+$`, `^((satu|dua|(tiga|empat)),)+$` and `((ok|oke)\s)+` are all
+      // linear (measured at 0.0 ms against the 1000-char input cap) and all of them are rules an
+      // operator really writes. Rejecting those would silently stop an upgraded install from replying.
+      const pureCover = !frame.sawAtom && frame.branches.length === 1;
+      const ambiguous =
+        (frame.hasAmbiguous && pureCover) || (frame.branches.length >= 2 && branchesAmbiguous(frame.branches));
+      if ((q.unbounded || q.count >= 2) && ambiguous) {
         return false;
       }
       if (stack.length) {
         if (q.unbounded || frame.hasUnbounded) stack[stack.length - 1].hasUnbounded = true;
         if (q.variable || frame.hasVariable) stack[stack.length - 1].hasVariable = true;
+        if (ambiguous) stack[stack.length - 1].hasAmbiguous = true;
       }
       // A group breaks flat adjacency only if it MUST consume something. `(x?)` can match empty, so
       // `.*(x?).*` is `.*.*` in disguise; resume the parked run rather than pretending it ended.
@@ -232,6 +259,7 @@ export function isSafeRegexPattern(p: string): boolean {
     const atom = atomAt(p, i);
     const q = quantifierAt(p, i + atom.len);
     if (stack.length) {
+      stack[stack.length - 1].sawAtom = true; // this group is no longer pure cover for a nested one
       const br = stack[stack.length - 1].branches;
       const cur = br[br.length - 1];
       if (cur) {

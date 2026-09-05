@@ -55,10 +55,10 @@ export async function handleOutbound(deps: OutboundDeps, req: WebhookRequest): P
 async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: ChatwootWebhookMessage): Promise<void> {
   const conversationId = evt.conversation?.id;
   const text = evt.content;
-  const media = firstMediaAttachment(evt);
+  const media = mediaAttachments(evt);
   // A media-only agent reply (voice note, image, …) has no `content`, so gate on either text or media —
   // the old text-only guard dropped every attachment silently (#607).
-  if (!conversationId || (!text && !media)) return;
+  if (!conversationId || (!text && media.length === 0)) return;
   const target = await deps.store.getByConversation(conversationId, sessionId);
   if (!target) {
     deps.log(`no WA mapping for conversation ${conversationId}`);
@@ -88,18 +88,41 @@ async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: Cha
     // reply if Chatwoot re-announces an already-relayed message under a NEW delivery id during the upgrade
     // window — visible and self-correcting, unlike silently dropping a genuine agent reply.
     if (id && (await deps.store.hasSeen('cw', id, target.sessionId))) return;
-    let res: unknown;
-    if (media) {
+    // Echo guard for the own-send relay (#615): every message this reply sends comes back as a fromMe
+    // message:sent event, and handleSent skips it only if its WA id was marked. Claimed as each send
+    // RETURNS, not after the whole reply: a multi-attachment reply that throws part-way leaves the
+    // sends that did land already guarded, so the retry costs the contact a duplicate (this module's
+    // documented duplicate-over-loss posture) without ALSO mirroring those first copies back into
+    // Chatwoot. Scoped by target.sessionId, the WA session that will emit them, never the delivery
+    // scope; relayMessage marks the own-send mirror under the same value, so both halves agree.
+    // Inside the conversation lock, so a mark always lands before message:sent can take that lock.
+    let unclaimed = 0;
+    const claimEcho = async (res: unknown): Promise<void> => {
+      const sentId = (res as { messageId?: string } | null)?.messageId;
+      if (sentId) await deps.store.markSeen('wa', sentId, target.sessionId);
+      else unclaimed++;
+    };
+    if (media.length > 0) {
       // No replyTo on a media envelope: the engine media path cannot quote, and the host REJECTS an
       // envelope carrying both — which would dead-letter the whole reply for a quote decoration. A
       // quoted attachment therefore goes out unquoted, with its caption intact.
-      res = await deps.conversations.send({
-        sessionId: target.sessionId,
-        chatId: target.chatId,
-        type: media.type,
-        mediaUrl: media.url,
-        text: text || undefined,
-      });
+      //
+      // Sequential, inside the conversation lock already held: each is a separate WhatsApp message and
+      // the agent's order is the order they should arrive in. The caption rides the FIRST only, so a
+      // three-image reply does not repeat the agent's text three times. A failure part-way propagates
+      // before the 'cw' marker is written, so the whole reply retries; that is the module's documented
+      // duplicate-over-loss posture (see the marker note above), not an oversight.
+      for (const [index, part] of media.entries()) {
+        await claimEcho(
+          await deps.conversations.send({
+            sessionId: target.sessionId,
+            chatId: target.chatId,
+            type: part.type,
+            mediaUrl: part.url,
+            text: index === 0 ? text || undefined : undefined,
+          }),
+        );
+      }
     } else {
       const env = { sessionId: target.sessionId, chatId: target.chatId, type: 'text' as const, text };
       // An agent "Reply to" carries the quoted message's source_id — a WA message id for everything this
@@ -109,43 +132,43 @@ async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: Cha
       // the retry budget into the dead-letter queue. The re-send matches how a failed send is already
       // handled here — mark-after-success, so a duplicate is possible but a lost agent reply is not.
       const replyTo = evt.content_attributes?.in_reply_to_external_id;
-      res = replyTo
-        ? await deps.conversations.send({ ...env, replyTo }).catch(err => {
-            deps.log('quote target unresolvable; sending the reply unquoted', err);
-            return deps.conversations.send(env);
-          })
-        : await deps.conversations.send(env);
+      await claimEcho(
+        replyTo
+          ? await deps.conversations.send({ ...env, replyTo }).catch(err => {
+              deps.log('quote target unresolvable; sending the reply unquoted', err);
+              return deps.conversations.send(env);
+            })
+          : await deps.conversations.send(env),
+      );
     }
     if (id) await deps.store.markSeen('cw', id, target.sessionId);
-    // Echo guard for the own-send relay (#615): the message we just sent to WhatsApp will come back as a
-    // fromMe message:sent event. Mark its WA id seen — scoped by the WA session that will emit it
-    // (target.sessionId, NOT the delivery scope) — so handleSent recognizes it as ours and skips it. Held
-    // inside this lock, so the mark lands before message:sent can acquire the same per-chat lock.
-    const sentId = (res as { messageId?: string } | null)?.messageId;
-    if (sentId) {
-      await deps.store.markSeen('wa', sentId, target.sessionId);
-    } else {
+    if (unclaimed > 0) {
       // No id to key the echo guard on (an engine that returns an empty messageId — e.g. Baileys' `?? ''`).
-      // The reply's own message:sent could then be re-relayed as a duplicate; surface it rather than fail
+      // Those sends' own message:sent could be re-relayed as a duplicate; surface it rather than fail
       // silently open.
-      deps.log('conversation.send returned no message id; own-send echo guard skipped for this reply');
+      deps.log(`conversation.send returned no message id for ${unclaimed} send(s); own-send echo guard skipped for those`);
     }
     });
   });
 }
 
-// First attachment with a downloadable URL wins (a WhatsApp message carries one media). The host fetches
-// the URL by its SSRF-guarded media-by-URL path, so no bytes cross the sandbox. Audio relays as a PTT
-// voice note — the common agent action is recording voice; a plain audio file is a rare exception.
-function firstMediaAttachment(
+// EVERY attachment with a downloadable URL, in order. One WhatsApp message carries one media, so an
+// agent reply holding several becomes several sends; taking only the first dropped the rest silently,
+// and the 'cw' marker written after that one send made the loss permanent on re-delivery. Chatwoot
+// models attachments as a has_many on a single message_created, so the multi shape is ordinary, not
+// exotic. The host fetches each URL by its SSRF-guarded media-by-URL path, so no bytes cross the
+// sandbox. Audio relays as a PTT voice note: the common agent action is recording voice, and a plain
+// audio file is the rare exception.
+function mediaAttachments(
   evt: ChatwootWebhookMessage,
-): { type: 'image' | 'video' | 'voice' | 'file'; url: string } | undefined {
+): Array<{ type: 'image' | 'video' | 'voice' | 'file'; url: string }> {
+  const out: Array<{ type: 'image' | 'video' | 'voice' | 'file'; url: string }> = [];
   for (const a of evt.attachments ?? []) {
     if (!a?.data_url) continue;
     const type = a.file_type === 'image' ? 'image' : a.file_type === 'video' ? 'video' : a.file_type === 'audio' ? 'voice' : 'file';
-    return { type, url: a.data_url };
+    out.push({ type, url: a.data_url });
   }
-  return undefined;
+  return out;
 }
 
 // Human handover is driven by the assignee_id transition, NOT by status (status:'open' is not a human

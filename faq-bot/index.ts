@@ -1,6 +1,7 @@
 import type { IPlugin, PluginContext, HookContext, IncomingMessage } from '../types/openwa';
 import { parseRules, matchRule, CompiledRule } from './rules.ts';
 import { allowCooldown } from './cooldown.ts';
+import { isBroadcastJid } from './jid.ts';
 
 export interface FaqConfig {
   fallbackReply: string;
@@ -107,6 +108,13 @@ export default class FaqBot implements IPlugin {
     }
 
     if (m.isGroup && !cfg.config.respondInGroups) return false;
+    // `isGroup` is a boolean over a five-way discriminator, so it cannot see a WhatsApp Channel: a
+    // `@newsletter` post arrives flagged as a non-group chat and reads exactly like a 1:1 message.
+    // Nothing filters it upstream (the host diverts only status broadcasts), so a channel this account
+    // merely FOLLOWS drew a reply into a chat it can never post to, burning the per-chat slot and
+    // logging a send failure per post. Broadcast-list ids are the same shape. Matched on the JID rather
+    // than `msg.kind`, which the host only stamps from 0.10.8, below every floor in this catalogue.
+    if (isBroadcastJid(m.chatId)) return false;
 
     const sessionId = hook.sessionId;
     const rule = matchRule(cfg.rules, m.body);

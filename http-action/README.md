@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `http-action` |
-| **Version** | 0.2.7 |
-| **Released** | 2026-08-25 |
+| **Version** | 0.2.8 |
+| **Released** | 2026-09-05 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.0 (tested 0.23.3) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.23.4) |
 | **Keywords** | api, rest, automation, connector, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/http-action](https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action) |
 <!-- END DETAILS -->
@@ -135,8 +135,10 @@ allowlist via `allowConfigHosts`.
   values. Response bodies are capped at 256 KiB.
 - **Reliability.** Storage-backed idempotency (fail-closed check plus a marker written only after a
   successful reply) so a redelivered message id never double-fires and a transient send failure retries;
-  in-memory per-chat cooldown (fail-open). The handler returns `{ continue: true }` immediately and
-  floats the fetch/render/send, so a slow upstream never stalls the inbound hook.
+  in-memory per-chat cooldown (fail-open). The handler returns synchronously and floats the
+  fetch/render/send, so a slow upstream never stalls the inbound hook. It returns `{ continue: false }`
+  for a message that matched an action, claiming it so a keyword bot or a flow does not answer the same
+  command, and `{ continue: true }` for everything else.
 - **Secrets.** `authToken` is marked `secret` in `configSchema`, so the dashboard masks it and preserves
   the stored value on save. Per-action `request.headers` values are **not** masked: the host redacts
   config per schema field, and every action lives inside the single `actions` textarea, so marking that

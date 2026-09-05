@@ -8,6 +8,22 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-09-05
+
+### Fixed
+
+- **A WhatsApp Channel or broadcast-list post no longer draws a reply.** A `@newsletter` post arrives
+  flagged as a non-group chat, so the only chat-scope gate let it through and a channel this account
+  merely follows was answered into a chat it can never post to: a send that always fails, once per
+  post, after taking that chat's cooldown slot.
+- The 0.1.4 note describing the failed-send cooldown as "rewound rather than released" is rewritten.
+  It contradicted both the shipped code and the entry directly below it, which records that the
+  backoff is stored as an absolute deadline.
+
+### Changed
+
+- **Verified against OpenWA v0.23.4** (testedOpenWAVersion 0.23.3 -> 0.23.4).
+
 ## [0.2.6] - 2026-08-25
 
 ### Fixed
@@ -105,10 +121,12 @@ is updated to match.
 - **A failed away reply silenced the chat for the whole cooldown.** The per-chat slot is taken *before*
   the send, so a reply that then failed left nothing delivered and nothing retryable until the window
   expired. That path is easier to hit on OpenWA 0.12, where another plugin vetoing `message:sending`
-  surfaces here as a thrown error indistinguishable from a transport failure. The slot is now rewound rather than released — clearing it outright removed the only throttle, so a
-  permanently blocked send turned every inbound message into another attempt. The next try lands a fixed
-  backoff from the failure,
-  when the reply fails, so the contact's next message tries again.
+  surfaces here as a thrown error indistinguishable from a transport failure. The slot is no longer
+  held for the full window when the send fails: clearing it outright would remove the only throttle, so
+  a permanently blocked send would turn every inbound message into another attempt. Instead the next
+  try lands a fixed backoff after the failure, so the contact's next message retries without opening
+  the floodgate. (See the following entry: that backoff is stored as an absolute deadline, not as a
+  rewound cooldown timestamp.)
 - **The failure backoff is an absolute deadline, not a rewound cooldown timestamp.** Expressing it as a
   rewind only makes sense against the cooldown value it was computed from, and config is re-read per
   message — so an operator lowering `cooldownSec` in the dashboard turned the stored value into "long

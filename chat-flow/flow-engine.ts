@@ -14,11 +14,32 @@ export interface SessionFlow {
 export interface UserState {
   path: string[];
   lastActive: number;
+  /**
+   * CONSECUTIVE unmatched inputs at the current node, reset by any valid choice. Absent on a state
+   * written before this field existed, which reads as 0.
+   *
+   * A miss refreshes `lastActive` like any other turn, because the bot has just re-prompted with the
+   * menu and must honour the answer to it. What stops that from keeping a flow alive forever is this
+   * counter, not a frozen clock: see MAX_MISSES.
+   */
+  misses?: number;
 }
 
 export class FlowEngine {
   private static readonly TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes state expiration
   private static readonly MAX_REPROCESS = 1; // bound the invalid-path reset (no unbounded recursion)
+  /**
+   * Consecutive misses before the flow is dropped, silently, and the contact has to re-trigger.
+   *
+   * Every miss draws an "Invalid option" reply, so without a bound the flow answers a contact who has
+   * stopped following the menu on every message, forever: refreshing `lastActive` on a miss meant the
+   * TTL could never fire for the one contact it exists to release, and against an auto-replying peer
+   * the two bots held each other open indefinitely. Bounding the misses is what closes that, and it
+   * does so without the cure being worse than the disease: freezing the clock instead would expire a
+   * flow between the bot's re-prompt and the contact's correct answer to it, so the bot would ask for
+   * a choice and then ignore it.
+   */
+  private static readonly MAX_MISSES = 3;
   /** Per (session,chat) promise chain serializing the state read→write. Self-evicts when drained. */
   private static readonly locks = new Map<string, Promise<unknown>>();
 
@@ -171,6 +192,7 @@ export class FlowEngine {
       context.logger.debug('[FlowEngine] Input matched option');
       state.path.push(input);
       state.lastActive = Date.now();
+      state.misses = 0; // progress: the miss budget is per stall, not per flow
       // Record the move before the reply goes out, for the same reason as the greeting above. Sending a
       // sub-menu the stored path never moved to means the contact's next answer is matched against the
       // menu they were shown a level up, where the same key usually names a different option.
@@ -190,11 +212,22 @@ export class FlowEngine {
       await context.storage.delete(stateKey);
       return false;
     } else {
+      const misses = (state.misses ?? 0) + 1;
+      if (misses >= FlowEngine.MAX_MISSES) {
+        // Budget spent: end the flow WITHOUT another reply. This is the bound on the runaway, so it
+        // must not itself send, or two bots would still trade one message per flow forever.
+        context.logger.debug('[FlowEngine] Miss budget spent. Ending flow silently.');
+        await context.storage.delete(stateKey);
+        return false;
+      }
       context.logger.debug('[FlowEngine] Input did not match any options. Replying with fallback.');
       const invalidMsg = `Invalid option. Please choose one of the available options:\n\n${currentNode.text}`;
-      await context.messages.reply(sessionId, chatId, messageId, invalidMsg);
+      // Recorded BEFORE the reply, like every other branch here: a reply that goes out against a miss
+      // the store never counted is a miss that never expires the budget.
+      state.misses = misses;
       state.lastActive = Date.now();
       await context.storage.set(stateKey, state);
+      await context.messages.reply(sessionId, chatId, messageId, invalidMsg);
       return true;
     }
   }

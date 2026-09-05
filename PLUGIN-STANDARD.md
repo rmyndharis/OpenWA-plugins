@@ -4,7 +4,7 @@ The conventions every plugin in this repository follows, so the catalog stays co
 management/automation stays easy. Verified against OpenWA's plugin runtime (sandboxed worker model) at
 the same baseline as [`types/openwa.d.ts`](./types/openwa.d.ts) — re-check both together, since this
 document describes host behaviour that has moved repeatedly (per-session config in 0.7, boot re-enable
-and the storage quota in 0.12, the `storage:use` gate after 0.16).
+in 0.10.5, the storage quota and `message:deleted` in 0.11.0, the `storage:use` gate in 0.17.0).
 
 ## Principles
 
@@ -47,7 +47,7 @@ OpenWA-plugins/
   // ── Surfaced by OpenWA ──
   "description": "…",            // rendered in the dashboard card + returned by the API
   "provides": ["feature-tag"],  // rendered as tags in the dashboard card
-  "permissions": [],            // see the five values below — enforced at the capability boundary
+  "permissions": [],            // see the seven values below — enforced at the capability boundary
   "sessions": ["*"],            // capability session scope (static; editing config can't widen it)
   "hooks": ["message:received"],// declared interest
   "configSchema": { … },        // declarative config form (see vocabulary below); mark secrets "secret": true
@@ -253,8 +253,8 @@ correct plugins and were each learned the hard way. Re-verify against OpenWA cor
    resolve to the manifest's, silently. (Top-level only — defaults nested under `properties`/`items`
    are not seeded. A required field with no declared default deliberately stays absent, because that
    needs real operator input; the host never enforces `required` itself.)
-4. **Host boot re-enables every plugin the operator had enabled** (OpenWA ≥ 0.12; earlier hosts really
-   did require a manual re-enable). The runtime `status` is still reset on load, but the operator's
+4. **Host boot re-enables every plugin the operator had enabled** (OpenWA ≥ 0.10.5; earlier hosts
+   really did require a manual re-enable). The runtime `status` is still reset on load, but the operator's
    standing decision is persisted separately and replayed at boot. `ctx.config` and `ctx.storage`
    survive, so dedup/state markers in storage are safe. What this demands of a plugin:
    - **`onEnable` must be idempotent** — it now runs unattended on every restart, not just on an
@@ -332,7 +332,8 @@ ignored; the provider's reply comes from `ingress[].response.ack` (default 202).
 `minOpenWAVersion` is advisory (never enforced by the host). Still bump it when a plugin *requires* a
 newer capability: `canonicalChatId` → 0.8.7, Integration SDK v1 (`sdkVersion: "1"` — a STRING; the
 host's ingress validation runs `sdkVersion.split('.')`, so a JSON number throws at load) → 0.8.x,
-`getChatHistory` → 0.8.5. Keep `testedOpenWAVersion` honest: it is the newest host the plugin was
+`getChatHistory` → 0.8.6 (0.8.5 exposed it in-process, but the sandbox bridge every marketplace
+plugin needs landed in 0.8.6). Keep `testedOpenWAVersion` honest: it is the newest host the plugin was
 actually smoke-tested against.
 
 ## `README.md` — required sections (in order)
@@ -428,7 +429,7 @@ alongside uploads.
 | `npm run catalog` | Regenerate `plugins.json`, the root README catalog table, and every plugin README **Details** block. |
 | `npm run catalog:check` | Same, in-memory; fail if the committed files are out of date, a version↔changelog drift exists, or a manifest gate fails (CI). |
 | `npm run catalog:live` | Fetch every `download` URL in `plugins.json` and verify the bytes against its `#sha256=` pin, catching unpushed tags and stale digests that `catalog:check` cannot see. |
-| `npm test` | Run the full suite (`scripts/run-tests.mjs` auto-discovers every plugin dir by its `manifest.json`, plus `scripts/`) with `node --test` + `tsx`. |
+| `npm test` | Run the full suite (`scripts/run-tests.mjs` walks the whole repository for `*.test.ts` / `*.test.mjs`, so a test file outside a plugin directory is picked up too) with `node --test` + `tsx`. |
 | `npm run test:coverage` | Same, with Node's built-in coverage report. |
 | `npm run typecheck` | `tsc --noEmit` over every `*/**/*.ts` (plugin dirs are not hardcoded). |
 | `node scripts/download-badges.mjs [out-dir]` | Sum per-plugin .zip downloads across all GitHub Releases and write shields.io endpoint JSON files (run by the `download-badges` workflow; also runnable locally to preview the numbers). |

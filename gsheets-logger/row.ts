@@ -24,7 +24,17 @@ type AckPayload = { messageId?: string; status?: string };
 // Cap every cell as the final step so a single long message can't poison the pipeline. Applied after the
 // quote prefix so the guarded prefix is never truncated away.
 const MAX_CELL = 50000;
-const cap = (s: string): string => (s.length > MAX_CELL ? s.slice(0, MAX_CELL) : s);
+// Cutting at a fixed code-unit count can land BETWEEN a surrogate pair, leaving a lone high surrogate
+// as the last character. That is not valid Unicode: it cannot be encoded as UTF-8 (the host encodes
+// the request body), so the cell is corrupted at best and rejected at worst, on exactly the oversized
+// sender-controlled body this cap exists to make safe. Back off one unit instead, the same way
+// http-action truncates its reply.
+const cap = (s: string): string => {
+  if (s.length <= MAX_CELL) return s;
+  const last = s.charCodeAt(MAX_CELL - 1);
+  const cut = last >= 0xd800 && last <= 0xdbff ? MAX_CELL - 1 : MAX_CELL;
+  return s.slice(0, cut);
+};
 
 // Neutralize CSV / spreadsheet formula injection on export/re-import (values are already written
 // with valueInputOption=RAW, so Sheets never evaluates them — this is defense-in-depth for CSV

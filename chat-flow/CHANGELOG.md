@@ -8,6 +8,29 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.1.8] - 2026-09-05
+
+### Fixed
+
+- **An unmatched reply no longer keeps a flow alive forever.** Every miss drew "Invalid option" and
+  refreshed the activity timestamp, so the 15-minute expiry could never fire for the one contact it
+  exists to release: someone who keeps typing past the menu stayed pinned to that reply indefinitely,
+  and against an auto-replying peer the two bots held each other open. Consecutive misses are now
+  bounded: after three the flow is dropped without another reply, and the contact re-triggers. Any
+  valid choice resets the budget, and a miss still refreshes the timestamp, so answering the bot's own
+  re-prompt keeps working.
+- `options` is marked required in `configSchema`, matching `greeting` and what the plugin actually
+  demands. The host does not enforce `required`, so this only drives the dashboard form; it stops an
+  operator saving a config as complete that the plugin then rejects on every message.
+
+- **A WhatsApp Channel or broadcast-list post no longer starts a flow.** A `@newsletter` post arrives
+  flagged as a non-group chat, so with the documented empty trigger every post started a flow: a reply
+  into a chat the account can never post to, and a durable state row per followed channel.
+
+### Changed
+
+- **Verified against OpenWA v0.23.4** (testedOpenWAVersion 0.23.3 -> 0.23.4).
+
 ## [1.1.7] - 2026-08-25
 
 ### Fixed

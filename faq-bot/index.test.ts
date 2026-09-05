@@ -45,7 +45,7 @@ async function runHook(
   await new FaqBot().onEnable(ctx as never);
   return handler!({
     source: 'Engine', sessionId: 's1', timestamp: new Date(),
-    data: { id: 'm1', chatId: 'c@x', body, type, fromMe: false, isGroup: false },
+    data: { id: 'm1', chatId: config.chatId ?? 'c@x', body, type, fromMe: false, isGroup: false },
   });
 }
 
@@ -299,4 +299,23 @@ test('the same repeated text is answered once, but different questions are all a
 
   await fire('jam berapa buka', 'm6');
   assert.equal(sent.length, 4, 'and a different rule is unaffected');
+});
+
+test('a channel or broadcast post never draws an FAQ reply', async () => {
+  // A `@newsletter` post arrives flagged as a non-group chat, so the only chat-scope gate let it
+  // through and a followed channel whose post happened to match a keyword drew a reply into a chat
+  // the account can never post to.
+  const rules = [{ mode: 'contains', pattern: 'promo', reply: 'Here is the promo' }];
+  const replies: string[] = [];
+  for (const chatId of ['120363000000000000@newsletter', '628123-456@broadcast', 'status@broadcast']) {
+    const r = await runHook({ rules, chatId }, 'promo hari ini', (t) => replies.push(t));
+    assert.deepEqual(r, { continue: true }, `${chatId} must not be claimed`);
+  }
+  // assert.equal on the length, not deepEqual against []: node:assert/strict's deepEqual is an
+  // `asserts actual is T` guard, so comparing to a literal [] narrows `replies` to never[] and the
+  // guard-rail push below stops compiling.
+  assert.equal(replies.length, 0, 'nothing may be sent into a channel or broadcast chat');
+  // Guard rail: the same body in a real chat still answers.
+  await runHook({ rules, chatId: '628123456789@c.us' }, 'promo hari ini', (t) => replies.push(t));
+  assert.deepEqual(replies, ['Here is the promo']);
 });

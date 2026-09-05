@@ -1,11 +1,21 @@
 // Vendored OpenWA plugin contract. There is no published @openwa SDK package; keep this in sync
 // with the OpenWA version you target. All imports of this module must be `import type`.
 //
-// Last aligned against OpenWA core v0.23.3 (tag), verified field-by-field against
+// Last aligned against OpenWA core v0.23.4 (tag), verified field-by-field against
 // src/core/plugins/plugin.interfaces.ts, src/core/hooks/hook.interfaces.ts, plugin-net.ts,
 // sandbox/{worker-bootstrap,worker-capability,worker-hooks,worker-webhooks}.ts and
 // src/engine/interfaces/whatsapp-engine.interface.ts. Where this file narrows the host on purpose it
 // says so; where the host is stricter than this file, the comment names the runtime consequence.
+// The 0.23.3 → 0.23.4 diff over src/core/plugins/ and src/core/hooks/ is EMPTY, file for file, so the
+// contract itself did not move; the whole delta lives in the engine interface and reaches a plugin as
+// payload CONTENT. Two items, both recorded below where they belong rather than only here:
+//   1. ChatSummary gained archived/pinned/muted (REQUIRED host-side) and muteExpiration (optional).
+//      They ride out of `engine.getChats` unreshaped. See ChatSummary for why this file keeps all four
+//      optional while the host makes three of them required.
+//   2. A FAILED inbound media download now emits the `omitted` marker on BOTH engines instead of
+//      dropping the `media` field. Nothing in this file changed shape for it, but the cause list on
+//      `IncomingMessage.media.omitted` did, and a plugin that reads a present `media` as "there was
+//      media" now takes that branch for one more reason. See that note.
 // The 0.20.0 → 0.23.3 diff over the four plugin-runtime sources is EMPTY. The engine interface gained
 // only optional trailing parameters (mentions on replyToMessage/editMessage, messageIds on sendSeen),
 // none of them reachable from a plugin: the sandbox capability router is a 19-verb allowlist carrying
@@ -33,7 +43,7 @@
 // and cannot import from core. It has been wrong before: the v0.14.0 alignment silently omitted six
 // host fields, four of which predated it by several minor versions, and every one of them was an
 // unannounced gap rather than a deliberate narrowing. When re-aligning, diff MEMBER BY MEMBER against
-// the six files named above and annotate anything left out, so a future reader can tell an omission
+// the eight files named above and annotate anything left out, so a future reader can tell an omission
 // from a decision.
 //
 // v0.7 surface: `ctx.net.fetch` (host-proxied, SSRF-guarded outbound HTTP — gated by the
@@ -43,7 +53,7 @@
 // select, array/items, object/properties, min/max/pattern — see PluginConfigField) is plain manifest
 // JSON — the plugin still reads `ctx.config` as `Record<string, unknown>` and validates defensively.
 //
-// Host bounds a plugin cannot see from the types (all host-side, re-checked at v0.23.3):
+// Host bounds a plugin cannot see from the types (all host-side, re-checked at v0.23.4):
 //   30 s per lifecycle phase (onLoad/onEnable/onDisable/onUnload) and per capability call, except
 //   the send verbs (ctx.messages.sendText / ctx.messages.reply / ctx.conversations.send) at 120 s;
 //   5 s per hook dispatch (overrun → the host fails OPEN with {continue:true} and drops your result);
@@ -57,7 +67,7 @@ export type HookEvent =
   | 'session:created' | 'session:starting' | 'session:ready' | 'session:qr'
   | 'session:disconnected' | 'session:error' | 'session:deleted'
   | 'message:received' | 'message:sending' | 'message:sent' | 'message:failed' | 'message:ack' | 'message:persisted'
-  // v0.12: emitted when the host deletes a redundant echo row during send reconciliation. The payload
+  // v0.11.0: emitted when the host deletes a redundant echo row during send reconciliation. The payload
   // is `{ sessionId, message }` where `message` is the host's persisted DB row — NOT an IncomingMessage.
   | 'message:deleted'
   | 'webhook:before' | 'webhook:queued' | 'webhook:delivered' | 'webhook:after' | 'webhook:error'
@@ -148,6 +158,28 @@ export interface ChatSummary {
   unreadCount: number;
   timestamp: number;
   lastMessage?: string;
+  /**
+   * Archived / pinned / muted state. Host 0.23.4+ only, and REQUIRED on the host's own ChatSummary.
+   * Deliberately optional here: the catalogue advertises minOpenWAVersion floors down to 0.6.1, and on
+   * every host below 0.23.4 these three are simply absent from the wire payload, so typing them
+   * required would declare `undefined` as `boolean` for most of the supported range.
+   */
+  archived?: boolean;
+  pinned?: boolean;
+  /**
+   * NOT normalized across engines, so do not read it as one verdict. Baileys computes
+   * `muteEndTime > now`, so a lapsed mute reads false. whatsapp-web.js copies the library's own
+   * `Chat.isMuted`, which compares nothing against now, so a lapsed or absent page-side mute record
+   * can still read true.
+   */
+  muted?: boolean;
+  /**
+   * Epoch MILLISECONDS the mute ends, present only when `muted`. `0` means muted INDEFINITELY, not
+   * epoch zero: special-case it before any comparison, or an indefinite mute reads as long expired.
+   * Only whatsapp-web.js ever emits `0`, and only it can report an instant already in the past;
+   * Baileys omits the field unless the instant is still in the future.
+   */
+  muteExpiration?: number;
 }
 
 export interface PluginEngineReadCapability {
@@ -156,7 +188,8 @@ export interface PluginEngineReadCapability {
   getContactById(sessionId: string, contactId: string): Promise<unknown>;
   checkNumberExists(sessionId: string, phone: string): Promise<unknown>;
   getChats(sessionId: string): Promise<unknown>;
-  /** Recent messages for a chat, both directions (v0.8.5+). The host clamps `limit` (max 100). */
+  /** Recent messages for a chat, both directions. The host clamps `limit` (max 100). Available to a
+   *  SANDBOXED plugin from v0.8.6: 0.8.5 added the capability in-process, 0.8.6 bridged it to the worker. */
   getChatHistory(sessionId: string, chatId: string, limit?: number, includeMedia?: boolean): Promise<IncomingMessage[]>;
   /**
    * Canonical (neutral) form of a chat id: resolves a `@lid` privacy id to its stable `<phone>@c.us` when
@@ -524,10 +557,18 @@ export interface IncomingMessage {
     mimetype: string;
     filename?: string;
     data?: string;
-    /** True when the blob was dropped for ANY of: the inbound size cap, a download timeout, or
-     *  download-concurrency saturation. Do NOT tell the user "that file was too large" — it may
-     *  simply have failed to download and be worth retrying. */
+    /** True when the blob was dropped for ANY of: the inbound size cap (declared-size pre-gate or the
+     *  streaming abort), a download timeout (which is also how download-concurrency saturation
+     *  surfaces, since the limiter queue is unbounded and never rejects), a host-wide disabled
+     *  download (MEDIA_DOWNLOAD_ENABLED=false), a FAILED download (host 0.23.4+ on both engines;
+     *  before that a failure dropped the whole `media` field instead), the own-send echo on
+     *  `message:sent` (the adapter skips the download outright, since the API caller already holds the
+     *  bytes), and on getChatHistory a spent CHAT_HISTORY_MEDIA_BUDGET_BYTES. Do NOT tell the user "that file was too large": size is one
+     *  cause out of five, and the others are worth a retry. */
     omitted?: boolean;
+    /** Byte size, but NOT a trustworthy one when `omitted` is true: it is the SENDER-DECLARED size on
+     *  the pre-gate and failed-download exits (`0` when the sender declared nothing), and the CAP
+     *  itself on the streaming abort, which is a bound rather than the real size. */
     sizeBytes?: number;
   };
   // The message this one replies to (swipe-to-reply / quote), when present. `id` is the quoted WhatsApp

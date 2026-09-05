@@ -50,3 +50,12 @@ test('a group session key embeds the participant', () => {
   assert.ok(k.includes('62811@c.us'), `expected the participant in the key, got ${k}`);
   assert.ok(k.includes('g@g.us'), 'and the chat');
 });
+
+test('a channel or broadcast post is out of scope', () => {
+  // A followed channel would otherwise start a real Typebot flow (an outbound call per post) and take
+  // a durable session row per channel, for a chat the account can never answer in.
+  for (const chatId of ['120363000000000000@newsletter', '628123-456@broadcast', 'status@broadcast']) {
+    assert.equal(inScope(base({ chatId }), 'Engine', true), false, chatId);
+  }
+  assert.equal(inScope(base({ chatId: '628123456789@c.us' }), 'Engine', true), true);
+});

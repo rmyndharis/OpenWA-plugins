@@ -40,3 +40,24 @@ test('outbound: strict private — relay only outgoing + private===false in the 
   assert.equal(shouldRelayOutbound({ ...ok, private: undefined }, 7), false); // absent → drop (fail-closed)
   assert.equal(shouldRelayOutbound({ ...ok, inbox: { id: 9 } }, 7), false); // foreign inbox
 });
+
+test('channel and broadcast chats are never relayed, in either direction', () => {
+  // `isGroup` is a boolean over a five-way discriminator, so a WhatsApp Channel post arrives with
+  // isGroup false and read exactly like a customer writing in: one Chatwoot contact and one open
+  // conversation per followed channel, for an agent to triage and close by hand, and any reply
+  // addressed to a chat this account cannot post to. The host filters only status broadcasts.
+  for (const chatId of [
+    '120363000000000000@newsletter',
+    '120363000000000000@NEWSLETTER',
+    '628123456789-1234567890@broadcast',
+    'status@broadcast',
+  ]) {
+    assert.equal(shouldRelayInbound({ ...base, chatId }, 'Engine', true), false, `inbound ${chatId}`);
+    assert.equal(shouldRelayOwn({ ...base, chatId, fromMe: true }, 'Engine', true), false, `own ${chatId}`);
+  }
+  // Ordinary 1:1, group and @lid chats are untouched.
+  for (const chatId of ['628123456789@c.us', '628123456789@s.whatsapp.net', '1234-5678@g.us', '99887766@lid']) {
+    assert.equal(shouldRelayInbound({ ...base, chatId }, 'Engine', true), true, `inbound ${chatId}`);
+    assert.equal(shouldRelayOwn({ ...base, chatId, fromMe: true }, 'Engine', true), true, `own ${chatId}`);
+  }
+});

@@ -84,6 +84,28 @@ test('a poll or a contact card never triggers an action', async () => {
     'a tapped business button is a legitimate way to invoke an action');
 });
 
+test('a channel or broadcast post never triggers an action', async () => {
+  // A WhatsApp Channel post arrives with isGroup false, so the only chat-scope gate this plugin had
+  // read it as an ordinary 1:1 chat. This plugin performs real writes against the operator's backend,
+  // so a followed channel whose post happens to start with a configured prefix fired an irreversible
+  // request on behalf of a sender the operator has no relationship with.
+  let handler: HookHandler | undefined;
+  const ctx = makeCtx({ registerHook: (_e, h) => { handler = h; } });
+  await new HttpAction().onEnable(ctx as never);
+  const fire = (chatId: string) =>
+    handler!({
+      event: 'message:received', source: 'Engine', sessionId: 's1', timestamp: new Date(),
+      data: { ...msg('/stock ABC', 'm1', 'text'), chatId, from: chatId },
+    });
+
+  for (const chatId of ['120363000000000000@newsletter', '628123-456@broadcast', 'status@broadcast']) {
+    assert.equal((await fire(chatId)).continue, true, `${chatId} must not be claimed or acted on`);
+  }
+  // Guard rail: the same body in a real chat still triggers, so the test above proves the gate and
+  // not a broken fixture.
+  assert.equal((await fire('628123456789@c.us')).continue, false);
+});
+
 test('a whitespace-only body is ignored', async () => {
   assert.equal((await runHook('   ')).continue, true);
 });

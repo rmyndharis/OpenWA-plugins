@@ -75,3 +75,43 @@ test('a success resets the consecutive-failure counter', async () => {
   await c.translate('b', 'en', 'es');
   assert.equal(c.isHealthy(), true);
 });
+
+test('a host fetch refusal is rethrown without the URL credentials it quotes', async () => {
+  // The host names the full request URL when it refuses a fetch, and a credentialed
+  // `libretranslateUrl` is dropped from the config-derived allowlist, so that refusal fires on EVERY
+  // message. The coordinator logs the rejection reason verbatim, so an unredacted rethrow wrote the
+  // operator's password into the host log once per message.
+  const { net } = fakeNet([
+    async () => {
+      throw new Error(
+        'Plugin group-translate may not fetch https://admin:s3cr3t@lt.example.com/translate ' +
+          '- add its host to net.allow or net.allowConfigHosts',
+      );
+    },
+  ]);
+  const client = new LibreTranslateClient({ url: 'https://admin:s3cr3t@lt.example.com', timeoutMs: 1000, net });
+  const err = await client.translate('hi', 'en', 'es').then(
+    () => null,
+    (e: unknown) => e as Error,
+  );
+  assert.ok(err, 'the call must still fail');
+  assert.ok(!/s3cr3t/.test(err.message), `password leaked: ${err.message}`);
+  assert.ok(!/admin:/.test(err.message), `userinfo leaked: ${err.message}`);
+  // Still diagnosable: the host, the reason and the remedy survive.
+  assert.match(err.message, /lt\.example\.com/);
+  assert.match(err.message, /net\.allow/);
+});
+
+test('a password containing @ is redacted whole, not just up to its first @', async () => {
+  // `@` in a password is common and legal. Stopping the match at the first one republished the tail:
+  // `admin:p@ssw0rd@host` came out as `***:***@ssw0rd@host`, still carrying most of the secret.
+  const { net } = fakeNet([
+    async () => {
+      throw new Error('Plugin group-translate may not fetch https://admin:p@ssw0rd@lt.example.com/translate - add its host');
+    },
+  ]);
+  const client = new LibreTranslateClient({ url: 'https://admin:p@ssw0rd@lt.example.com', timeoutMs: 1000, net });
+  const err = (await client.translate('hi', 'en', 'es').then(() => null, (e: unknown) => e as Error))!;
+  assert.ok(!/ssw0rd/.test(err.message), `password tail leaked: ${err.message}`);
+  assert.match(err.message, /\/\/\*\*\*:\*\*\*@lt\.example\.com/);
+});

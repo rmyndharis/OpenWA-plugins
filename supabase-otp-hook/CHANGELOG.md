@@ -7,6 +7,22 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-09-05
+
+### Fixed
+
+- **An unscoped ingress instance no longer sends every OTP to a session that cannot exist.** The host
+  stores the wildcard scope verbatim and hands it over as the delivery's session id; it was used as a
+  literal session id, which also skipped `fallbackSessionId`, the setting configured for exactly this
+  case. A wildcard scope now falls through to the fallback, and with no fallback nothing is sent.
+- **An empty `messageTemplate` is refused when the config is saved, not by every failed send.** The
+  default only applied to an absent value, so clearing the field in the dashboard composed an empty
+  message, which the host refuses, dead-lettering every OTP with nothing naming the cause.
+
+### Changed
+
+- **Verified against OpenWA v0.23.4** (testedOpenWAVersion 0.23.3 -> 0.23.4).
+
 ## [0.3.5] - 2026-08-25
 
 ### Fixed

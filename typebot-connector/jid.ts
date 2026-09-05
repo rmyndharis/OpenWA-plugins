@@ -19,3 +19,17 @@ export function phoneFromJid(jid: string): string {
   const user = jid.slice(0, at).split(':')[0];
   return /^\d+$/.test(user) ? user : '';
 }
+
+// Chat ids that are NOT a conversation with a person or a group: `@newsletter` is a WhatsApp Channel
+// (a broadcast feed this account follows) and `@broadcast` covers broadcast lists and `status@broadcast`.
+// A denylist, unlike USER_JID_DOMAINS above, and deliberately so: the question there is "may these
+// digits be published as a phone number", where an unknown domain must fail closed, while the question
+// here is "should this plugin act at all", where an unknown domain should keep behaving as it does
+// today rather than silently going quiet on a future WhatsApp id.
+const BROADCAST_JID_DOMAINS = new Set(['newsletter', 'broadcast']);
+
+/** True for a channel / broadcast-list / status chat id, which no responder should act on. */
+export function isBroadcastJid(chatId: string): boolean {
+  const at = chatId.lastIndexOf('@');
+  return at !== -1 && BROADCAST_JID_DOMAINS.has(chatId.slice(at + 1).toLowerCase());
+}

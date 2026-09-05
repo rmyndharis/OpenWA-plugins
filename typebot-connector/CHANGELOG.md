@@ -6,6 +6,24 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+## [0.2.8] - 2026-09-05
+
+### Fixed
+
+- **An attachment that could not be read is no longer reported to the contact as too large.** The
+  omitted marker carries no reason and size is one of five causes; OpenWA 0.23.4 adds a failed
+  download on both engines, which is the retryable one, so most contacts were told to do the one
+  thing that cannot help. The prompt now invites a retry without naming a cause.
+- **A WhatsApp Channel or broadcast-list post no longer starts a flow.** A `@newsletter` post arrives
+  flagged as a non-group chat, so a followed channel called the operator's Typebot on every post and
+  took a durable session row per channel, for a chat the account can never answer in.
+- The README no longer says a plugin cannot ask for a Baileys link preview; the send envelope has
+  carried `linkPreview` since host 0.14.1. This connector still leaves it unset.
+
+### Changed
+
+- **Verified against OpenWA v0.23.4** (testedOpenWAVersion 0.23.3 -> 0.23.4).
+
 ## [0.2.7] - 2026-08-25
 
 ### Fixed

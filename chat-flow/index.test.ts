@@ -168,3 +168,46 @@ test('a contact card or a poll never reaches the flow engine, but a tapped butto
   assert.ok(sent.length > 0, 'a tapped button still drives the flow');
   await plugin.onDisable();
 });
+
+test('a channel or broadcast post never starts a flow', async () => {
+  // A `@newsletter` post arrives flagged as a non-group chat, so the only chat-scope gate let it
+  // through. With the documented empty trigger every post started a flow, replying into a chat the
+  // account can never post to and taking a durable state row per followed channel.
+  const replies: string[] = [];
+  const stored = new Map<string, unknown>();
+  let handler: ((hook: unknown) => Promise<{ continue: boolean }>) | undefined;
+  const ctx = {
+    ...makeCtx({
+      config: { trigger: '', greeting: 'menu', options: [{ key: '1', text: 'A' }] },
+      registerHook: (_e, h) => { handler = h as (hook: unknown) => Promise<{ continue: boolean }>; },
+    }),
+    storage: {
+      get: async (k: string) => (stored.has(k) ? stored.get(k) : null),
+      set: async (k: string, v: unknown) => void stored.set(k, v),
+      delete: async (k: string) => void stored.delete(k),
+      list: async () => [...stored.keys()],
+    },
+    messages: {
+      reply: async (_s: string, _c: string, _q: string, text: string) => { replies.push(text); return { messageId: 'x', timestamp: 0 }; },
+      sendText: async () => ({ messageId: 'x', timestamp: 0 }),
+    },
+  };
+  const { default: ChatFlow } = await import('./index.ts');
+  await new ChatFlow().onEnable(ctx as never);
+
+  const fire = (chatId: string) =>
+    handler!({
+      source: 'Engine', sessionId: 's1', timestamp: new Date(),
+      data: { id: `m-${chatId}`, chatId, from: chatId, body: 'anything', type: 'text', fromMe: false, isGroup: false },
+    });
+
+  for (const chatId of ['120363000000000000@newsletter', '628123-456@broadcast', 'status@broadcast']) {
+    assert.deepEqual(await fire(chatId), { continue: true }, `${chatId} must not be claimed`);
+  }
+  assert.equal(replies.length, 0, 'nothing may be sent into a channel or broadcast chat');
+  assert.equal(stored.size, 0, 'and no flow state may be stored for one');
+
+  // Guard rail: a real chat under the same config still starts the flow.
+  await fire('628123456789@c.us');
+  assert.deepEqual(replies, ['menu']);
+});

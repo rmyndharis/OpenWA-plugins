@@ -88,3 +88,22 @@ test('drain: processes multiple entries independently (one succeeds, one fails)'
   const ids = (await d.store.listRetries()).map(e => e.msg.id);
   assert.deepEqual(ids, ['bad']); // 'ok' relayed + removed; 'bad' remains for retry
 });
+
+test('drain: a channel entry queued by an earlier version is dropped, never relayed', async () => {
+  // The drain calls relayInbound directly, so it does not pass through shouldRelayInbound. Live
+  // inbound now refuses channel chats before enqueueing, but an entry an earlier version queued is
+  // still here, and relaying it would mint the Chatwoot contact and conversation the exclusion exists
+  // to prevent. It must also be deleted, not skipped: it can never become relayable, and skipping
+  // parks it forever without ever dead-lettering.
+  const d = deps();
+  await d.store.enqueueRetry({ sessionId: 'sess', chatId: '120363000000000000@newsletter', msg: msg('m1'), enqueuedAt: 1 }, 500);
+  await d.store.enqueueRetry({ sessionId: 'sess', chatId: '628111@c.us', msg: msg('m2'), enqueuedAt: 1 }, 500);
+
+  const calls: string[] = [];
+  await drainRetries(d, async (s, c, m) => void calls.push(`${s}:${c}:${m.id}`), 5);
+  assert.deepEqual(calls, ['sess:628111@c.us:m2'], 'only the real chat is relayed');
+
+  // And the channel entry is gone, so it cannot come back on the next tick.
+  const left = await d.store.listRetryKeys();
+  assert.equal(left.length, 0, `the queue must be empty, got ${JSON.stringify(left)}`);
+});

@@ -136,3 +136,33 @@ test('healthCheck reports a dropped OTP that reaches no retry and no dead-letter
   await handler!(req);
   assert.equal((await plugin.healthCheck()).healthy, true, 'a later success clears the last error');
 });
+
+test('a config cleared after enable turns the plugin unhealthy instead of failing silently', async () => {
+  // The plugin declares no onConfigChange and the host pushes config fire-and-forget, so clearing a
+  // required field saves cleanly and only breaks at the next delivery. Letting that throw escape would
+  // dead-letter every OTP while healthCheck still reported green, which is exactly the invisible-loss
+  // state this plugin's health surface was added to prevent.
+  const plugin = new SupabaseSmsHook();
+  let handler: ((req: unknown) => Promise<unknown>) | undefined;
+  const config: Record<string, unknown> = { appName: 'Acme' };
+  const sent: unknown[] = [];
+  const ctx = {
+    config,
+    logger: { log: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+    messages: { sendText: async (...a: unknown[]) => { sent.push(a); return { messageId: 'm', timestamp: 0 }; } },
+    registerWebhook: (_r: string, h: (req: unknown) => Promise<unknown>) => { handler = h; },
+  };
+  await plugin.onEnable(ctx as never);
+  assert.deepEqual(await plugin.healthCheck(), { healthy: true });
+
+  config.messageTemplate = '   '; // operator clears the field in the dashboard
+  await handler!({
+    body: JSON.stringify({ user: { phone: '+15551234567' }, sms: { otp: '123456' } }),
+    sessionId: 'sess-1', instanceId: 'i', deliveryId: 'd', headers: {}, query: {}, rawBody: '', method: 'POST', verified: true,
+  });
+
+  assert.deepEqual(sent, [], 'nothing is sent with an unusable template');
+  const health = await plugin.healthCheck();
+  assert.equal(health.healthy, false, 'the operator must see it');
+  assert.match(String(health.message), /messageTemplate/);
+});

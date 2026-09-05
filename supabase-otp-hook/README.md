@@ -15,13 +15,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `supabase-otp-hook` |
-| **Version** | 0.3.5 |
-| **Released** | 2026-08-25 |
+| **Version** | 0.3.6 |
+| **Released** | 2026-09-05 |
 | **Status** | beta |
 | **Author** | maplerichie |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.16 (tested 0.23.3) |
+| **Requires OpenWA** | ≥ 0.8.16 (tested 0.23.4) |
 | **Keywords** | supabase, auth, otp, sms, whatsapp, verification, standard-webhooks, openwa |
 | **Repository** | [OpenWA-plugins/supabase-otp-hook](https://github.com/rmyndharis/OpenWA-plugins/tree/main/supabase-otp-hook) |
 <!-- END DETAILS -->
@@ -94,7 +94,7 @@ to the mint call.
   failure. Supabase is still never told. Prefer Option A wherever the sending session is known.
 - **Option C — misconfiguration.** Both blank → the handler drops the delivery (no session to send from).
 
-> The plugin's **Sessions** tab controls *activity*, not *which session sends*. Sending session = `sessionScope` or `fallbackSessionId`, in that order.
+> The plugin's **Sessions** tab controls *activity*, not *which session sends*. Sending session = `sessionScope` or `fallbackSessionId`, in that order. A `sessionScope` of `*` is the host's wildcard, not a session id, so it falls through to `fallbackSessionId` like a blank one.
 
 ```bash
 curl -X POST "$OPENWA/api/integration/plugins/supabase-otp-hook/instances" \
@@ -147,7 +147,7 @@ curl -X POST "$OPENWA/api/plugins/supabase-otp-hook/enable" \
 | --- | --- | --- | --- |
 | `appName` | string | yes | Inserted into the message template's `{appName}` placeholder. |
 | `messageTemplate` | textarea | no (default `{appName} \| Your verification code is {otp}`) | WhatsApp message body. `{appName}` and `{otp}` are replaced. |
-| `fallbackSessionId` | string | yes if `sessionScope` blank | Sending session when the instance isn't bound. Ignored when `sessionScope` is set. |
+| `fallbackSessionId` | string | yes unless `sessionScope` names one session | Sending session when the instance is not bound to one. Used whenever `sessionScope` is blank **or** the wildcard `*`; ignored only when it names a real session. |
 | `debug` | boolean | no (default `false`) | Log inbound deliveries (resolved session/chatId), sends, and send failures. |
 
 The Supabase webhook secret is set as the **instance `secret`** (at mint time or via

@@ -50,7 +50,15 @@ interface SupabaseSmsPayload {
 export function readConfig(raw: Record<string, unknown>): SupabaseSmsConfig {
   const appName = String(raw.appName ?? '').trim();
   if (!appName) throw new Error('supabase-otp-hook: appName is required');
-  const messageTemplate = String(raw.messageTemplate ?? '{appName} | Your verification code is {otp}');
+  // `?? default` only covers null/undefined, and an operator who CLEARS the field in the dashboard
+  // stores '', which is not nullish. That composed to an empty message, and the host's capability
+  // router refuses a zero-length text, so every OTP failed the send and dead-lettered: a config typo
+  // that silently stopped all deliveries. Fail here instead, where the operator is looking.
+  const rawTemplate = raw.messageTemplate ?? '{appName} | Your verification code is {otp}';
+  const messageTemplate = String(rawTemplate);
+  if (!messageTemplate.trim()) {
+    throw new Error('supabase-otp-hook: messageTemplate must not be empty (it needs at least {otp})');
+  }
   const fallbackSessionId = raw.fallbackSessionId ? String(raw.fallbackSessionId) : undefined;
   const debug = raw.debug === true || raw.debug === 'true';
   return { appName, messageTemplate, fallbackSessionId, debug };
@@ -110,9 +118,21 @@ export async function handleSendSms(deps: HandlerDeps, req: WebhookRequest): Pro
     return;
   }
 
-  const sessionId = req.sessionId ?? cfg.fallbackSessionId;
+  // '*' is the host's WILDCARD scope, not a session id: an ingress instance left unscoped stores it
+  // verbatim and hands it over as `req.sessionId` (the host's own preflight special-cases it as
+  // "no single session to probe"). Treating it as an id sent every OTP to a session that cannot
+  // exist, and because `??` only falls through on nullish, it also skipped `fallbackSessionId`, which
+  // is the setting an operator configures for exactly this case.
+  const scoped = req.sessionId && req.sessionId !== '*' ? req.sessionId : undefined;
+  const sessionId = scoped ?? cfg.fallbackSessionId;
   if (!sessionId) {
-    deps.log('supabase-otp-hook: no session to send from');
+    const reason = 'no session to send from: the instance has no session scope (or a wildcard one) and fallbackSessionId is unset';
+    deps.log(`supabase-otp-hook: ${reason}`);
+    // Recorded on the health surface, not just the log. Returning here drops the OTP, and healthCheck
+    // is the only place the dashboard renders that, so staying silent would leave a plugin reporting
+    // healthy while losing 100% of deliveries. Deliberately NOT thrown: a retry cannot fix operator
+    // config, and dead-lettering every OTP would bury the real signal under a growing queue.
+    deps.onSendResult?.(reason);
     return;
   }
 

@@ -52,7 +52,8 @@ export function parseConfig(raw: Record<string, unknown>): { config: LoggerConfi
   // but sub-second interval (e.g. 0.001) is likewise a hot-loop, so floor it to 1s. The ceiling is the
   // same hot-loop from the other end: setInterval takes a 32-bit millisecond delay, so an interval past
   // 2_147_483s overflows, warns, and silently fires at ~1ms instead. The host never validates
-  // configSchema bounds, so the manifest's min/max are advisory and both ends are the plugin's job.
+  // configSchema bounds at all, and this manifest declares none on either field, so both ends are
+  // entirely the plugin's job.
   const flushIntervalSec = Number(raw.flushIntervalSec ?? 5);
   const flushBatchSize = Number(raw.flushBatchSize ?? 20);
   return {
@@ -102,6 +103,18 @@ export function capBuffer(buffer: string[][], maxRows: number, maxChars: number)
   return before - buffer.length;
 }
 
+// Identity of the delivery destination: the spreadsheet, and the credentials that reach it.
+//
+// `sheetTab` is deliberately excluded, because a tab rename is the same spreadsheet under the same
+// service account and rows captured before it still belong there. The credentials are compared by
+// their PARSED identity (account + key), not by the raw JSON text: an operator who re-pastes the same
+// key reformatted, or with different whitespace or key order, has not rotated anything, and treating
+// that as a new destination would park the backlog exactly as the bug this guard fixes did. The NUL
+// join keeps two different splits of the same characters from colliding.
+function targetOf(config: LoggerConfig, sa: ServiceAccount): string {
+  return [config.spreadsheetId, sa.client_email, sa.private_key].join('\u0000');
+}
+
 export default class GSheetsLogger implements IPlugin {
   private buffer: string[][] = [];
   private client: SheetsClient | null = null;
@@ -112,6 +125,10 @@ export default class GSheetsLogger implements IPlugin {
   // Last flush failure, surfaced on healthCheck. Green while every append fails is the one state an
   // operator must not see: the rows are piling up and nothing says so.
   private lastFlushError: string | null = null;
+  // The destination the buffered rows were captured for: spreadsheet + credentials, nothing else. Only
+  // a change to THIS may park the buffer (see onConfigChange). A tab rename is the same spreadsheet
+  // under the same credentials, so it must not.
+  private target = '';
 
   async onEnable(ctx: PluginContext): Promise<void> {
     this.ctx = ctx;
@@ -120,6 +137,7 @@ export default class GSheetsLogger implements IPlugin {
     // manifest net.allow for the two fixed Google hosts) — never the raw unguarded worker fetch.
     this.client = new SheetsClient(ctx.net.fetch.bind(ctx.net), sa, config.spreadsheetId, config.sheetTab);
     this.batchSize = config.flushBatchSize;
+    this.target = targetOf(config, sa);
 
     // The only place untrusted data enters the buffer. Everything downstream assumes rows of strings —
     // the size accounting reads each cell's length, and appendRows sends them verbatim — so filter here
@@ -153,6 +171,13 @@ export default class GSheetsLogger implements IPlugin {
   }
 
   async onConfigChange(ctx: PluginContext, _newConfig: Record<string, unknown>): Promise<void> {
+    // Resolve the new config BEFORE touching the buffer. Two reasons: the park below has to know
+    // whether the destination actually moved, and a config that fails validation (a blanked
+    // spreadsheetId) must throw with the old client and timer still live, so the rows keep flushing to
+    // the target that is still valid instead of being parked on the way out.
+    const { config, sa } = parseConfig(ctx.config);
+    const nextTarget = targetOf(config, sa);
+
     // Drain to the current (old) client before swapping, so rows buffered before a spreadsheet/credential
     // rotation land in the sheet they belong to — not the new one. flush() is guarded and a no-op when empty.
     await this.flush();
@@ -160,25 +185,35 @@ export default class GSheetsLogger implements IPlugin {
     // Those rows carry message content captured under the previous spreadsheet and credentials; sending
     // them to the new target would move it across exactly the boundary the operator just changed. Park
     // them under their own key instead — kept, but never delivered anywhere they do not belong.
-    if (this.buffer.length > 0) {
+    //
+    // Only when the destination genuinely moved. The host fires config-change on EVERY config write
+    // with no dirty check, so gating on "the buffer is non-empty" alone parked the backlog on an edit
+    // that changed nothing but the flush interval, during the Sheets outage that built the backlog in
+    // the first place. Nothing ever reads UNDELIVERED_KEY back, so those rows were gone for good, and
+    // the README's promise that buffered rows flush on their own once the API goes live was false for
+    // exactly the operator following its own setup steps.
+    if (this.buffer.length > 0 && nextTarget !== this.target) {
       const undelivered = this.buffer.splice(0, this.buffer.length);
       try {
         const existing = await this.ctx?.storage.get<string[][]>(UNDELIVERED_KEY);
         const kept = [...(Array.isArray(existing) ? existing : []), ...undelivered];
-        capBuffer(kept, MAX_BUFFER, MAX_BUFFER_CHARS);
+        const evicted = capBuffer(kept, MAX_BUFFER, MAX_BUFFER_CHARS);
         await this.ctx?.storage.set(UNDELIVERED_KEY, kept);
         ctx.logger.warn(
-          `gsheets-logger: ${undelivered.length} row(s) were still undelivered at a config change; ` +
-            `parked under "${UNDELIVERED_KEY}" rather than sent to the new sheet`,
+          `gsheets-logger: ${undelivered.length} row(s) were still undelivered at a spreadsheet or ` +
+            `credential change; parked under "${UNDELIVERED_KEY}" rather than sent to the new sheet` +
+            // capBuffer's return was discarded, so an eviction from the park was the one loss this
+            // plugin never reported, in the branch that exists to avoid losing rows.
+            (evicted > 0 ? `, dropping the ${evicted} oldest to stay inside the buffer cap` : ''),
         );
       } catch (err) {
         ctx.logger.error(`gsheets-logger: ${undelivered.length} undelivered row(s) could not be parked`, err);
       }
     }
     this.ctx = ctx;
-    const { config, sa } = parseConfig(ctx.config);
     this.client = new SheetsClient(ctx.net.fetch.bind(ctx.net), sa, config.spreadsheetId, config.sheetTab);
     this.batchSize = config.flushBatchSize;
+    this.target = nextTarget;
     this.startTimer(config.flushIntervalSec);
   }
 

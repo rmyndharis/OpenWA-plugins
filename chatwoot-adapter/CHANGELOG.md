@@ -6,6 +6,34 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-09-05
+
+### Fixed
+
+- **Every attachment of a multi-attachment agent reply now reaches WhatsApp.** Chatwoot delivers an
+  agent's attachments as one event carrying several; only the first was relayed and the rest were
+  dropped with no log, and the idempotency marker written straight after made the loss permanent. Each
+  attachment is sent as its own WhatsApp message, in order, with the agent's caption on the first.
+- **An interrupted link no longer leaves a chat that relays inbound but drops every agent reply.** The
+  forward mapping was written first, so a restart or a storage rejection before the reverse write left
+  a chat that looked linked and resolved no conversation, permanently. The forward key is now the last
+  write, and the next inbound message re-links against the same Chatwoot contact and conversation.
+- **WhatsApp Channel and broadcast-list traffic is no longer relayed as customer conversations.** A
+  `@newsletter` post arrives flagged as a non-group chat, so a followed channel produced a Chatwoot
+  contact and an open conversation for an agent to triage, and any reply was addressed to a chat the
+  account cannot post to. Excluded on both doors: the live relay in each direction, and the one-time
+  bulk sweep, which reads the engine's chat list and would otherwise import every followed channel at
+  once on first enable.
+- `backfillLimit`'s bounds use `min`/`max`, the keys the dashboard form reads; declared as
+  `minimum`/`maximum` they were inert. Its description now names 0.8.6 as the floor, matching the
+  README and the release that bridged `getChatHistory` to sandboxed plugins.
+- The README no longer says a plugin cannot ask for a Baileys link preview; the send envelope has
+  carried `linkPreview` since host 0.14.1. This adapter still leaves it unset.
+
+### Changed
+
+- **Verified against OpenWA v0.23.4** (testedOpenWAVersion 0.23.3 -> 0.23.4).
+
 ## [0.9.6] - 2026-08-25
 
 ### Fixed

@@ -94,3 +94,41 @@ test('an entry nested under another entry contributes each member once', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('a directory walk skips dotfiles and returns members in a stable order', () => {
+  // Two properties the release depends on, both of them silent when broken:
+  //
+  //  - The member list IS the zip's byte order, and readdirSync order is filesystem-dependent, so an
+  //    unsorted walk can make a local build and the CI build differ. The release job compares the
+  //    built artifact against the digest plugins.json pins, so that surfaces as a failed release.
+  //  - The OS writes dotfiles into a working tree unasked. A `.DS_Store` beside a configUi entry
+  //    shipped inside the zip and changed its sha256, silently invalidating the same pin.
+  const dir = mkdtempSync(join(tmpdir(), 'entry-path-'));
+  try {
+    mkdirSync(join(dir, 'ui'));
+    mkdirSync(join(dir, 'ui', 'assets'));
+    writeFileSync(join(dir, 'ui', 'index.html'), '<html>');
+    writeFileSync(join(dir, 'ui', 'assets', 'b.css'), 'b');
+    writeFileSync(join(dir, 'ui', 'assets', 'a.js'), 'a');
+    writeFileSync(join(dir, 'ui', '.DS_Store'), 'junk');
+    writeFileSync(join(dir, 'ui', 'assets', '._a.js'), 'junk');
+    writeFileSync(join(dir, 'manifest.json'), '{}');
+
+    const names = collectMembers(dir, ['manifest.json', 'ui']).map((f) => f.name);
+    assert.deepEqual(names, [
+      'manifest.json',
+      'ui/assets/a.js',
+      'ui/assets/b.css',
+      'ui/index.html',
+    ]);
+    // Explicitly: no dotfile at any depth, and sorted regardless of the order the entries were given.
+    assert.equal(names.some((n) => n.split('/').some((seg) => seg.startsWith('.'))), false);
+    assert.deepEqual(collectMembers(dir, ['ui', 'manifest.json']).map((f) => f.name), names);
+    // Stated as the invariant rather than as one expected list, because the hardcoded list above only
+    // proves the sort on a filesystem whose readdir order already differs from it. APFS happens to
+    // return this directory sorted, so on a Mac the intra-directory case would pass either way.
+    assert.deepEqual(names, [...names].sort(), 'members must be in sorted archive-path order');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

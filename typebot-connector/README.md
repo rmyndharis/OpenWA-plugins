@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `typebot-connector` |
-| **Version** | 0.2.7 |
-| **Released** | 2026-08-25 |
+| **Version** | 0.2.8 |
+| **Released** | 2026-09-05 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.2 (tested 0.23.3) |
+| **Requires OpenWA** | ≥ 0.8.2 (tested 0.23.4) |
 | **Keywords** | typebot, chatbot, flow, bot, no-code, two-way, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/typebot-connector](https://github.com/rmyndharis/OpenWA-plugins/tree/main/typebot-connector) |
 <!-- END DETAILS -->
@@ -117,9 +117,11 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
   message. Streaming AI blocks are resolved server-side into normal text bubbles.
 - **Link bubbles look plainer from OpenWA 0.14.0 on the Baileys engine.** A link bubble and a redirect
   step are sent as the bare URL, and WhatsApp used to draw a preview card for them. From 0.14.0 Baileys
-  only generates that card when the sender asks for it, and a plugin has no way to ask — so these
+  only generates that card when the sender asks for it, and this connector does not, so these
   bubbles arrive as plain links. Nothing is lost and every link still works; if the card matters, put
-  the context in the bubble's own text. The whatsapp-web.js engine is unaffected.
+  the context in the bubble's own text. The whatsapp-web.js engine is unaffected. (A plugin CAN ask,
+  via the send envelope's `linkPreview` flag, from host 0.14.1; it is left unset here so a flow renders
+  the same way on both engines.)
 
 ### Per-session config
 

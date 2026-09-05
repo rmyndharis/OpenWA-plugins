@@ -8,6 +8,25 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.3.7] - 2026-09-05
+
+### Fixed
+
+- **`setlang` and `auto` are admin-gated, as the README, the command table and the plugin description
+  have always said.** Targeting yourself skipped authorization entirely, and an absent target defaults
+  to yourself, so the plain `<prefix> setlang <code>` form was open to any group member. The
+  confirmation is unconditional, so a member could make the bot post into the group on every attempt,
+  the amplification `help` is explicitly bounded against, and could pin their own language. The
+  in-chat help now marks both commands as admin, like its neighbours.
+- **A backend URL carrying credentials no longer reaches the host log.** When the configured URL has
+  embedded credentials the gateway refuses every fetch and names the full URL in the error, which was
+  rethrown verbatim and logged once per message. Enable-time validation already refused to log that
+  field's value for exactly this reason. Userinfo is now stripped before the error leaves the client.
+
+### Changed
+
+- **Verified against OpenWA v0.23.4** (testedOpenWAVersion 0.23.3 -> 0.23.4).
+
 ## [1.3.6] - 2026-08-25
 
 ### Changed

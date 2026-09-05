@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `voice-transcription` |
-| **Version** | 1.2.8 |
-| **Released** | 2026-08-25 |
+| **Version** | 1.2.9 |
+| **Released** | 2026-09-05 |
 | **Status** | beta |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.0 (tested 0.23.3) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.23.4) |
 | **Keywords** | transcription, speech-to-text, stt, whisper, voice, audio, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/voice-transcription](https://github.com/rmyndharis/OpenWA-plugins/tree/main/voice-transcription) |
 <!-- END DETAILS -->
@@ -126,7 +126,7 @@ curl -X POST http://localhost:2785/api/plugins/voice-transcription/enable \
 | `enabledMessageTypes` | no | `["voice"]` | Add `audio` to also transcribe non-PTT audio (more cost). |
 | `maxSizeBytes` | no | `16777216` | Skip audio larger than this (exact cost guard). |
 | `maxPerHour` | no | `60` | Best-effort per-session hourly transcription cap. |
-| `deliveryWebhookUrl` | cond. | — | Endpoint receiving the `message.transcription` event. Must be https, and is then allowed automatically. Optional if you only use `chatDelivery`. |
+| `deliveryWebhookUrl` | cond. | — | Endpoint receiving the `message.transcription` event. An https host is allowed automatically; a plain-http one is not, so it only works for `localhost`/`127.0.0.1` (already in `net.allow`) and also needs `SSRF_ALLOWED_HOSTS`. Optional if you only use `chatDelivery`. |
 | `deliverySecret` | no | — | Optional. HMAC-SHA256 signs the body in `X-OpenWA-Signature: sha256=<hex>` (same as core webhooks). Stored redacted. |
 | `deliveryTimeoutMs` | no | `5000` | Delivery POST timeout. |
 | `chatDelivery` | no | `off` | Also post the transcript into WhatsApp: `off` (webhook only) · `self` (note to your own number) · `reply` (quote-reply to the sender — visible to them). **In a group, `reply` posts to the whole group**, so every member reads the contents of the voice note. |

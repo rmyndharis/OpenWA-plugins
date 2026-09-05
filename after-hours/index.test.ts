@@ -311,3 +311,34 @@ test('lowering cooldownSec mid-backoff does not release the retry storm', async 
     mock.timers.reset();
   }
 });
+
+test('a channel or broadcast post never draws an away reply', async () => {
+  // A `@newsletter` post arrives flagged as a non-group chat, so the group gate lets it through and the
+  // plugin replied into a channel the account merely follows: a send that always fails, one per post,
+  // after consuming that chat's cooldown slot.
+  const replies: string[] = [];
+  let handler: ((hook: unknown) => Promise<{ continue: boolean }>) | undefined;
+  const ctx = makeCtx({
+    config: closedNowConfig,
+    registerHook: (_e, h) => { handler = h as (hook: unknown) => Promise<{ continue: boolean }>; },
+    reply: async (_s: string, chatId: string) => { replies.push(chatId); return { messageId: 'x', timestamp: 0 }; },
+  });
+  const { default: AfterHours } = await import('./index.ts');
+  await new AfterHours().onEnable(ctx as never);
+
+  const fire = (chatId: string) =>
+    handler!({
+      source: 'Engine', sessionId: 's1', timestamp: new Date(),
+      data: { id: `m-${chatId}`, chatId, body: 'hello', fromMe: false, isGroup: false },
+    });
+
+  for (const chatId of ['120363000000000000@newsletter', '628123-456@broadcast', 'status@broadcast']) {
+    assert.deepEqual(await fire(chatId), { continue: true }, `${chatId} must not be claimed`);
+  }
+  assert.deepEqual(replies, [], 'nothing may be sent into a channel or broadcast chat');
+
+  // Guard rail: a real 1:1 chat under the same closed schedule still gets the away message, so the
+  // test above proves the gate rather than a broken fixture.
+  await fire('628123456789@c.us');
+  assert.deepEqual(replies, ['628123456789@c.us']);
+});

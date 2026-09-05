@@ -1,7 +1,7 @@
 {
   "id": "chat-flow",
   "name": "Chat Flow",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Interactive, stateful auto-reply: a trigger word starts a greeting + numbered menu, replies traverse a configurable menu tree, and per-chat state expires after 15 minutes.",
@@ -20,7 +20,7 @@
   ],
   "status": "stable",
   "minOpenWAVersion": "0.7.0",
-  "testedOpenWAVersion": "0.23.3",
+  "testedOpenWAVersion": "0.23.4",
   "provides": [
     "auto-reply"
   ],
@@ -60,6 +60,7 @@
       },
       "options": {
         "type": "array",
+        "required": true,
         "title": "Menu options",
         "description": "The menu tree. Each option has a key (what the user types, e.g. \"1\"), the reply text, and optional sub-options. Edit visually in the Flow editor.",
         "items": {
