@@ -8,6 +8,22 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.9] - 2026-09-05
+
+### Fixed
+
+- **Restore the 0.2.7 regex screen.** The adjacency rework in 0.2.8 refused rules that are provably
+  fast, including the two commonest shapes an operator writes: a capture between two unbounded
+  quantifiers (`^\s*(.*)\s*$`, `.*(\d+).*`), each measured at 0.0 ms against a full 1000-character
+  input. A refused rule is only logged, so those installs stopped answering with no other symptom. The
+  same rework also let `a*(b)*a*a*$` through, at 1.3 s against 301 characters, because a group that can
+  match empty was treated as breaking the adjacency run when it actually joins the quantifiers on
+  either side of it.
+  The screen is back to the 0.2.7 behaviour, which refuses `(a+)+`, `.*.*.*` and `(a?){40}` and the
+  ambiguous repeated alternations 0.2.7 added. The shapes 0.2.8 aimed at, a run of adjacent unbounded
+  quantifiers spelled with groups or with overlapping character classes, are accepted again; they need
+  a screen that models a group's width and nullability, which this one does not.
+
 ## [0.2.8] - 2026-09-05
 
 ### Fixed
