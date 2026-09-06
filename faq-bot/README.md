@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `faq-bot` |
-| **Version** | 0.2.9 |
-| **Released** | 2026-09-05 |
+| **Version** | 0.2.10 |
+| **Released** | 2026-09-06 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -109,21 +109,32 @@ rule sets.
 
 ## Security
 
-`regex` patterns are operator-authored (trusted) and tested against at most the first 1000 characters
-of a message. At parse time every pattern is screened for catastrophic-backtracking shapes — nested,
+Two controls, each covering what the other cannot.
+
+**The input cap.** A `regex` rule is tested against at most the first **150 characters** of a message.
+Backtracking cost grows with the input, so capping it sets the ceiling directly, whatever the pattern
+looks like. `contains` and `exact` cannot backtrack and are not capped, so they still see the whole
+message: use `contains` when you need "mentions X anywhere in a long message".
+
+**The parse-time screen.** Every pattern is checked for catastrophic-backtracking shapes: nested,
 adjacent-overlapping, and repeated-variable-width quantifiers (e.g. `(a+)+`, `.*.*.*`, `(a?){40}`), plus
-ambiguous repeated alternations (`(a|a)*`, `(a|ab)+`, `^([a-z]|[a-z0-9])+$`, `^(\w|\d)+$`) — and an
-unsafe one is skipped with a warning. This parse-time screen is the real safeguard: the sandbox hook
-timeout lets the host proceed but cannot interrupt a synchronous regex already running in the plugin
-worker, so a pattern that slips through would still pin that worker.
+ambiguous repeated alternations (`(a|a)*`, `(a|ab)+`, `^([a-z]|[a-z0-9])+$`, `^(\w|\d)+$`). An unsafe
+pattern is skipped with a warning.
+
+The split matters because the two failure modes are not alike. Exponential shapes stay fatal at any
+input length, so only the screen can stop them, and they are the ones it recognises reliably. Polynomial
+shapes are the opposite: hard to see in the pattern text, but bounded by the cap. The host aborts a hook
+at 5 s and cannot interrupt a regex already running, so the ceiling has to hold on a slow host too.
 
 An alternation is only rejected when two branches can consume the same text AND the repetition lands
 directly on it, including through a group that adds nothing but parentheses (`((a|a))+`). A wrapper that
 also contributes a mandatory atom is not that shape: the atom realigns every iteration, so ordinary
 keyword sets like `(one|two|three)+`, `^(ya|tidak)$` and `^((no|nope) )+$` are unaffected even where two
 branches share a first letter.
-The screen is a heuristic rather than a decision procedure: it covers the shapes that occur in real rule
-sets, and the 1000-character body cap remains as the second line of defence.
+The screen is a heuristic rather than a decision procedure, and it is known to accept some polynomial
+shapes: `(a|b)*(a|b)*(a|b)*$` and `[ab]*[bc]*[cd]*$` pass it. Those are safe because of the cap, not
+because the screen understood them. Measured on the worst of them against alternating input, 1000
+characters runs past 8 s while 150 takes 362 ms.
 
 The same inbound text is answered at most once every 10 seconds per chat. A rule whose reply also
 matches its own pattern is a fixed point, and an autoresponder on the other end would otherwise trade

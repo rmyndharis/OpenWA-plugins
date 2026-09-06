@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRules, matchRule, isSafeRegexPattern } from './rules.ts';
+import { parseRules, matchRule, isSafeRegexPattern, MAX_REGEX_INPUT } from './rules.ts';
 
 const ok = JSON.stringify([
   { mode: 'contains', pattern: 'harga', reply: 'Harga mulai 100rb' },
@@ -181,6 +181,41 @@ test('parseRules keeps legitimate patterns (adjacent DISJOINT classes, separated
   const { rules, skipped } = parseRules(JSON.stringify(corpus));
   assert.deepEqual(skipped, []);
   assert.equal(rules.length, corpus.length);
+});
+
+test('a regex only sees the first MAX_REGEX_INPUT characters, which is what bounds a blow-up', () => {
+  // The input cap is the control for polynomial backtracking, so it has to be pinned. A pattern the
+  // structural screen accepts can still be quadratic or cubic, and the only thing keeping that under
+  // the host's 5 s hook budget is how much text it is handed. Measured on the worst shape that gets
+  // past the screen, `((a|b)*(a|b)*)(a|b)*$` against alternating input: 1000 characters runs past 8 s,
+  // 300 takes 5.8 s, 250 takes 2.8 s, 150 takes 362 ms.
+  const { rules } = parseRules(JSON.stringify([{ mode: 'regex', pattern: 'needle', reply: 'found' }]));
+  assert.ok(matchRule(rules, 'needle at the very start'), 'a match inside the window still works');
+  assert.equal(matchRule(rules, 'x'.repeat(200) + 'needle'), null, 'past the window a regex no longer matches');
+
+  // `contains` and `exact` cannot backtrack, so they are deliberately NOT capped: an operator who
+  // needs "mentions X anywhere in a long message" should use `contains`, and it keeps working.
+  const { rules: contains } = parseRules(JSON.stringify([{ mode: 'contains', pattern: 'needle', reply: 'found' }]));
+  assert.ok(matchRule(contains, 'x'.repeat(5000) + 'needle'), 'contains still sees the whole body');
+});
+
+test('the cap holds the shapes the structural screen lets through', () => {
+  // These are accepted by isSafeRegexPattern and are genuinely polynomial. They are safe only because
+  // of the cap, so this pins the two together: raising it without re-measuring fails here.
+  //
+  // The input has to be adversarial INSIDE the window. The cap slices from the front, so a failing
+  // tail appended to a long message is simply cut off and the regex matches cheaply. An attacker
+  // sends a message whose first MAX_REGEX_INPUT characters are the bad case, which is what this
+  // builds: alternating text filling the window exactly, ending in a character no branch accepts.
+  const adversarial = 'ab'.repeat(Math.ceil(MAX_REGEX_INPUT / 2)).slice(0, MAX_REGEX_INPUT - 1) + 'Z';
+  assert.equal(adversarial.length, MAX_REGEX_INPUT);
+  for (const pattern of ['((a|b)*(a|b)*)(a|b)*$', '(a|b)*(a|b)*(a|b)*$', '[ab]*[bc]*[cd]*$']) {
+    assert.equal(isSafeRegexPattern(pattern), true, `guard rail: the screen accepts ${pattern}`);
+    const { rules } = parseRules(JSON.stringify([{ mode: 'regex', pattern, reply: 'r' }]));
+    const started = Date.now();
+    matchRule(rules, adversarial + 'x'.repeat(5000));
+    assert.ok(Date.now() - started < 2000, `${pattern} must stay bounded by the cap`);
+  }
 });
 
 test('matchRule: contains is case-insensitive substring; no match returns null', () => {

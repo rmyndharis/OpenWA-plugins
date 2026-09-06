@@ -9,8 +9,26 @@ export interface CompiledRule extends Rule {
 }
 
 const MODES: RuleMode[] = ['contains', 'exact', 'regex'];
-/** Cap on the body length a regex is tested against (defence in depth, not the ReDoS control). */
-const MAX_REGEX_INPUT = 1000;
+/**
+ * Cap on the body length a regex is tested against, and the PRIMARY control for polynomial blow-up.
+ *
+ * The screen below reads the pattern text, which works for the exponential shapes it can recognise
+ * syntactically (a quantifier on a group that holds one, an ambiguous repeated alternation) but not
+ * for the polynomial ones, where cost depends on how many ways an input splits between adjacent
+ * quantifiers. Those are not reliably visible in the text, and repeated attempts to make them so each
+ * closed one family of patterns while opening another.
+ *
+ * Bounding the input instead needs no model at all. A polynomial blow-up costs about n^3, so the cap
+ * sets the ceiling directly. Measured on the worst shape that gets past the screen,
+ * `((a|b)*(a|b)*)(a|b)*$` against alternating input: 1000 characters runs past 8 s, 300 takes 5.8 s,
+ * 250 takes 2.8 s, and 150 takes 362 ms. 150 is chosen so the ceiling holds on a host several times
+ * slower than the machine that measured it, since the host aborts a hook at 5 s and a running regex
+ * cannot be interrupted before then.
+ *
+ * This only applies to `regex` rules. `contains` and `exact` cannot backtrack, so they still see the
+ * whole message, and `contains` remains the right mode for "does this message mention X anywhere".
+ */
+export const MAX_REGEX_INPUT = 150;
 /** Reject absurdly long patterns outright. */
 const MAX_PATTERN_LENGTH = 1000;
 
@@ -140,7 +158,7 @@ const REPEAT_THRESHOLD = 10;
  *  1. an unbounded quantifier on a group that itself contains one — `(a+)+`, `((a+))+`, `(\w+\s?)*`;
  *  2. THREE OR MORE adjacent unbounded quantifiers over overlapping atoms in one concatenation —
  *     `.*.*.*`, `\w*\w*\w*` (O(n^3)+); TWO adjacent (`.*.*`, `.*\d+`) is only O(n^2), safe under the
- *     1000-char input cap, so it is allowed; a mandatory atom or a group boundary breaks the chain;
+ *     input cap, so it is allowed; a mandatory atom or a group boundary breaks the chain;
  *  3. an unbounded or ≥REPEAT_THRESHOLD repeat of a group whose body has a variable-width quantifier —
  *     `(a?){40}`, `(a?)+` (exponential); a small bounded repeat of a VARIABLE body like `(ab?){2}` is
  *     allowed, but any repeat of an UNBOUNDED body is not — see (1).
@@ -234,7 +252,7 @@ export function isSafeRegexPattern(p: string): boolean {
       // A wrapper that DOES contribute an atom is deliberately not propagated through. The atom is
       // mandatory in every iteration, so it realigns the match and the branches can no longer split
       // the same text: `((no|nope) )+$`, `^((satu|dua|(tiga|empat)),)+$` and `((ok|oke)\s)+` are all
-      // linear (measured at 0.0 ms against the 1000-char input cap) and all of them are rules an
+      // linear (measured at 0.0 ms against a full-length input) and all of them are rules an
       // operator really writes. Rejecting those would silently stop an upgraded install from replying.
       const pureCover = !frame.sawAtom && frame.branches.length === 1;
       const ambiguous =
