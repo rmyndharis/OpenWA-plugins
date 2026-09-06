@@ -695,7 +695,7 @@
   {
     "id": "faq-bot",
     "name": "FAQ / Auto-Reply Bot",
-    "version": "0.2.9",
+    "version": "0.2.10",
     "type": "extension",
     "status": "stable",
     "description": "Auto-replies to inbound WhatsApp messages from configurable FAQ keyword/regex rules.",
@@ -711,11 +711,11 @@
     ],
     "minOpenWAVersion": "0.6.1",
     "testedOpenWAVersion": "0.23.4",
-    "releasedAt": "2026-09-05",
+    "releasedAt": "2026-09-06",
     "repoPath": "faq-bot",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.2.9/faq-bot.zip#sha256=6513c8f31023395c8c98c9c7410dc999ee06516ee88d22417d776d37bbed811e",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.2.10/faq-bot.zip#sha256=c26deddca78e36bb46ed6b55da55a44e07450be27f638225da5cbba3e20906df",
     "permissions": [
       "messages:send"
     ],

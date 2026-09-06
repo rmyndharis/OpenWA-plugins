@@ -8,6 +8,21 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.10] - 2026-09-06
+
+### Changed
+
+- **A `regex` rule is now tested against the first 150 characters of a message, down from 1000.**
+  Backtracking cost grows with the input, so capping it bounds the worst case whatever the pattern
+  looks like. The parse-time screen accepts some polynomial shapes it cannot recognise in the pattern
+  text (`(a|b)*(a|b)*(a|b)*$`, `[ab]*[bc]*[cd]*$`, `\w*\d*\w*x`); measured against alternating input,
+  the worst of them runs past 8 s at 1000 characters, 2.8 s at 250, and 362 ms at 150. The host aborts
+  a hook at 5 s and cannot interrupt a running regex, so the cap is set to hold on a host several times
+  slower than the machine that measured it.
+  A regex rule therefore no longer matches text past the first 150 characters. `contains` and `exact`
+  cannot backtrack and are not capped, so they still see the whole message; `contains` is the right
+  mode for "mentions X anywhere in a long message".
+
 ## [0.2.9] - 2026-09-05
 
 ### Fixed
