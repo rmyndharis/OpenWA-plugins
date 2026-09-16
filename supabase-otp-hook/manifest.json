@@ -31,7 +31,7 @@
       "response": {
         "preflight": [{ "type": "session-alive" }],
         "ack": {
-          "status": 200,
+          "status": 204,
           "headers": { "content-type": "application/json" },
           "body": "{\"ok\":true}"
         }
