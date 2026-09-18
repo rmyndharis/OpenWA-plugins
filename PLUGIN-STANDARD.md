@@ -327,7 +327,11 @@ there rather than a silent publish into `plugins.json`:
 An ingress route with `signature.scheme: "none"` is a hard load failure for the entire plugin unless the
 operator sets `ALLOW_UNSIGNED_INGRESS=true`. `mode: "sync-reply"` is inert dead code — declare
 synchronous behavior via `ingress[].response` instead. A `WebhookResponse` returned from your handler is
-ignored; the provider's reply comes from `ingress[].response.ack` (default 202).
+ignored; the provider's reply comes from `ingress[].response.ack` (default 202). A declared ack
+`content-type` never reaches the provider: the host applies your headers and then forces `text/plain`
+on every ingress response, so a provider that requires `application/json` on a 200 or 202 rejects the
+ack. Declare a bodiless status instead (`supabase-otp-hook` acks `204`; express drops the body and the
+content type there anyway). Tracked upstream as OpenWA#1637.
 
 `minOpenWAVersion` is advisory (never enforced by the host). Still bump it when a plugin *requires* a
 newer capability: `canonicalChatId` → 0.8.7, Integration SDK v1 (`sdkVersion: "1"` — a STRING; the
