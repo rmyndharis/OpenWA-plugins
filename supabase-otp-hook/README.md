@@ -2,7 +2,7 @@
 
 > Deliver Supabase Auth phone OTPs over WhatsApp. Supabase's Send SMS hook (Standard Webhooks-signed) is
 > verified host-side, and the plugin sends the OTP via an OpenWA WhatsApp session — with synchronous
-> feedback to Supabase (401 on a bad signature, 503 on a dead session, 200 on accept).
+> feedback to Supabase (401 on a bad signature, 503 on a dead session, 204 on accept).
 
 ![type: extension](https://img.shields.io/badge/type-extension-blue.svg)
 ![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)
@@ -15,8 +15,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `supabase-otp-hook` |
-| **Version** | 0.3.6 |
-| **Released** | 2026-09-05 |
+| **Version** | 0.3.7 |
+| **Released** | 2026-09-18 |
 | **Status** | beta |
 | **Author** | maplerichie |
 | **License** | MIT |
@@ -36,25 +36,27 @@
 - **Configurable message** — `{appName}` and `{otp}` placeholders.
 - **Synchronous feedback** — the host verifies the signature (→ **401** on failure) and runs a
   `session-alive` preflight (→ **503** on a dead WhatsApp session) before accepting, returning
-  **200** on success. Supabase learns immediately whether the OTP could be handed
-  off; a dead session no longer gets swallowed as a silent 202. The ack body is the JSON literal
-  `{"ok":true}`; its content type is `application/json` on hosts below 0.20.0 and `text/plain` on 0.20.0
-  and later, which forces the type on every ingress reflection, so nothing should match on it.
+  **204** on success. Supabase learns immediately whether the OTP could be handed
+  off; a dead session no longer gets swallowed as a silent 202. The ack carries no body, which is the
+  only shape Supabase accepts: Auth refuses a 200 or 202 whose content type does not parse to
+  `application/json`, and hosts from 0.20.0 on force `text/plain` on every ingress response.
 - **Fail-fast WhatsApp send** — a send that fails immediately (no live engine, the plugin not activated
   for the session, the concurrent-capability limit) fails the delivery, so the host retries it and
   dead-letters it for redrive instead of dropping the OTP, and
   `GET /api/plugins/supabase-otp-hook/health` reports the last failure. A send that is only slow
   finishes in the background: the ingress worker dispatch is bounded to 5 s, and an overrun would be
   retried into a duplicate OTP.
-- **Per-user ordering + dedup** — ordered per `user.id`, deduped on `webhook-id`. Ordering and the
-  retry/DLQ path need `QUEUE_ENABLED=true` on the host; with the queue off, ingress runs inline, takes
-  no ordering lock, and makes a single attempt.
+- **Per-user ordering + dedup** — ordered per `user.id`, deduped on `webhook-id`. Dedup catches a
+  replay of one delivery, not a Supabase retry: Auth mints a fresh `webhook-id` per attempt, so a
+  retried hook is a new delivery and sends a second OTP. Ordering and the retry/DLQ path need
+  `QUEUE_ENABLED=true` on the host; with the queue off, ingress runs inline, takes no ordering lock,
+  and makes a single attempt.
 
 ## What it does
 
 Supabase calls the OpenWA ingress URL. The host verifies the Standard Webhooks signature against the
 instance secret (→ 401 on a mismatch), runs the `session-alive` preflight (→ 503 on a dead session),
-persists the event for dedup, fast-acks Supabase with **200** `{"ok":true}`, then dispatches the
+persists the event for dedup, fast-acks Supabase with a bodiless **204**, then dispatches the
 sandboxed handler async from the ingress worker (retry + DLQ). The handler parses `{ user: { phone },
 sms: { otp } }`, normalizes the phone to `<digits>@c.us`, and fires the WhatsApp send in the background
 to stay within the worker's 5 s dispatch budget.
@@ -62,7 +64,8 @@ to stay within the worker's 5 s dispatch budget.
 ## Setup
 
 Requires OpenWA v0.8.16+ (the `standard-webhooks` signature scheme and the `response`/preflight
-ingress contract) with a logged-in WhatsApp session, and a Supabase project with phone auth.
+ingress contract) with a logged-in WhatsApp session, and a Supabase project with phone auth on Supabase
+Auth v2.172.0+ (every Supabase Cloud project qualifies; an older self-hosted Auth rejects the 204 ack).
 
 **Install the plugin, then set its base config, then enable it** (see [Install](#install) below) — in
 that order. Enabling validates the plugin's **base** (`*`) config and refuses to start without
@@ -88,7 +91,7 @@ to the mint call.
 - **Option B — use a fallback.** Leave `sessionScope` blank, set `fallbackSessionId` in plugin config.
   ⚠️ **This gives up the dead-session 503.** The host preflight probes the *instance* scope, and a blank
   scope has no single session to probe — `fallbackSessionId` is plugin config the host never sees. So a
-  delivery whose fallback session is down is answered `200 {"ok":true}`, Supabase treats it as
+  delivery whose fallback session is down is answered `204`, Supabase treats it as
   delivered and does not retry. The send itself then fails fast, so the host records the delivery as
   failed and dead-letters it for redrive, and `GET /api/plugins/supabase-otp-hook/health` reports the
   failure. Supabase is still never told. Prefer Option A wherever the sending session is known.
@@ -120,7 +123,7 @@ create response. Either way, copy the **ingress URL** and the **plaintext secret
 
 **3. Enable phone auth.** Supabase → Authentication → Providers → Phone → enable, set SMS provider to the hook.
 
-**4. Test.** Trigger a phone-OTP sign-in. Supabase receives 200 and the OTP arrives in WhatsApp. A dead WhatsApp session yields 503 (visible to Supabase); a bad signature yields 401.
+**4. Test.** Trigger a phone-OTP sign-in. Supabase receives 204 and the OTP arrives in WhatsApp. A dead WhatsApp session yields 503 (visible to Supabase); a bad signature yields 401.
 
 ## Install
 
@@ -177,7 +180,7 @@ set `fallbackSessionId`.
 - Signature verified **host-side, before any send or plugin code runs**, constant-time compare, 5-min replay window.
 - A bad signature returns **401** synchronously. A dead session returns **503** synchronously **only under
   Option A** — the host-side preflight probes the instance's `sessionScope`, so a blank scope (Option B)
-  skips the check and the delivery is acked `200` before the plugin runs. Neither case reaches plugin code.
+  skips the check and the delivery is acked `204` before the plugin runs. Neither case reaches plugin code.
 - Permissions: `webhook:ingress` + `messages:send` only (liveness is checked host-side, so no `engine:read`).
 
 ## Changelog

@@ -1643,7 +1643,7 @@
   {
     "id": "supabase-otp-hook",
     "name": "Supabase Auth OTP",
-    "version": "0.3.6",
+    "version": "0.3.7",
     "type": "extension",
     "status": "beta",
     "description": "Deliver Supabase Auth phone OTPs over WhatsApp.",
@@ -1661,11 +1661,11 @@
     ],
     "minOpenWAVersion": "0.8.16",
     "testedOpenWAVersion": "0.23.4",
-    "releasedAt": "2026-09-05",
+    "releasedAt": "2026-09-18",
     "repoPath": "supabase-otp-hook",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/supabase-otp-hook",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/supabase-otp-hook-v0.3.6/supabase-otp-hook.zip#sha256=e957d7c6988f75117c0aa10f1d75a21de7e1d38ab4e31407eaea1fbbf3ccf102",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/supabase-otp-hook-v0.3.7/supabase-otp-hook.zip#sha256=61f0b9d90c40697b0e3100b0e1f157482db349a812274a5d1c4b0d2f247f0eab",
     "permissions": [
       "webhook:ingress",
       "messages:send"

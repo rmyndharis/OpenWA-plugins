@@ -7,6 +7,27 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-09-18
+
+### Fixed
+
+- **Supabase rejected every OTP delivery, and the sign-in failed after the code had already been sent.**
+  The ack was `200` with the body `{"ok":true}` and a declared `application/json` content type, but
+  OpenWA 0.20.0 and later force `text/plain` on every ingress response, and Supabase Auth refuses a 200
+  or 202 whose content type does not parse to `application/json` ("Invalid JSON response"). The route is
+  async and the WhatsApp send is enqueued before the ack, so the contact received a code that Supabase
+  had already thrown away, and the `signInWithOtp` call returned an error. The ack is now a bodiless
+  `204`, which Supabase accepts without inspecting the response at all.
+
+### Changed
+
+- **Requires Supabase Auth v2.172.0 or newer**, the first release that accepts a bodiless `204` from an
+  HTTP hook. Every Supabase Cloud project is well past it; a self-hosted Auth older than that has to be
+  upgraded.
+- The documented dedup guarantee is corrected: `webhook-id` dedup catches a replay of one delivery, not
+  a Supabase retry. Auth mints a fresh `webhook-id` per attempt, so a retried hook is a new delivery and
+  sends a second OTP.
+
 ## [0.3.6] - 2026-09-05
 
 ### Fixed

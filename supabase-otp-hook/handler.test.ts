@@ -170,7 +170,7 @@ test('does not send when no session is available', async () => {
 // ── send behavior ────────────────────────────────────────────────────────────
 
 test('a send that fails immediately fails the delivery, so the host retries it', async () => {
-  // Supabase was acked 200 before this handler ran and never retries such a delivery itself, so
+  // Supabase was acked 204 before this handler ran and never retries such a delivery itself, so
   // backgrounding an instant rejection lost the OTP outright with one warn line to show for it. The
   // capability layer rejects instantly when the plugin is not activated for the session, when the
   // session has no live engine, and at the concurrent-capability limit. Throwing hands the delivery

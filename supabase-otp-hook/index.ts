@@ -7,12 +7,12 @@ import { handleSendSms, readConfig } from './handler.ts';
  * Receives Supabase Auth's Send SMS hook on the ingress route "send-sms". The host verifies the
  * Standard Webhooks signature (manifest signature.scheme: 'standard-webhooks', secret = instance.secret)
  * and runs the `session-alive` preflight before dispatching this handler, so Supabase gets synchronous
- * feedback: 401 on a bad signature, 503 on a dead session, and 200 on accept. The ack BODY is the JSON
- * literal {"ok":true}; its CONTENT TYPE depends on the host. The manifest declares application/json,
- * which hosts below 0.20.0 return, but 0.20.0 and later force text/plain on every ingress response
- * (`res.type('text/plain')` after `res.set`, ingress.controller.ts) so a reflected body cannot be parsed
- * as HTML. The declaration is kept because it is still honored on the older hosts this plugin supports,
- * but nothing may depend on the ack's content type.
+ * feedback: 401 on a bad signature, 503 on a dead session, and 204 on accept. The ack carries no body
+ * and no content type, the only shape Supabase Auth accepts here. It refuses a 200 or a 202 whose
+ * content type does not parse to application/json, and hosts from 0.20.0 on force text/plain on every
+ * ingress response (`res.type('text/plain')` after `res.set`, ingress.controller.ts) so a declared
+ * application/json never reaches the wire. A 204 returns before Supabase inspects the response at all.
+ * Needs Supabase Auth v2.172.0+, the first release that accepts a bodiless 204 from an HTTP hook.
  *
  * This handler runs async from the ingress worker (retry + DLQ) and only parses the payload + fires the
  * WhatsApp send. It waits just long enough to catch a send that fails immediately, so the host retries
@@ -21,7 +21,7 @@ import { handleSendSms, readConfig } from './handler.ts';
  */
 export default class SupabaseSmsHook implements IPlugin {
   // Outcome of the most recent send, cleared by the next one that succeeds. A send that fails AFTER the
-  // handler's fail-fast window has closed reaches nobody else: Supabase was acked 200 and the ingress
+  // handler's fail-fast window has closed reaches nobody else: Supabase was acked 204 and the ingress
   // job already completed, so there is no retry and no dead-letter row. healthCheck is the only surface
   // the dashboard renders, so this is where such an OTP surfaces as lost.
   private lastSendError: string | null = null;

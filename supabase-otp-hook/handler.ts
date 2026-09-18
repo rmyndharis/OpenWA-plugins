@@ -2,7 +2,7 @@
 //
 // Runs ASYNC. The host verifies the Standard Webhooks signature (manifest signature.scheme:
 // 'standard-webhooks') and runs the `session-alive` preflight BEFORE dispatching this handler, then
-// fast-acks Supabase (200) and enqueues this handler from the ingress worker (BullMQ, retry + DLQ). So
+// fast-acks Supabase (204) and enqueues this handler from the ingress worker (BullMQ, retry + DLQ). So
 // by the time we run, the request is authentic and the sending session is live; this handler only
 // parses the payload and fires the WhatsApp send.
 //
@@ -165,7 +165,7 @@ export async function handleSendSms(deps: HandlerDeps, req: WebhookRequest): Pro
   //    the job and sends the contact a DUPLICATE OTP.
   //  - A send that has ALREADY FAILED must not be swallowed. The capability layer rejects instantly when
   //    the plugin is not activated for the session, when the session has no live engine, and when the
-  //    plugin is at its concurrent-capability limit. Supabase was acked 200 before this handler ran and
+  //    plugin is at its concurrent-capability limit. Supabase was acked 204 before this handler ran and
   //    never retries such a delivery itself, so backgrounding it lost the code outright, with one warn
   //    line to show for it.
   //

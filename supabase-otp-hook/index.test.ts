@@ -90,7 +90,7 @@ test('onEnable throws when appName is missing', async () => {
 
 test('healthCheck reports a dropped OTP that reaches no retry and no dead-letter row', async () => {
   // A send that fails AFTER the handler's fail-fast window has closed reaches nobody else: Supabase was
-  // already acked 200 and the ingress job completed, so there is no retry and no dead-letter row. The
+  // already acked 204 and the ingress job completed, so there is no retry and no dead-letter row. The
   // host reports a plugin with no health check as healthy, so this was the only surface left.
   let handler: ((req: WebhookRequest) => unknown) | undefined;
   let sendFails = false;
