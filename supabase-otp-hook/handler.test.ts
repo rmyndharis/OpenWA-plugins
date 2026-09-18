@@ -241,6 +241,9 @@ test('phoneToChatId strips non-digits and appends @c.us', () => {
   assert.equal(phoneToChatId('+1 (*************'), '1@c.us');
   assert.equal(phoneToChatId('+15551234567'), '15551234567@c.us');
   assert.equal(phoneToChatId('+447911123456'), '447911123456@c.us');
+  // Supabase Auth strips the leading + before it calls the hook, so bare digits are the shape
+  // production actually sends; every other fixture in this file uses the + form.
+  assert.equal(phoneToChatId('15555550100'), '15555550100@c.us');
   assert.equal(phoneToChatId('no digits'), undefined);
   assert.equal(phoneToChatId(123 as unknown as string), undefined);
 });
