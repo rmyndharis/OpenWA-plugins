@@ -1,6 +1,6 @@
 import type { IncomingMessage } from '../types/openwa';
 import { shouldRelayOwn } from './filters.ts';
-import { relayMessage, ensureConversation, type InboundDeps } from './relay.ts';
+import { relayMessage, ensureConversation, resolvePhone, type InboundDeps } from './relay.ts';
 
 // WhatsApp → Chatwoot for the account's OWN outbound sends — messages composed on a linked phone / the
 // WhatsApp mobile app / the OpenWA REST API — so the Chatwoot thread mirrors the full WhatsApp
@@ -66,12 +66,12 @@ export async function handleSent(
           await deps.store.unlinkByChatId(sessionId, msg.chatId);
           await deps.store.unlinkByConversationId(sessionId, conversationId);
           conversationId = await ensureConversation(deps, sessionId, msg.chatId, {
-            name:
-              msg.contact?.pushName ||
-              msg.contact?.name ||
-              msg.senderPhone ||
-              (msg.isGroup ? `Group ${msg.chatId}` : msg.chatId),
-            phone: msg.isGroup ? undefined : msg.senderPhone ?? undefined,
+            name: msg.contact?.pushName || msg.contact?.name || (msg.isGroup ? `Group ${msg.chatId}` : msg.chatId),
+            // `key` is the canonical id resolved at the top of this handler. resolvePhone is called
+            // WITHOUT the message on purpose: on an own send `senderPhone` would be OUR number, not the
+            // recipient's, and a plugin's hook payload never carries it anyway. Dropped from the name
+            // chain for the same two reasons.
+            phone: resolvePhone({ isGroup: msg.isGroup }, key),
           });
           await relayMessage(deps, sessionId, conversationId, msg, 'outgoing');
         } catch (rebuildErr) {

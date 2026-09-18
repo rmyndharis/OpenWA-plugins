@@ -1,6 +1,6 @@
 import type { IncomingMessage } from '../types/openwa';
 import { shouldRelayInbound } from './filters.ts';
-import { relayMessage, ensureConversation, refreshContactName, resolvePhone, type InboundDeps } from './relay.ts';
+import { relayMessage, ensureConversation, refreshContact, resolvePhone, type InboundDeps } from './relay.ts';
 import { backfillHistory } from './backfill.ts';
 import { MAX_PENDING_RETRIES, slimForRetry } from './retry.ts';
 
@@ -133,7 +133,7 @@ export async function handleInbound(
 // The import marker is bookkeeping; the message is the product. A rejected write — the host rejects
 // EVERY `set` once the plugin is at its 50 MiB quota — must cost at most one redundant import on the
 // next message. Unguarded it threw past relayMessage, so a perfectly relayable message became a
-// retry-queue entry whose drain re-ran the whole 30 s import behind it. Mirrors refreshContactName.
+// retry-queue entry whose drain re-ran the whole 30 s import behind it. Mirrors refreshContact.
 async function recordBackfill(
   deps: InboundDeps,
   sessionId: string,
@@ -170,7 +170,7 @@ async function maybeBackfill(
 }
 
 // Resolves the Chatwoot conversation for this chat and reports where its mapping document lives, so the
-// caller patches the SAME document refreshContactName does, plus that document's backfill state.
+// caller patches the SAME document refreshContact does, plus that document's backfill state.
 async function resolveConversation(
   deps: InboundDeps,
   sessionId: string,
@@ -180,7 +180,7 @@ async function resolveConversation(
   // Dual lookup (re-read inside the lock): the raw chatId finds a mapping keyed by @lid, the canonical
   // chatId finds one keyed by @c.us (a contact that has since migrated to @lid, when the lid resolves) —
   // so a migrated contact's inbound lands in its EXISTING conversation instead of splitting a duplicate.
-  // `foundKey` is the key the mapping actually lives under, so refreshContactName patches the right doc
+  // `foundKey` is the key the mapping actually lives under, so refreshContact patches the right doc
   // AND the 404-recovery path knows which forward key to unlink (a migrated contact's stale row is under
   // the canonical key, NOT msg.chatId — unlinking the raw id would miss it entirely).
   let existing = await deps.store.getByChat(sessionId, msg.chatId);
@@ -190,7 +190,7 @@ async function resolveConversation(
     foundKey = canonicalChatId;
   }
   if (existing) {
-    await refreshContactName(deps, sessionId, msg, existing, foundKey);
+    await refreshContact(deps, sessionId, msg, existing, foundKey, canonicalChatId);
     return {
       conversationId: existing.conversationId,
       key: foundKey,

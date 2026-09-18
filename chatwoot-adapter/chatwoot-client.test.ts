@@ -123,6 +123,16 @@ test('updateContact PUTs the new name to the contact', async () => {
   assert.deepEqual(JSON.parse(last.init!.body as string), { name: 'Budi' });
 });
 
+test('updateContact sends only the fields it was given, so neither can clear the other', async () => {
+  const { fn, calls } = fakeFetch({ 'PUT /api/v1/accounts/3/contacts/9': { body: { id: 9 } } });
+  const c = new ChatwootClient(fn, cfg);
+  await c.updateContact(9, 'Budi', '+628123');
+  assert.deepEqual(JSON.parse(calls.at(-1)!.init!.body as string), { name: 'Budi', phone_number: '+628123' });
+  await c.updateContact(9, undefined, '+628123');
+  // No `name` key at all: an absent key leaves Chatwoot's value alone, an empty one would overwrite it.
+  assert.deepEqual(JSON.parse(calls.at(-1)!.init!.body as string), { phone_number: '+628123' });
+});
+
 test('postText forwards source_id and the in_reply_to_external_id thread pointer when given', async () => {
   const { fn, calls } = fakeFetch({ 'POST /api/v1/accounts/3/conversations/55/messages': { body: { id: 1 } } });
   await new ChatwootClient(fn, cfg).postText(55, '..', { sourceId: 'wa1', inReplyToExternalId: 'wa0' });

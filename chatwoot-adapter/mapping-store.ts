@@ -19,6 +19,12 @@ export interface ChatLink {
   // Last name synced to the Chatwoot contact. Lets inbound skip a redundant rename and detect when a real
   // pushName has arrived for a contact first seeded with a bare JID. Absent on pre-0.2.0 rows.
   name?: string;
+  // Last phone_number synced to the Chatwoot contact, or one Chatwoot REFUSED with a 422 (identical for
+  // suppression: both mean "do not send this value again"). Absent means never synced, so the next inbound
+  // message tries once. Unlike `backfillDone` there is no three-state trap: mis-reading an absent `phone`
+  // costs ONE idempotent PUT of the correct value, which IS the fix for every row written before this
+  // field existed.
+  phone?: string;
   // History-import state. Kept on this document rather than in its own key: the host re-measures the
   // 50 MiB quota by stat-ing every key on every write, so key COUNT is a per-message cost. `done` and
   // `attempts` stay separate on purpose — a retry budget that ran out must never be recorded as a

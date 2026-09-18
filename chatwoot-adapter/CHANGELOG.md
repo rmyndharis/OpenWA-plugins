@@ -6,6 +6,33 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.8] - 2026-09-18
+
+### Upgrade notes
+
+- On the first inbound message after upgrading, each existing chat sends one contact update. A
+  `phone_number` that was edited by hand in Chatwoot is replaced by the number derived from the chat id,
+  once. After that the recorded value suppresses further updates.
+
+### Fixed
+
+- **A Chatwoot contact created without a phone number now gets one on that chat's next inbound
+  message.** The only contact-update path sent the name alone, so a contact created before WhatsApp
+  revealed the number, and every contact created by a release older than 0.5.7, stayed blank
+  permanently. The number rides the same update, is sent once per chat and only while the adapter has
+  no number recorded for it, and a value Chatwoot rejects is recorded rather than retried on every
+  later message. Groups and a still-unresolved privacy id (`@lid`) remain without a number.
+- **An own-send that rebuilds a deleted Chatwoot conversation no longer creates the contact without a
+  phone number.** That path read the sender phone from the message payload, which a plugin never
+  receives, instead of deriving the number from the chat id like every other creation path.
+- **A contact adopted from an existing Chatwoot record is no longer left with a stale name.** The
+  mapping recorded the name the adapter wanted rather than what Chatwoot ended up holding, which
+  suppressed the update that would have synced it. Nothing is recorded at creation now, so the next
+  inbound message syncs both fields once.
+- A phone number that is not valid E.164 is no longer sent at all. Chatwoot refuses the whole contact
+  write on such a value, and on the create path that refusal reached the retry queue and then the
+  dead-letter queue.
+
 ## [0.9.7] - 2026-09-05
 
 ### Fixed

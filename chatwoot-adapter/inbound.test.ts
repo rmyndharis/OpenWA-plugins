@@ -6,7 +6,7 @@ import type { IncomingMessage } from '../types/openwa';
 
 const msg = {
   id: 'm1', from: '621@c.us', to: 'y', chatId: '621@c.us', body: 'hello', type: 'chat',
-  timestamp: 0, fromMe: false, isGroup: false, senderPhone: '+621', contact: { pushName: 'Budi' },
+  timestamp: 0, fromMe: false, isGroup: false, contact: { pushName: 'Budi' },
 } as IncomingMessage;
 
 function makeDeps(
@@ -38,6 +38,7 @@ function makeDeps(
       return { id: 1 };
     },
     postMedia: async () => ({ id: 2 }),
+    updateContact: async () => {},
     ...over.client,
   };
   // unlinkByChatId + unlinkByConversationId default to actual map deletes against the SAME backing `store`
@@ -114,7 +115,7 @@ test('reusing a @c.us mapping via @lid dual-lookup patches the name under the @c
   const lidMsg = { ...msg, id: 'x3', chatId: '621@lid', contact: { pushName: 'Budi' } } as IncomingMessage;
   await handleInbound(d, 'sess', 'Engine', lidMsg);
   assert.deepEqual(renames, ['Budi']); // the @c.us contact is renamed correctly
-  assert.deepEqual(patches, [['621@c.us', { name: 'Budi' }]]); // and the name is recorded under the @c.us key
+  assert.deepEqual(patches, [['621@c.us', { name: 'Budi', phone: '+621' }]]); // recorded under the @c.us key
 });
 
 test('a failed relay queues the message for retry (at-least-once), not dropped', async () => {
@@ -214,6 +215,7 @@ test('refreshes an @lid contact name once a real pushName arrives (#609)', async
   const lidMsg = { ...msg, id: 'x1', chatId: '621@lid', contact: { pushName: 'Budi' } } as IncomingMessage;
   await handleInbound(d, 'sess', 'Engine', lidMsg);
   assert.deepEqual(updates, [[9, 'Budi']]);
+  // No phone: an unresolved @lid canonicalizes to itself, so there is no MSISDN to derive.
   assert.deepEqual(patches, [{ name: 'Budi' }]);
 });
 
@@ -221,7 +223,9 @@ test('does not rename when the stored name already matches (#609)', async () => 
   const updates: unknown[] = [];
   const { deps: d } = makeDeps({
     client: { updateContact: async (id: number, name: string) => void updates.push([id, name]) },
-    store: { getByChat: async () => ({ conversationId: 55, contactId: 9, sourceId: 'src', name: 'Budi' }) },
+    store: {
+      getByChat: async () => ({ conversationId: 55, contactId: 9, sourceId: 'src', name: 'Budi', phone: '+621' }),
+    },
   });
   await handleInbound(d, 'sess', 'Engine', { ...msg, chatId: '621@lid', contact: { pushName: 'Budi' } } as IncomingMessage);
   assert.equal(updates.length, 0);
@@ -671,4 +675,91 @@ test('a 404 on the REBUILT inbound conversation propagates to the retry queue (n
     logCalls.some(l => /inbound 404-recovery failed/.test(l)),
     'logs the recovery failure so ops can see why the rebuild itself failed',
   );
+});
+
+// ── contact phone backfill (#114) ────────────────────────────────────────────
+
+test('fills the phone number on a contact that has none, even when the name already matches (#114)', async () => {
+  const updates: Array<[number, string | undefined, string | undefined]> = [];
+  const patches: Array<Record<string, unknown>> = [];
+  const { deps: d } = makeDeps({
+    client: {
+      updateContact: async (id: number, name?: string, phone?: string) => void updates.push([id, name, phone]),
+    },
+    store: {
+      // A contact created before the number was derivable: name in sync, no phone recorded.
+      getByChat: async () => ({ conversationId: 55, contactId: 9, sourceId: 'src', name: 'Budi' }),
+      patch: async (_s: string, _c: string, patch: Record<string, unknown>) => void patches.push(patch),
+    },
+  });
+  await handleInbound(d, 'sess', 'Engine', msg);
+  assert.deepEqual(updates, [[9, undefined, '+621']]); // phone alone; the name is not re-sent
+  assert.deepEqual(patches, [{ phone: '+621' }]);
+});
+
+test('a phone Chatwoot refuses with 422 is recorded, so it is never re-sent (#114)', async () => {
+  const updates: unknown[] = [];
+  const patches: Array<Record<string, unknown>> = [];
+  let stored: Record<string, unknown> = { conversationId: 55, contactId: 9, sourceId: 'src', name: 'Old Name' };
+  const { deps: d, posted } = makeDeps({
+    client: {
+      updateContact: async (...args: unknown[]) => {
+        updates.push(args);
+        throw Object.assign(new Error('Phone number has already been taken'), { status: 422 });
+      },
+    },
+    store: {
+      getByChat: async () => stored,
+      patch: async (_s: string, _c: string, patch: Record<string, unknown>) => {
+        patches.push(patch);
+        stored = { ...stored, ...patch };
+      },
+    },
+  });
+  await handleInbound(d, 'sess', 'Engine', msg);
+  assert.equal(posted.length, 1); // the refusal never blocks the relay
+  assert.deepEqual(updates[0], [9, 'Budi', '+621']); // both fields rode the same PUT
+  assert.deepEqual(patches, [{ phone: '+621' }]); // only the phone is recorded, despite the 422
+  await handleInbound(d, 'sess', 'Engine', { ...msg, id: 'm2' } as IncomingMessage);
+  // The name is re-sent alone, and succeeds now that the phone is suppressed.
+  assert.deepEqual(updates[1], [9, 'Budi', undefined]);
+});
+
+test('does not record a name or phone it cannot know Chatwoot holds (#114)', async () => {
+  const links: Array<Record<string, unknown>> = [];
+  const { deps: d } = makeDeps({
+    // A contact that already exists in Chatwoot for this inbox: createContact never runs. The same holds
+    // when it DOES run and 422s into one of its adoption branches, which is why nothing is recorded.
+    client: { searchContact: async () => ({ id: 9, sourceId: 'src' }) },
+    store: {
+      getByChat: async () => null,
+      link: async (_s: string, _c: string, _i: string, l: Record<string, unknown>) => void links.push(l),
+    },
+  });
+  await handleInbound(d, 'sess', 'Engine', msg);
+  assert.equal(links.length, 1);
+  assert.equal('name' in links[0], false);
+  assert.equal('phone' in links[0], false);
+});
+
+test('a non-422 failure leaves the phone unrecorded, so it is retried (#114)', async () => {
+  const updates: unknown[] = [];
+  const patches: Array<Record<string, unknown>> = [];
+  const { deps: d, posted } = makeDeps({
+    client: {
+      updateContact: async (...args: unknown[]) => {
+        updates.push(args);
+        throw Object.assign(new Error('chatwoot 503'), { status: 503 });
+      },
+    },
+    store: {
+      getByChat: async () => ({ conversationId: 55, contactId: 9, sourceId: 'src', name: 'Budi' }),
+      patch: async (_s: string, _c: string, patch: Record<string, unknown>) => void patches.push(patch),
+    },
+  });
+  await handleInbound(d, 'sess', 'Engine', msg);
+  assert.equal(posted.length, 1); // still never blocks the relay
+  assert.deepEqual(patches, []); // nothing recorded: a transient failure must not suppress the retry
+  await handleInbound(d, 'sess', 'Engine', { ...msg, id: 'm2' } as IncomingMessage);
+  assert.equal(updates.length, 2); // so the next message tries again
 });

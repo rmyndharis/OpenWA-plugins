@@ -140,10 +140,14 @@ export function resolvePhone(
   canonicalChatId: string,
 ): string | undefined {
   if (msg.isGroup) return undefined;
-  // Digits only, prefixed `+`; undefined if nothing survives (a host error like '--' must not emit a bare '+').
+  // Digits only, prefixed `+`, and only when the result is really E.164. Chatwoot validates the field
+  // ("Phone number should be in e164 format", 422) and refuses the WHOLE contact write on a miss, which
+  // the CREATE path cannot absorb: createContact's 422 handler only recovers from a uniqueness clash, so
+  // a malformed value rethrows and burns the message's retry budget into the dead-letter queue. Emitting
+  // nothing is strictly better than emitting a value the API rejects. Subsumes the old bare-'+' guard.
   const e164 = (raw: string): string | undefined => {
-    const digits = raw.replace(/\D/g, '');
-    return digits ? `+${digits}` : undefined;
+    const phone = `+${raw.replace(/\D/g, '')}`;
+    return /^\+[1-9]\d{1,14}$/.test(phone) ? phone : undefined;
   };
   if (msg.senderPhone) {
     const phone = e164(msg.senderPhone);
@@ -175,7 +179,12 @@ export async function ensureConversation(
     conversationId,
     contactId: contact.id,
     sourceId: contact.sourceId,
-    name: meta.name,
+    // Deliberately records NEITHER name nor phone, even when createContact just sent them. This function
+    // cannot know what Chatwoot ended up holding: the search may have hit an existing contact, or
+    // createContact may have 422'd on the identifier OR on the phone and adopted a row it never wrote
+    // either field to. Recording our own guess would make refreshContact believe both sides are in sync
+    // and suppress the sync forever. Absent is the documented "never synced" state, so the next inbound
+    // message sends both once, idempotently, and records what actually landed.
     // "Not yet imported" is written down, never inferred from a missing field. Every mapping an earlier
     // release wrote carries no backfill fields at all, so a trigger of `!backfillDone` would read them
     // as unimported and replay each chat's whole window into a conversation that was already imported —
@@ -189,23 +198,39 @@ export async function ensureConversation(
 // yet). Once a real pushName arrives, update the contact so agents see a human name instead of an id
 // (#609 P1). Best-effort and only when the name actually changed — never blocks the relay, never overwrites
 // a real name with a fallback (only pushName/name qualify, not senderPhone/JID).
-export async function refreshContactName(
+//
+// The phone rides the same PUT. Nothing else ever wrote it after creation, so a contact created before
+// the number was derivable, and every contact created by a release older than 0.5.7, stayed blank
+// forever. Sent once per contact: the stored value is what suppresses a repeat.
+export async function refreshContact(
   deps: InboundDeps,
   sessionId: string,
   msg: IncomingMessage,
   link: ChatLink,
   chatKey: string,
+  canonicalChatId: string,
 ): Promise<void> {
   if (msg.isGroup) return; // a group contact is named for the group, not whoever sent this message
-  const desired = msg.contact?.pushName || msg.contact?.name;
-  if (!desired || desired === link.name) return;
+  const desiredName = msg.contact?.pushName || msg.contact?.name;
+  const desiredPhone = resolvePhone(msg, canonicalChatId);
+  const name = desiredName && desiredName !== link.name ? desiredName : undefined;
+  const phone = desiredPhone && desiredPhone !== link.phone ? desiredPhone : undefined;
+  if (!name && !phone) return;
   try {
-    await deps.client.updateContact(link.contactId, desired);
+    await deps.client.updateContact(link.contactId, name, phone);
     // Patch under the key the mapping ACTUALLY lives under (`chatKey`), not msg.chatId: on the @lid dual-
     // lookup path the mapping is keyed @c.us while msg.chatId is @lid, so patching msg.chatId would be a
     // no-op and the name would never be recorded — re-issuing updateContact on every later inbound.
-    await deps.store.patch(sessionId, chatKey, { name: desired });
+    await deps.store.patch(sessionId, chatKey, { ...(name ? { name } : {}), ...(phone ? { phone } : {}) });
   } catch (err) {
-    deps.log('contact name refresh failed', err);
+    // A 422 is Chatwoot refusing the VALUE: "Phone number has already been taken", i.e. the number
+    // belongs to another contact in the account. Record it anyway, or the `phone !== link.phone` guard
+    // re-issues the same doomed PUT on every later message of this chat, forever. Any other status stays
+    // unrecorded and therefore retryable, so a 503 does not lose the phone. A name that rode along is
+    // lost with the 422; the next message re-sends it alone and succeeds, the phone now being recorded.
+    if (phone && (err as { status?: number } | null)?.status === 422) {
+      await deps.store.patch(sessionId, chatKey, { phone }).catch(() => undefined);
+    }
+    deps.log('contact refresh failed', err);
   }
 }

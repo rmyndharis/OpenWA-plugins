@@ -24,6 +24,14 @@ test('senderPhone that strips to empty digits falls through to the canonical sou
   );
 });
 
+test('a canonical user-part that is not valid E.164 yields no phone at all', () => {
+  // Chatwoot validates phone_number as E.164 and 422s the WHOLE contact write on a miss, which the create
+  // path cannot absorb: createContact's 422 handler only recovers from a uniqueness clash, so a malformed
+  // value rethrows and burns the message's retry budget into the dead-letter queue.
+  assert.equal(resolvePhone({ isGroup: false }, '1183678901234780@c.us'), undefined); // 16 digits, over E.164
+  assert.equal(resolvePhone({ isGroup: false }, '0621@c.us'), undefined); // a leading zero is not E.164
+});
+
 test('canonical `<digits>@c.us` is the phone when senderPhone is absent', () => {
   assert.equal(resolvePhone({ isGroup: false }, '1234567890@c.us'), '+1234567890');
   assert.equal(resolvePhone({ isGroup: false, senderPhone: null }, '6281234567@c.us'), '+6281234567');

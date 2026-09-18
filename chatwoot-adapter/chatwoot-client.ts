@@ -139,8 +139,14 @@ export class ChatwootClient {
     return src;
   }
 
-  async updateContact(contactId: number, name: string): Promise<void> {
-    await this.json(`${this.base()}/contacts/${contactId}`, { method: 'PUT', body: JSON.stringify({ name }) });
+  // `name` stays first and positional so existing callers are unchanged. Chatwoot accepts both keys on
+  // one PUT and ignores absent ones, so a name-only body cannot clear `phone_number` and a phone-only
+  // body cannot clear the name (verified against Chatwoot 4.16.0).
+  async updateContact(contactId: number, name?: string, phone?: string): Promise<void> {
+    await this.json(`${this.base()}/contacts/${contactId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ ...(name ? { name } : {}), ...(phone ? { phone_number: phone } : {}) }),
+    });
   }
 
   async findOpenConversation(contactId: number): Promise<number | null> {

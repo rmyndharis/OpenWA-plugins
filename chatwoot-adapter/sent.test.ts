@@ -294,3 +294,41 @@ test('a 404 on the REBUILT own-send conversation logs failure (sent is at-most-o
     'logs the unrecoverable own-send failure (sent does not retry)',
   );
 });
+
+test('an own-send rebuild creates the contact WITH the recipient phone derived from the chat id (#114)', async () => {
+  // The 404-recovery test above stubs searchContact to a hit, so createContact never runs there and the
+  // phone it would be given is asserted by nothing. This drives the create path: the number must come
+  // from the canonical chat id, never from msg.senderPhone, which on an own send would be the account's
+  // OWN number and which a plugin's hook payload never carries in the first place.
+  const createArgs: Array<[string, string, string | undefined]> = [];
+  const links = new Map<string, unknown>([
+    ['sess:621@c.us', { conversationId: 55, contactId: 9, sourceId: 'oldSrc', name: 'x' }],
+  ]);
+  const { deps: d } = deps({
+    store: {
+      getByChat: async (_s: string, c: string) => links.get(`sess:${c}`) ?? null,
+      link: async (_s: string, c: string, _i: string, l: unknown) => void links.set(`sess:${c}`, l),
+      unlinkByChatId: async (_s: string, c: string) => void links.delete(`sess:${c}`),
+      unlinkByConversationId: async () => {},
+    },
+    client: {
+      postText: async (id: number) => {
+        if (id === 55) {
+          const e = new Error('Chatwoot POST -> 404') as Error & { status?: number };
+          e.status = 404;
+          throw e;
+        }
+        return { id: 1 };
+      },
+      searchContact: async () => null, // no existing contact: the create path runs
+      createContact: async (identifier: string, name: string, phone?: string) => {
+        createArgs.push([identifier, name, phone]);
+        return { id: 9, sourceId: 'newSrc' };
+      },
+      findOpenConversation: async () => null,
+      createConversation: async () => 77,
+    },
+  });
+  await handleSent(d, 'sess', 'Engine', own);
+  assert.deepEqual(createArgs, [['621@c.us', '621@c.us', '+621']]);
+});
