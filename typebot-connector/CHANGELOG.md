@@ -6,6 +6,13 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-24
+
+### Fixed
+
+- A bullet list written with `*` or `+` reaches WhatsApp as a list; it was read as italic and could
+  run across lines.
+
 ## [0.3.1] - 2026-09-24
 
 ### Added
