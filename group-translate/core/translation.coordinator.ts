@@ -92,8 +92,20 @@ export class TranslationCoordinator {
     private readonly logger: TranslationLogger = NOOP_LOGGER,
   ) {}
 
+  /** True when handleMessage would run `msg` as a command, with the same gate and the same prefix. */
+  isCommand(msg: InboundMessage): boolean {
+    return msg.isGroup && !msg.fromMe && !!msg.author && parseCommand(msg.body, this.opts.prefix) !== null;
+  }
+
   async handleMessage(sessionId: string, msg: InboundMessage): Promise<{ swallow: boolean }> {
     if (!msg.isGroup || msg.fromMe || !msg.author) return { swallow: false };
+    // Delivered long after it was sent (a reconnect replay): a translation would quote a message the
+    // group has moved past, and a command could apply stale or out of order (a replay is dispatched
+    // several at a time, not in send order). A command is still claimed so no responder answers it.
+    if (msg.late) {
+      this.logger.debug('message delivered late; not translated or run', { action: 'translation_skipped_late' });
+      return { swallow: this.isCommand(msg) };
+    }
     // Concurrent messages for the same group must not interleave load→mutate→save (lost updates /
     // duplicate announcements). Chain each behind the previous for the same key; store a settled tail
     // so one rejection can't wedge the chain, and evict the entry once the chain drains.
@@ -347,7 +359,16 @@ export class TranslationCoordinator {
     // lines up, but unbounded. Routing these through authorize is the fix rather than a second
     // cooldown, because with the default denyReply:false an unauthorized attempt now says nothing at
     // all, and it also puts the unvalidated-language write below behind an admin.
-    const admins = await this.gateway.getGroupAdmins(sessionId, msg.chatId);
+    // An admin list the host could not read counts as an empty one, the outcome a null group read
+    // already gives. From OpenWA 0.23.6 a whatsapp-web.js read that outruns the protocol timeout throws
+    // where it used to return null.
+    const admins = await this.gateway.getGroupAdmins(sessionId, msg.chatId).catch((error: unknown) => {
+      this.logger.warn('group admin lookup failed; no sender is recognized as an admin', {
+        action: 'translation_admin_lookup_failed',
+        error: String(error),
+      });
+      return [];
+    });
     const { isAdmin, isController } = await this.authorize(sessionId, msg, state, admins);
     const adminOnly = cmd.name === 'grant' || cmd.name === 'revoke';
     if ((adminOnly && !isAdmin) || (!adminOnly && !isController)) {
@@ -532,13 +553,19 @@ export class TranslationCoordinator {
   }
 
   /** Memoized {@link ChatGateway.resolveCanonicalWid}. A null (unresolvable) answer is cached too —
-   *  retrying it on every command would spend a round-trip per denial on a wid the host cannot map. */
+   *  retrying it on every command would spend a round-trip per denial on a wid the host cannot map.
+   *  A lookup that got no answer is not "unresolvable": it reads as null now and is asked again next time. */
   private async canonicalWid(sessionId: string, wid: string): Promise<string | null> {
     const key = `${sessionId}:${wid}`;
     const hit = this.canonicalWids.get(key);
     if (hit !== undefined) return hit;
 
-    const resolved = await this.gateway.resolveCanonicalWid(sessionId, wid);
+    let resolved: string | null;
+    try {
+      resolved = await this.gateway.resolveCanonicalWid(sessionId, wid);
+    } catch {
+      return null;
+    }
     // Bounded: one entry per distinct author the plugin has had to resolve. Evict oldest-first (Map
     // preserves insertion order) rather than growing without limit in a busy multi-group deployment.
     if (this.canonicalWids.size >= MAX_CANONICAL_WIDS) {

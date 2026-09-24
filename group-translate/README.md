@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `group-translate` |
-| **Version** | 1.3.8 |
-| **Released** | 2026-09-23 |
+| **Version** | 1.3.9 |
+| **Released** | 2026-09-24 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -127,6 +127,12 @@ product title as the body. Earlier hosts deliver both as `unknown`, which the pl
 from other messages. On Baileys a share of a whole catalog still arrives as `unknown` with the catalog
 title as its body, and is translated like any other text.
 
+Messages delivered late are not acted on. From OpenWA 0.23.6 a Baileys session delivers, after it
+reconnects, the messages WhatsApp queued while it was disconnected. A message that reaches the plugin
+more than 5 minutes after it was sent is not translated, and a `/tr` command that late is not run,
+though it is still kept from other bots: send it again once the session is back. The check compares
+the message's WhatsApp send time with the gateway's clock, so keep that clock in sync.
+
 ### Per-session config
 
 **Supported, with a caveat.** Every config field may be overridden per WhatsApp session via the
@@ -166,7 +172,10 @@ The API key travels only in the request body to the allow-listed host and is sto
 Commands that change group state are admin-gated via `ctx.engine.getGroupInfo`. When WhatsApp delivers the
 author under its `@lid` privacy id, the plugin resolves that to the author's phone identity through
 `ctx.engine.getContactById` before comparing — resolution widens *recognition*, never permission: an
-author who resolves to someone outside the admin and delegated-controller lists is still refused. The
+author who resolves to someone outside the admin and delegated-controller lists is still refused. If
+WhatsApp does not return the group's admin list, nobody counts as an admin for that command (delegated
+controllers still do), and `denyReply` decides whether the sender is told. A `/tr` command is claimed
+as soon as it is recognized, so no other plugin answers it even when the lookup is slow. The
 per-call timeout (≤ the host hook budget) and circuit breaker keep a slow backend from stalling the host.
 
 ## Changelog
