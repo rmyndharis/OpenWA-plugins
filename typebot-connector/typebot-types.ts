@@ -23,7 +23,9 @@ export type Bubble =
 export type InputSpec =
   | { kind: 'choice'; blockId: string; items: ChoiceItem[]; multiple: boolean }
   | { kind: 'rating'; blockId: string; max?: number }
-  | { kind: 'file'; blockId: string }
+  // `placeholder` is the author's plain-text placeholder, never markup. `skipLabel` is set only for an
+  // optional step; its absence, including on rows persisted by 0.2.10, means required (Typebot's default).
+  | { kind: 'file'; blockId: string; placeholder?: string; skipLabel?: string }
   | { kind: 'text'; blockId: string; placeholder?: string; attachmentsEnabled: boolean }
   | { kind: 'unsupported'; blockId: string; typeLabel: string };
 
@@ -51,4 +53,5 @@ export type OutgoingPart =
 export type ReplyIntent =
   | { kind: 'text'; message: string }                                   // send as the continueChat message string
   | { kind: 'file'; mime: string; filename: string; data: string }      // base64 data → upload, then continueChat
-  | { kind: 'fallback'; text: string };                                 // send this text to WA and DO NOT advance
+  | { kind: 'fallback'; text: string }                                  // send this text to WA and DO NOT advance
+  | { kind: 'skip' };                                                   // continueChat with no message: how Typebot skips an optional file step

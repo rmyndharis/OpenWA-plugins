@@ -19,6 +19,11 @@ export interface TurnDeps {
   log: (m: string, e?: unknown) => void;
 }
 
+// From OpenWA 0.23.6 a Baileys session delivers, after it reconnects, what WhatsApp queued while it was
+// disconnected, each message with its original send time. Five minutes is far above the clock skew
+// between WhatsApp and the gateway and matches the host's own auto-reply age limit.
+export const LATE_AFTER_MS = 5 * 60_000;
+
 // One WhatsApp message → one Typebot turn. Runs under the per-key lock so concurrent messages from the same
 // chat serialize (a concurrent continueChat would race the same server session row).
 export async function handleTurn(deps: TurnDeps, sessionId: string, source: string, msg: IncomingMessage): Promise<void> {
@@ -27,7 +32,16 @@ export async function handleTurn(deps: TurnDeps, sessionId: string, source: stri
 
   await deps.lock.run(key, async () => {
     let state = await deps.store.get(key);
-    if (state && deps.now() - state.lastActivity > deps.cfg.sessionTimeoutMinutes * 60_000) state = null; // idle reset
+    // When the contact wrote. `timestamp` is unix seconds; a missing, zero, negative, unrepresentable or
+    // future one counts as now.
+    const now = deps.now();
+    const sent = new Date((msg.timestamp ?? 0) * 1000);
+    const at = sent.getTime() > 0 ? Math.min(sent.getTime(), now) : now;
+    // Idle is judged at the send time, so a reply typed during an outage still answers the step it saw.
+    if (state && at - state.lastActivity > deps.cfg.sessionTimeoutMinutes * 60_000) state = null; // idle reset
+    // Delivered late AND written well before the current step went out: the contact never saw that
+    // prompt, so this is not its answer. index.ts has already claimed it; nothing is sent or stored.
+    if (state && now - at > LATE_AFTER_MS && state.lastActivity - at > LATE_AFTER_MS) return;
 
     const prefilled = deps.cfg.passContactVariables ? contactVars(msg) : undefined;
     let resp;
@@ -41,7 +55,7 @@ export async function handleTurn(deps: TurnDeps, sessionId: string, source: stri
         await send(deps, sessionId, msg, { type: 'text', text: intent.text });
         return; // stay on the same input
       }
-      let message: ContinueMessage;
+      let message: ContinueMessage | undefined;
       if (intent.kind === 'file') {
         let url: string;
         try {
@@ -61,9 +75,10 @@ export async function handleTurn(deps: TurnDeps, sessionId: string, source: stri
         message = state.awaiting.kind === 'file'
           ? { type: 'text', text: url }
           : { type: 'text', text: '', attachedFileUrls: [url] };
-      } else {
+      } else if (intent.kind === 'text') {
         message = intent.message;
       }
+      // A 'skip' leaves `message` undefined, which is how Typebot skips an optional file step.
       try {
         resp = await deps.client.continueChat(state.sessionId, message);
       } catch (e) {

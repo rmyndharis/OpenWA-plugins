@@ -230,3 +230,83 @@ test('a rejected state write still delivers the turn the server has already adva
   assert.deepEqual(sent.map(s => s.text), ['Halo, ada yang bisa dibantu?'], 'the turn is still delivered');
   assert.ok(logged.some(l => /state write failed/i.test(l)), 'and the lost row is recorded, not silent');
 });
+
+// ── Late delivery ────────────────────────────────────────────────────────────────────────────────────
+// From OpenWA 0.23.6 a Baileys session delivers, after it reconnects, what WhatsApp queued while it was
+// disconnected, each message with its original send time. A message written before a step was shown
+// cannot be its answer.
+
+const NOW = Date.UTC(2026, 8, 24, 12);
+const ago = (min: number) => (NOW - min * 60_000) / 1000; // unix seconds, as the host sends it
+const choiceStep: NormalizedResponse['input'] = { kind: 'choice', blockId: 'q', multiple: false, items: [
+  { id: '1', content: 'Sales' }, { id: '2', content: 'Support' },
+] };
+
+function flowDeps() {
+  const calls = { starts: 0, answers: [] as unknown[] };
+  const r = deps({
+    startChat: () => { calls.starts++; return { sessionId: 'S1', bubbles: [{ kind: 'text', markdown: 'Hi' }], input: choiceStep }; },
+    continueChat: (_s: string, m: unknown) => { calls.answers.push(m); return { bubbles: [], input: choiceStep }; },
+  });
+  r.d.now = () => NOW;
+  return { ...r, calls };
+}
+
+test('a backlog replayed after a reconnect starts the flow once and answers none of it', async () => {
+  const { d, sent, store, calls } = flowDeps();
+  await Promise.all([
+    handleTurn(d, 'sess', 'Engine', msg({ body: 'hi', timestamp: ago(60) })),
+    handleTurn(d, 'sess', 'Engine', msg({ body: '2', timestamp: ago(59) })),
+    handleTurn(d, 'sess', 'Engine', msg({ body: 'John', timestamp: ago(58) })),
+  ]);
+  assert.equal(calls.starts, 1);
+  assert.deepEqual(calls.answers, []);
+  assert.deepEqual(sent.map(s => s.text), ['Hi', '1. Sales\n2. Support']);
+  assert.deepEqual((await store.get('sess:c@c.us'))?.awaiting, choiceStep);
+});
+
+test('a reply typed during an outage to a step shown before it still answers it', async () => {
+  const { d, store, calls } = flowDeps();
+  await store.set('sess:c@c.us', { sessionId: 'S1', awaiting: choiceStep!, lastActivity: NOW - 45 * 60_000 });
+  await handleTurn(d, 'sess', 'Engine', msg({ body: '2', timestamp: ago(40) }));
+  assert.equal(calls.starts, 0, 'not reset as idle: it was written 5 minutes after the step, inside the 30-minute window');
+  assert.deepEqual(calls.answers, ['Support']);
+});
+
+test('fast typing within the skew tolerance is still live', async () => {
+  const { d, store, calls } = flowDeps();
+  await store.set('sess:c@c.us', { sessionId: 'S1', awaiting: choiceStep!, lastActivity: NOW });
+  await handleTurn(d, 'sess', 'Engine', msg({ body: '2', timestamp: ago(2) }));
+  assert.deepEqual(calls.answers, ['Support']);
+});
+
+test('exactly five minutes on either bound is still live', async () => {
+  // Written exactly 5 minutes before the step went out; then delivered exactly 5 minutes late after the
+  // gateway clock stepped back a minute. Only strictly more than 5 minutes on both counts is late.
+  for (const [lastActivity, written] of [[NOW - 5 * 60_000, 10], [NOW + 60_000, 5]]) {
+    const { d, store, calls } = flowDeps();
+    await store.set('sess:c@c.us', { sessionId: 'S1', awaiting: choiceStep!, lastActivity });
+    await handleTurn(d, 'sess', 'Engine', msg({ body: '2', timestamp: ago(written) }));
+    assert.deepEqual(calls.answers, ['Support'], `written ${written} minutes ago`);
+  }
+});
+
+test('a missing, unusable or future send time counts as now', async () => {
+  for (const timestamp of [undefined, 0, -1, NaN, null, 1e30, ago(-60)]) {
+    const { d, store, calls } = flowDeps();
+    await store.set('sess:c@c.us', { sessionId: 'S1', awaiting: choiceStep!, lastActivity: NOW });
+    await handleTurn(d, 'sess', 'Engine', msg({ body: '2', timestamp: timestamp as number }));
+    assert.equal(calls.starts, 0, `timestamp ${timestamp}`);
+    assert.deepEqual(calls.answers, ['Support'], `timestamp ${timestamp}`);
+  }
+});
+
+test('at an optional file step a late skip word is ignored and a live one skips', async () => {
+  const { d, sent, store, calls } = flowDeps();
+  await store.set('sess:c@c.us', { sessionId: 'S1', awaiting: { kind: 'file', blockId: 'f', skipLabel: 'Lewati' }, lastActivity: NOW });
+  await handleTurn(d, 'sess', 'Engine', msg({ body: 'Lewati', timestamp: ago(60) }));
+  assert.deepEqual(sent, [], 'the late one gets no answer, not even a fallback');
+  assert.deepEqual(calls.answers, []);
+  await handleTurn(d, 'sess', 'Engine', msg({ body: 'Lewati', timestamp: ago(0) }));
+  assert.deepEqual(calls.answers, [undefined]);
+});

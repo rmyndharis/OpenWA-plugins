@@ -8,6 +8,14 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.12] - 2026-09-24
+
+### Fixed
+
+- **A message older than five minutes is no longer answered.** From OpenWA 0.23.6 a Baileys session
+  delivers what WhatsApp queued during a disconnect, so a long outage ended in a burst of rule answers
+  and fallback replies quoting old messages.
+
 ## [0.2.11] - 2026-09-23
 
 ### Fixed
