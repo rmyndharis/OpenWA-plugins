@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `faq-bot` |
-| **Version** | 0.2.11 |
-| **Released** | 2026-09-23 |
+| **Version** | 0.2.12 |
+| **Released** | 2026-09-24 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -95,6 +95,13 @@ both carry text in the message body, and a vCard is free text that matches ordin
 OpenWA 0.23.5 a Baileys session carries the order note or product title in the body. Tapped business
 buttons and list replies are still answered. A Baileys whole-catalog share arrives as type `unknown`
 with the catalog title as its body, so it can still match a rule or draw the fallback.
+
+A message is answered only within five minutes of when it was sent. From OpenWA 0.23.6 a Baileys
+session delivers the messages WhatsApp queued during a disconnect once it reconnects; after a longer
+outage those are left unanswered instead of drawing a burst of replies, quoted to old messages, into
+chats that may already have been answered from the phone. One that matches a rule is still claimed, so
+no other bot answers it; one that matches nothing passes down the chain. The age is measured against
+the gateway's clock, so keep it in sync.
 
 ### Per-session config
 
