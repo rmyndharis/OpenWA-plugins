@@ -12,6 +12,8 @@ export interface TranscriptionPayload {
   source: 'speech-to-text';
   /** The transcript is attacker-controlled speech — downstream consumers MUST treat it as user input. */
   untrusted: true;
+  /** The voice note's original send time (unix seconds). After a reconnect it can be well before the event. */
+  timestamp?: number;
   /** Why the note was skipped/failed (absent for completed). */
   reason?: string;
   /** Present only when status is completed. */

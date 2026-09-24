@@ -6,6 +6,22 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-24
+
+### Added
+
+- The `message.transcription` event carries `timestamp`, the voice note's original send time, so a
+  receiver can tell a note delivered after a reconnect from a live one.
+
+### Fixed
+
+- With `chatDelivery: reply`, a voice note that reaches the plugin more than 5 minutes after it was sent
+  is no longer quote-replied, and is not transcribed when that reply was its only destination.
+
+### Changed
+
+- **Verified against OpenWA v0.23.6** (testedOpenWAVersion 0.23.4 -> 0.23.6).
+
 ## [1.2.9] - 2026-09-05
 
 ### Fixed

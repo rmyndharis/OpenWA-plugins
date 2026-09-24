@@ -32,6 +32,11 @@ const LEGACY_SWEEP_PER_RUN = 25;
 // Only the claim is serialized; the STT call and delivery stay concurrent.
 const claimTails = new Map<string, Promise<unknown>>();
 
+// From OpenWA 0.23.6 a Baileys session delivers, after it reconnects, what WhatsApp queued while it was
+// disconnected, each message with its original send time. Five minutes is far above clock skew between
+// WhatsApp and the gateway and matches the host's own auto-reply age limit.
+const LATE_AFTER_MS = 5 * 60_000;
+
 export interface CoordinatorLogger {
   warn(message: string, meta?: Record<string, unknown>): void;
 }
@@ -80,7 +85,7 @@ export interface CoordinatorDeps {
   providerLabel: string;
   model: string;
   logger: CoordinatorLogger;
-  /** Injectable clock for the hourly rate-limit bucket (defaults to Date.now). */
+  /** Injectable clock for the hourly rate-limit bucket and the late check (defaults to Date.now). */
   now?: () => number;
 }
 
@@ -114,6 +119,11 @@ export class TranscriptionCoordinator {
       if (!config.enabledMessageTypes.includes(msg.type)) return;
       if (!msg.media) return;
 
+      // Judged once, on arrival, so a slow STT call cannot tip a live note over the bound. A missing or
+      // unusable send time, or one ahead of the gateway clock, reads as live.
+      const sent = new Date((msg.timestamp ?? 0) * 1000);
+      const late = sent.getTime() > 0 && this.now() - sent.getTime() > LATE_AFTER_MS;
+
       // Idempotency first, so every outcome (including skips) fires at most once per message id. Kept in
       // durable storage rather than memory: with chatDelivery 'reply' a duplicate transcript is a second
       // quote-reply the CONTACT sees, so this has to survive a worker restart, which is exactly when
@@ -134,6 +144,13 @@ export class TranscriptionCoordinator {
       });
       if (!claimed) return;
       await this.sweepLegacySeen(sessionId);
+
+      // A late note is never quote-replied (see emit), so when that reply is the only sink nobody would
+      // receive the transcript: skip before spending STT money or a slot of the hourly cap on it.
+      if (late && this.deps.chatDelivery === 'reply' && !this.deps.delivery) {
+        await this.emit(sessionId, msg, { status: 'skipped', reason: 'late' });
+        return;
+      }
 
       const media = msg.media;
       if (media.omitted || !media.data) {
@@ -187,6 +204,7 @@ export class TranscriptionCoordinator {
 
       await this.emit(sessionId, msg, {
         status: 'completed',
+        late,
         text: result.text,
         transcription: {
           text: result.text,
@@ -240,6 +258,8 @@ export class TranscriptionCoordinator {
     o: {
       status: TranscriptionPayload['status'];
       reason?: string;
+      /** Delivered long after it was sent: goes to the webhook and `self`, never quote-replied. */
+      late?: boolean;
       text?: string;
       transcription?: NonNullable<TranscriptionPayload['transcription']>;
     },
@@ -247,6 +267,7 @@ export class TranscriptionCoordinator {
     if (o.status !== 'completed') {
       this.deps.logger.warn(`Transcription ${o.status}: ${o.reason}`, { messageId: msg.id });
     }
+    const sent = new Date((msg.timestamp ?? 0) * 1000);
     const payload: TranscriptionPayload = {
       event: 'message.transcription',
       sessionId,
@@ -255,6 +276,7 @@ export class TranscriptionCoordinator {
       status: o.status,
       source: 'speech-to-text',
       untrusted: true,
+      ...(sent.getTime() > 0 ? { timestamp: msg.timestamp } : {}),
       ...(o.reason ? { reason: o.reason } : {}),
       ...(o.transcription ? { transcription: o.transcription } : {}),
     };
@@ -272,7 +294,7 @@ export class TranscriptionCoordinator {
     }
     if (o.status === 'completed' && o.text && this.deps.chat && this.deps.chatDelivery !== 'off') {
       if (this.deps.chatDelivery === 'self') await this.deps.chat.sendText(sessionId, msg.to, o.text);
-      else await this.deps.chat.reply(sessionId, msg.chatId, msg.id, o.text);
+      else if (!o.late) await this.deps.chat.reply(sessionId, msg.chatId, msg.id, o.text);
     }
   }
 }

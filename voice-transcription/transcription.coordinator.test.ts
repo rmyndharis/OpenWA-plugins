@@ -391,3 +391,51 @@ test('a transient list() failure does not stop the legacy sweep for good', async
   await co.handle('s1', voiceMsg({ id: 'm2' }));      // storage recovers → sweep must still run
   assert.ok(!store.keys().includes('seen:s1:legacy-1'), 'the sweep resumed after the transient failure');
 });
+
+// ── Late delivery (1.3.0) ───────────────────────────────────────────────────────────────────────────
+// From OpenWA 0.23.6 a Baileys session delivers, after it reconnects, the voice notes WhatsApp queued while
+// it was disconnected, each with its original send time. A quote-reply to one of those lands in the chat
+// long after the conversation moved on.
+
+const NOW = 1_758_000_000_000;
+
+test('a late voice note is transcribed for the webhook but not quote-replied', async () => {
+  const { co, provider, deliveries, chatSends } = setup({ chatDelivery: 'reply', now: () => NOW });
+  await co.handle('s1', voiceMsg({ timestamp: NOW / 1000 - 600 }));
+  assert.equal(provider.calls.length, 1);
+  assert.equal(deliveries[0].status, 'completed');
+  assert.equal(deliveries[0].timestamp, NOW / 1000 - 600);
+  assert.deepEqual(chatSends, []);
+});
+
+test('with a quote-reply as the only sink, a late note is not sent to speech-to-text', async () => {
+  const { co, provider, chatSends, warns } = setup({ chatDelivery: 'reply', noDelivery: true, now: () => NOW });
+  await co.handle('s1', voiceMsg({ timestamp: NOW / 1000 - 600 }));
+  assert.equal(provider.calls.length, 0);
+  assert.deepEqual(chatSends, []);
+  assert.ok(warns.includes('Transcription skipped: late'), warns.join(' | '));
+});
+
+test("the webhook event carries the note's send time", async () => {
+  const live = setup({ now: () => NOW });
+  await live.co.handle('s1', voiceMsg({ timestamp: NOW / 1000 }));
+  assert.equal(live.deliveries[0].timestamp, NOW / 1000);
+  const big = setup({ config: { maxSizeBytes: 3 }, now: () => NOW }); // 'AUDIO' decodes to 5 bytes
+  await big.co.handle('s1', voiceMsg({ timestamp: NOW / 1000 }));
+  assert.equal(big.deliveries[0].reason, 'too_large');
+  assert.equal(big.deliveries[0].timestamp, NOW / 1000);
+});
+
+test('a late note still reaches the self note, and a fresh one is still quote-replied', async () => {
+  // With no webhook, the self note is the only copy, so a late note must still be transcribed for it.
+  const self = setup({ chatDelivery: 'self', noDelivery: true, now: () => NOW });
+  await self.co.handle('s1', voiceMsg({ timestamp: NOW / 1000 - 600 }));
+  assert.deepEqual(self.chatSends, [{ kind: 'sendText', sessionId: 's1', chatId: 'y@s.whatsapp.net', text: 'hola' }]);
+  // Exactly five minutes old, and a send time well ahead of the gateway clock, both still count as fresh.
+  for (const timestamp of [NOW / 1000 - 300, NOW / 1000 + 600]) {
+    const fresh = setup({ chatDelivery: 'reply', noDelivery: true, now: () => NOW });
+    await fresh.co.handle('s1', voiceMsg({ timestamp }));
+    assert.equal(fresh.chatSends.length, 1, `timestamp ${timestamp}`);
+    assert.equal(fresh.chatSends[0].kind, 'reply');
+  }
+});

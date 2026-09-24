@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `voice-transcription` |
-| **Version** | 1.2.9 |
-| **Released** | 2026-09-05 |
+| **Version** | 1.3.0 |
+| **Released** | 2026-09-24 |
 | **Status** | beta |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.0 (tested 0.23.4) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.23.6) |
 | **Keywords** | transcription, speech-to-text, stt, whisper, voice, audio, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/voice-transcription](https://github.com/rmyndharis/OpenWA-plugins/tree/main/voice-transcription) |
 <!-- END DETAILS -->
@@ -67,12 +67,18 @@ non-empty transcript comes back — POSTs this to your **Delivery webhook URL**:
   "status": "completed",
   "source": "speech-to-text",
   "untrusted": true,
+  "timestamp": 1758000000,
   "transcription": { "text": "…", "language": "es", "provider": "faster-whisper", "model": "small" }
 }
 ```
 
 Correlate it to the original voice note by `messageId` (it arrives shortly **after** `message.received`,
 out of order — do not assume ordering).
+
+`timestamp` is the voice note's original send time (unix seconds). From OpenWA 0.23.6 a Baileys session
+delivers, after it reconnects, the notes WhatsApp queued while it was disconnected, so an event can arrive
+long after the note was sent: check it before replying. Such a late note is still transcribed and
+delivered to the webhook and to `self`, but never quote-replied (see `chatDelivery`).
 
 ## Setup
 
@@ -129,7 +135,7 @@ curl -X POST http://localhost:2785/api/plugins/voice-transcription/enable \
 | `deliveryWebhookUrl` | cond. | — | Endpoint receiving the `message.transcription` event. An https host is allowed automatically; a plain-http one is not, so it only works for `localhost`/`127.0.0.1` (already in `net.allow`) and also needs `SSRF_ALLOWED_HOSTS`. Optional if you only use `chatDelivery`. |
 | `deliverySecret` | no | — | Optional. HMAC-SHA256 signs the body in `X-OpenWA-Signature: sha256=<hex>` (same as core webhooks). Stored redacted. |
 | `deliveryTimeoutMs` | no | `5000` | Delivery POST timeout. |
-| `chatDelivery` | no | `off` | Also post the transcript into WhatsApp: `off` (webhook only) · `self` (note to your own number) · `reply` (quote-reply to the sender — visible to them). **In a group, `reply` posts to the whole group**, so every member reads the contents of the voice note. |
+| `chatDelivery` | no | `off` | Also post the transcript into WhatsApp: `off` (webhook only) · `self` (note to your own number) · `reply` (quote-reply to the sender, visible to them). **In a group, `reply` posts to the whole group**, so every member reads the contents of the voice note. `reply` is skipped for a note that reached the gateway more than 5 minutes after it was sent; with no webhook such a note is not transcribed at all. |
 
 ## Compatibility
 
@@ -138,6 +144,11 @@ curl -X POST http://localhost:2785/api/plugins/voice-transcription/enable \
   refused and neither transcription nor delivery works at all.
 - Engine-neutral: both Baileys and whatsapp-web.js materialize the audio before the hook fires, so the
   plugin works on either.
+- A backlog delivered after a reconnect (OpenWA 0.23.6+, Baileys) counts against `maxPerHour` in the
+  hour it arrives.
+- While another plugin (for example chatwoot-adapter) holds a chat in a `human` or `closed` handover, its
+  voice notes are not dispatched to this plugin and are not transcribed; from OpenWA 0.23.6 that also
+  covers the same contact's other `@lid` and phone ids.
 - **Best-effort by design (no core changes).** Because a sandboxed plugin has no host-managed background
   queue, transcription runs as an un-awaited task in the worker turn: it is **at-most-once while the worker
   is alive**, has no backpressure, and the hourly/idempotency guards are best-effort (a truly simultaneous
