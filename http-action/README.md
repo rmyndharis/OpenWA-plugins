@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `http-action` |
-| **Version** | 0.2.9 |
-| **Released** | 2026-09-23 |
+| **Version** | 0.2.10 |
+| **Released** | 2026-09-24 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -117,6 +117,14 @@ with one of your prefixes would otherwise fire a real request against your backe
 buttons and list replies still trigger actions. A Baileys whole-catalog share arrives as an `unknown`
 message with the catalog title as its body, like a whatsapp-web.js button reply, so a catalog titled
 with one of your prefixes can still trigger an action.
+
+A `POST` action is not run when its command reaches the plugin more than five minutes after WhatsApp
+accepted it. This happens from OpenWA 0.23.6, when a Baileys session reconnects and receives the
+messages WhatsApp queued while it was down. The contact gets a quoted reply saying the command arrived
+late and was not run, and asking them to send it again; that reply is not held back by
+`cooldownSeconds`. `GET` actions still run, since a late lookup returns current data. The age is
+measured on the gateway's clock, so keep it synchronized: a clock more than five minutes fast refuses
+every `POST`.
 
 ### Per-session config
 
