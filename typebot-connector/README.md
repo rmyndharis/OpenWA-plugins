@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `typebot-connector` |
-| **Version** | 0.2.9 |
-| **Released** | 2026-09-23 |
+| **Version** | 0.2.10 |
+| **Released** | 2026-09-24 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -34,7 +34,9 @@
   and audio bubbles are sent as media; a `choice` step is shown as a numbered list and the contact's
   numeric reply is mapped back to the option.
 - **Typed inputs validated by Typebot** — email, number, date, … are re-asked on a bad value. A file
-  input step accepts a photo/file the contact sends and uploads it to Typebot.
+  input step accepts a photo/file the contact sends and uploads it to Typebot. Typebot takes only the
+  file there, so typed text is answered with a request for one, and a file step marked optional cannot
+  be skipped from WhatsApp.
 - **Auto-reset** — the session resets when the flow ends or after the idle timeout, so the next message
   starts fresh.
 - **No public URL or webhook** — runs sandboxed in the plugin worker and polls Typebot's live Chat API

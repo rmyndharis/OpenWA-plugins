@@ -34,6 +34,13 @@ test('rating prompt, redirect URL, and flow-end (no input) render correctly', ()
   ]);
 });
 
+test('a file step asks for a file and does not invite a typed answer', () => {
+  // Typebot answers typed text at a file input with "Invalid message", so the prompt must not offer it.
+  assert.deepEqual(renderResponse({ bubbles: [], input: { kind: 'file', blockId: 'b' } }), [
+    { type: 'text', text: 'Send a file or photo to continue.' },
+  ]);
+});
+
 test('multi-choice appends a hint; unsupported input has a fallback line', () => {
   const multi = renderResponse({ bubbles: [], input: { kind: 'choice', blockId: 'b', multiple: true, items: [{ id: '1', content: 'A' }] } });
   assert.match(multi[0].type === 'text' ? multi[0].text : '', /pick more than one/);

@@ -6,6 +6,13 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+## [0.2.10] - 2026-09-24
+
+### Fixed
+
+- A file-upload step no longer invites a typed answer: Typebot accepts only the file there, so the
+  prompt promised a reply the connector then refused.
+
 ## [0.2.9] - 2026-09-23
 
 ### Fixed

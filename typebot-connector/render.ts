@@ -28,7 +28,9 @@ function renderInputPrompt(input: InputSpec): OutgoingPart | null {
     case 'rating':
       return { type: 'text', text: `Reply with a number${input.max ? ` from 1 to ${input.max}` : ''}.` };
     case 'file':
-      return { type: 'text', text: 'Send a file or photo — or type your answer to continue.' };
+      // Typebot accepts only the uploaded file here and answers typed text with "Invalid message", so
+      // offering to type would promise an answer mapReply has to refuse.
+      return { type: 'text', text: 'Send a file or photo to continue.' };
     case 'text':
       return input.placeholder ? { type: 'text', text: input.placeholder } : null;
     case 'unsupported':
