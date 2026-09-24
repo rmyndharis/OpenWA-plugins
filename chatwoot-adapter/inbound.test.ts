@@ -202,6 +202,65 @@ test('relays a sticker as a webp image attachment (#609 P2)', async () => {
   assert.equal(file!.contentType, 'image/webp');
 });
 
+test('relays a catalog order as a marked line with its id and note, never its token', async () => {
+  const { deps: d, posted } = makeDeps();
+  const order = {
+    ...msg, id: 'o1', type: 'order', body: 'Tolong kirim sore ini',
+    order: { orderId: '1000000000000001', token: 'SECRET-TOKEN' },
+  } as IncomingMessage;
+  await handleInbound(d, 'sess', 'Engine', order);
+  assert.deepEqual(posted, [{ id: 55, c: '🛒 Order 1000000000000001\nTolong kirim sore ini' }]);
+  assert.doesNotMatch(posted[0].c, /SECRET-TOKEN/);
+});
+
+test('relays a product card as its title and id, without repeating a body that is only the title', async () => {
+  const { deps: d, posted } = makeDeps();
+  const product = {
+    ...msg, id: 'p1', type: 'product', body: 'Kopi Gayo 250g',
+    product: { productId: '2000000000000002', title: 'Kopi Gayo 250g' },
+  } as IncomingMessage;
+  await handleInbound(d, 'sess', 'Engine', product);
+  assert.deepEqual(posted, [{ id: 55, c: '🛍️ Kopi Gayo 250g (product 2000000000000002)' }]);
+});
+
+test('a product card with an image uploads it with the product line as its content', async () => {
+  let content: string | undefined;
+  const { deps: d } = makeDeps({
+    client: { postMedia: async (_id: number, c: string) => { content = c; return { id: 2 }; } },
+  });
+  const product = {
+    ...msg, id: 'p2', type: 'product', body: '',
+    product: { productId: '2', title: 'Sample' }, media: { mimetype: 'image/jpeg', data: 'AAA' },
+  } as IncomingMessage;
+  await handleInbound(d, 'sess', 'Engine', product);
+  assert.equal(content, '🛍️ Sample (product 2)');
+});
+
+// On whatsapp-web.js the body of an order or product can be its base64 JPEG thumbnail, as a location's is.
+test('an order or product body that is image data is never relayed as text', async () => {
+  const { deps: d, posted } = makeDeps();
+  await handleInbound(d, 'sess', 'Engine', {
+    ...msg, id: 'o2', type: 'order', body: '/9j/4AAQSkZJRgABAQAAAQABAAD', order: { orderId: '1' },
+  } as IncomingMessage);
+  await handleInbound(d, 'sess', 'Engine', {
+    ...msg, id: 'p3', type: 'product', body: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB', product: { productId: '2' },
+  } as IncomingMessage);
+  await handleInbound(d, 'sess', 'Engine', {
+    ...msg, id: 'o3', type: 'order', body: 'Qk0'.repeat(80), order: { orderId: '3' },
+  } as IncomingMessage);
+  assert.deepEqual(posted.map(p => p.c), ['🛒 Order 1', '🛍️ Product 2', '🛒 Order 3']);
+});
+
+// The host omits the block when the id is missing (a whatsapp-web.js catalog share is typed product).
+test('an order or product without its id never relays image data, and still relays its text', async () => {
+  const { deps: d, posted } = makeDeps();
+  await handleInbound(d, 'sess', 'Engine', {
+    ...msg, id: 'p4', type: 'product', body: '/9j/4AAQSkZJRgABAQAAAQABAAD',
+  } as IncomingMessage);
+  await handleInbound(d, 'sess', 'Engine', { ...msg, id: 'o4', type: 'order', body: 'Pesanan saya' } as IncomingMessage);
+  assert.deepEqual(posted.map(p => p.c), ['💬 product', 'Pesanan saya']);
+});
+
 test('refreshes an @lid contact name once a real pushName arrives (#609)', async () => {
   const updates: Array<[number, string]> = [];
   const patches: Array<{ name?: string }> = [];
@@ -355,6 +414,38 @@ test('a markSeen failure takes the retry path instead of escaping the handler', 
   assert.equal(queued.length, 1, 'the message is queued for retry');
   assert.deepEqual(lost, []);
   assert.deepEqual(posted, [], 'nothing was relayed');
+});
+
+// The dedup read is a capability call too, and the host refuses a plugin's 33rd concurrent one: a reconnect
+// that delivers a backlog across many chats can get there.
+test('a dedup read the host refuses takes the retry path instead of escaping the handler', async () => {
+  const queued: Array<{ msg: IncomingMessage }> = [];
+  const { deps: d, lost, posted } = makeDeps({
+    store: {
+      hasSeen: async () => { throw new Error('capability call rejected: too many concurrent capability calls (limit 32)'); },
+      enqueueRetry: async (e: { msg: IncomingMessage }) => { queued.push(e); return null; },
+    },
+  });
+  await handleInbound(d, 'sess', 'Engine', msg); // must not reject
+  assert.deepEqual(queued.map(e => e.msg.id), ['m1']);
+  assert.deepEqual(lost, []);
+  assert.deepEqual(posted, []);
+});
+
+test('a message already seen is still skipped without relaying or queueing', async () => {
+  let marked = 0;
+  let queued = 0;
+  const { deps: d, posted } = makeDeps({
+    store: {
+      hasSeen: async () => true,
+      markSeen: async () => { marked++; },
+      enqueueRetry: async () => { queued++; return null; },
+    },
+  });
+  await handleInbound(d, 'sess', 'Engine', msg);
+  assert.deepEqual(posted, []);
+  assert.equal(marked, 0);
+  assert.equal(queued, 0);
 });
 
 // ── Durable per-chat backfill marker: the trigger reads back the stored state, not a one-shot inference ──

@@ -6,6 +6,22 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.9] - 2026-09-24
+
+### Fixed
+
+- An inbound message whose duplicate check the host refuses is now queued for retry instead of lost. A
+  reconnect that delivers a backlog across many chats can exceed the host's 32 concurrent capability calls.
+- A catalog order queued for retry no longer stores the order's token.
+- An order or product body that is base64 image data (whatsapp-web.js) is no longer posted as text.
+
+### Changed
+
+- A catalog order now reaches Chatwoot as `🛒 Order <id>` with the customer's note, and a shared product
+  card as its title and product id with any accompanying text, instead of bare text. Needs OpenWA 0.23.5.
+- README: messages from a disconnect show in Chatwoot at relay time, in arrival order.
+- **Verified against OpenWA v0.23.6** (testedOpenWAVersion 0.23.4 -> 0.23.6).
+
 ## [0.9.8] - 2026-09-18
 
 ### Upgrade notes
