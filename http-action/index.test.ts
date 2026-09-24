@@ -427,3 +427,84 @@ test('a non-user JID never yields a phone number', async () => {
     assert.equal((sendCalls[0].env as { text: string }).text, `p=[${want}]`, `for ${from}`);
   }
 });
+
+// ── Late delivery (0.2.10) ──────────────────────────────────────────────────────────────────────────
+// From OpenWA 0.23.6 a Baileys session delivers, after it reconnects, what WhatsApp queued while it was
+// disconnected, each message with its original send time. A POST is a write; running one the contact
+// sent long ago is worse than asking again. A GET only reads, so a late lookup still runs.
+
+const NOW = 1_800_000_000_000; // ms
+const LATE = 'This command arrived late and was not run. Please send it again if you still need it.';
+const secsAgo = (s: number) => NOW / 1000 - s;
+
+function postDeps(o: Opts = {}) {
+  const r = makeDeps({ body: JSON.stringify({ id: 'T-1', status: 'shipped' }), now: () => NOW, ...o });
+  r.d.cfg = cfgWith({
+    actions: JSON.stringify([{
+      id: 'create', match: { type: 'prefix', value: 'buat ' },
+      request: { method: 'POST', path: '/tickets', bodyTemplate: '{"d":"{{args.0}}"}' },
+      replyTemplate: 'Ticket {{response.id}}',
+    }, {
+      id: 'check', match: { type: 'prefix', value: 'cek ' },
+      request: { method: 'GET', path: '/orders/{{args.0}}' },
+      replyTemplate: 'Status: {{response.status}}',
+    }]),
+  });
+  const fetched: string[] = [];
+  const inner = r.d.fetch;
+  r.d.fetch = async (url, init) => { fetched.push(`${init?.method} ${url}`); return inner(url, init); };
+  return { ...r, fetched };
+}
+const at = (body: string, ts: number, id = 'm1') => ({ ...msg(body, id), timestamp: ts }) as IncomingMessage;
+
+test('a POST older than five minutes is not run; the contact is asked to send it again, once', async () => {
+  const { d, sendCalls, fetched, warns } = postDeps();
+  await handleMessage(d, 's1', at('buat X', secsAgo(301)));
+  assert.deepEqual(fetched, [], 'the backend write must not fire');
+  assert.match(warns.join('\n'), /'create' not run, the command arrived late/, 'a fast gateway clock shows in the log');
+  assert.deepEqual(sendCalls.map((c) => c.env), [
+    { sessionId: 's1', chatId: 'c1', type: 'text', text: LATE, replyTo: 'm1' },
+  ]);
+  assert.equal(await hasSeen(d.storage, 's1', 'm1'), true, 'marked after the notice is sent');
+  await handleMessage(d, 's1', at('buat X', secsAgo(400))); // redelivery of the same id
+  assert.equal(sendCalls.length, 1, 'a redelivery repeats neither the notice nor the request');
+  assert.deepEqual(fetched, []);
+});
+
+test('a late GET still runs: a lookup returns current data', async () => {
+  const { d, sendCalls, fetched } = postDeps();
+  await handleMessage(d, 's1', at('cek INV-1', secsAgo(3600)));
+  assert.deepEqual(fetched, ['GET https://api.example.com/orders/INV-1']);
+  assert.equal((sendCalls[0].env as { text: string }).text, 'Status: shipped');
+});
+
+test('a POST inside the window, or without a usable timestamp, still runs', async () => {
+  for (const ts of [secsAgo(300), secsAgo(0), NOW / 1000 + 120, 0, -5, NaN, Infinity, undefined]) {
+    const { d, sendCalls, fetched } = postDeps();
+    await handleMessage(d, 's1', at('buat X', ts as number));
+    assert.equal(fetched.length, 1, `timestamp ${ts} must count as fresh`);
+    assert.equal((sendCalls[0].env as { text: string }).text, 'Ticket T-1', `timestamp ${ts}`);
+  }
+});
+
+test('a refused late POST does not take the chat\'s cooldown slot', async () => {
+  const { d, sendCalls, fetched } = postDeps();
+  await handleMessage(d, 's1', at('buat X', secsAgo(600), 'm1')); // queued during the outage
+  await handleMessage(d, 's1', at('cek INV-1', secsAgo(1), 'm2')); // sent right after reconnect
+  assert.deepEqual(sendCalls.map((c) => (c.env as { text: string }).text), [LATE, 'Status: shipped']);
+  assert.deepEqual(fetched, ['GET https://api.example.com/orders/INV-1']);
+});
+
+test('a late notice that fails to send stays un-marked, and its redelivery never runs the request', async () => {
+  let attempts = 0;
+  const { d, sendCalls, fetched } = postDeps();
+  const send = d.conversations.send;
+  d.conversations = { send: async (env) => { if (++attempts === 1) throw new Error('transient'); return send(env); } };
+  await assert.rejects(handleMessage(d, 's1', at('buat X', secsAgo(600))), /transient/);
+  assert.deepEqual(fetched, [], 'the request must not fire before the notice');
+  assert.equal(await hasSeen(d.storage, 's1', 'm1'), false, 'un-marked, so a redelivery retries the notice');
+  await handleMessage(d, 's1', at('buat X', secsAgo(700)));
+  assert.equal((sendCalls[0].env as { text: string }).text, LATE);
+  assert.equal(await hasSeen(d.storage, 's1', 'm1'), true);
+  assert.deepEqual(fetched, [], 'the request never fires on either attempt');
+});
