@@ -312,10 +312,13 @@ test('lowering cooldownSec mid-backoff does not release the retry storm', async 
   }
 });
 
-test('a channel or broadcast post never draws an away reply', async () => {
+test('a channel or broadcast post never draws an away reply', async (t) => {
   // A `@newsletter` post arrives flagged as a non-group chat, so the group gate lets it through and the
   // plugin replied into a channel the account merely follows: a send that always fails, one per post,
   // after consuming that chat's cooldown slot.
+  // closedNowConfig is open on Thursdays 09:00-17:00 UTC, so pin the clock outside that window like the
+  // tests above; otherwise the guard rail below fails whenever the suite runs inside it.
+  t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
   const replies: string[] = [];
   let handler: ((hook: unknown) => Promise<{ continue: boolean }>) | undefined;
   const ctx = makeCtx({
