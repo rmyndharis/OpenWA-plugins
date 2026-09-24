@@ -10,6 +10,14 @@ on:
 permissions:
   contents: write
 
+# GitHub has delivered a single tag push as two push events, starting two runs that raced to create the
+# same Release; the one that lost failed with "Release.tag_name already exists" although the release was
+# fine. Runs for one tag now wait for each other, and the release step below lets the later one confirm
+# the published bytes instead of failing.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -94,10 +102,23 @@ jobs:
             echo "SHA-256: \`$(cut -d' ' -f1 "$PLUGIN_ID.zip.sha256")\`"
           } >> notes.md
 
+      # A release is immutable once created (there is no --clobber), so a second run for the same tag has
+      # nothing to publish. It succeeds only when the published zip is byte-identical to this build; any
+      # other difference means the tag and the release disagree, which must stay loud.
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if gh release view "$GITHUB_REF_NAME" --json tagName > /dev/null 2>&1; then
+            gh release download "$GITHUB_REF_NAME" --pattern "$PLUGIN_ID.zip" --dir published
+            PUBLISHED=$(sha256sum "published/$PLUGIN_ID.zip" | cut -d' ' -f1)
+            ACTUAL=$(sha256sum "$PLUGIN_ID.zip" | cut -d' ' -f1)
+            if [ "$PUBLISHED" = "$ACTUAL" ]; then
+              echo "Release $GITHUB_REF_NAME is already published with this build ($ACTUAL); nothing to do."
+              exit 0
+            fi
+            echo "Release $GITHUB_REF_NAME exists but holds $PUBLISHED, while this build is $ACTUAL"; exit 1
+          fi
           gh release create "$GITHUB_REF_NAME" \
             "$PLUGIN_ID.zip" "$PLUGIN_ID.zip.sha256" \
             --title "$PLUGIN_ID v$PLUGIN_VERSION" \
