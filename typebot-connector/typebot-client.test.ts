@@ -77,3 +77,26 @@ test('uploadFile: non-empty formData → multipart POST', async () => {
   assert.equal(calls[1].init!.method, 'POST');
   assert.match(calls[1].init!.headers!['Content-Type'], /^multipart\/form-data; boundary=/);
 });
+
+test('file input: keeps a plain-text placeholder, drops markup, and offers a skip only when optional', async () => {
+  const file = async (options?: unknown) => {
+    const { fetchFn } = recorder([ok({ input: { id: 'blk', type: 'file input', options } })]);
+    const input = (await new TypebotClient(fetchFn, cfg).continueChat('S', 'x')).input;
+    assert.equal(input?.kind, 'file');
+    return input as { placeholder?: string; skipLabel?: string };
+  };
+  const optional = await file({ isRequired: false, labels: { placeholder: 'Kirim satu foto sebagai bukti.', skip: 'Lewati' } });
+  assert.equal(optional.placeholder, 'Kirim satu foto sebagai bukti.');
+  assert.equal(optional.skipLabel, 'Lewati');
+  assert.equal((await file({ isRequired: false })).skipLabel, 'Skip', "Typebot's default label");
+  assert.equal((await file({ isRequired: false, labels: { skip: '  ' } })).skipLabel, 'Skip');
+  const required = await file();
+  assert.equal(required.skipLabel, undefined, 'required unless marked optional, as in Typebot');
+  assert.equal(required.placeholder, undefined);
+  assert.equal((await file({ isRequired: true, labels: { skip: 'Lewati' } })).skipLabel, undefined);
+  // Typebot's own default is the web upload box's HTML caption, with web-only wording.
+  for (const placeholder of ['<strong>Click to upload</strong> or drag and drop<br>(size limit: 10MB)', '<b>Foto</b>', 'Foto &amp; KTP', '  ']) {
+    assert.equal((await file({ labels: { placeholder } })).placeholder, undefined, placeholder);
+  }
+  assert.equal((await file({ labels: { placeholder: 'Size < 10MB' } })).placeholder, 'Size < 10MB');
+});
