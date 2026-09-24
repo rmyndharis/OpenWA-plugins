@@ -6,6 +6,21 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-24
+
+### Added
+
+- An optional file-upload step can be skipped from WhatsApp by replying with its Skip label.
+- A file-upload step sends its placeholder as the prompt when it is plain text, as a text step already
+  does.
+
+### Fixed
+
+- Messages WhatsApp delivers late after a reconnect no longer answer a step the contact had not seen yet.
+- A reply written during a disconnect to a step shown before it still answers it: the idle reset counts
+  from when it was written.
+- An attachment that did not come through at a file-upload step no longer invites a typed answer.
+
 ## [0.2.10] - 2026-09-24
 
 ### Fixed

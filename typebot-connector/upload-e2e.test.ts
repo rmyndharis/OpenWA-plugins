@@ -235,3 +235,57 @@ test('text input with attachments enabled: continueChat carries the text plus at
   assert.deepEqual(cont.message, { type: 'text', text: '', attachedFileUrls: ['https://cdn/p.png'] });
   assert.deepEqual(sent.map(s => s.text), ['Got it']);
 });
+
+// Typebot skips an optional file step on a continueChat with no message at all, as its web client's Skip
+// button does. The key must be absent, not null: Typebot up to at least v3.0 declares it optional but not
+// nullable and answers null with a 400, which the turn reads as an expired session and restarts the flow.
+test('optional file step: replying with the skip label continues with no message at all', async () => {
+  const { fetchFn, calls } = recorder([
+    ok({
+      messages: [{ id: 'm2', type: 'text', content: { type: 'markdown', markdown: 'Noted' } }],
+      input: { id: 'blk2', type: 'text input' },
+    }),
+  ]);
+  const sent: ConversationSendEnvelope[] = [];
+  const conversations: PluginConversationsCapability = { send: async e => void sent.push(e) };
+  const store = new SessionStore(fakeStorage());
+  await store.set('sess:c@c.us', {
+    sessionId: 'S1',
+    awaiting: { kind: 'file', blockId: 'blk', skipLabel: 'Lewati' },
+    lastActivity: 1000,
+  });
+  const msg = {
+    id: 'm',
+    from: 'c@c.us',
+    to: 'me',
+    chatId: 'c@c.us',
+    body: ' lewati ',
+    type: 'text',
+    timestamp: 0,
+    fromMe: false,
+    isGroup: false,
+  } as IncomingMessage;
+
+  await handleTurn(
+    {
+      cfg,
+      client: new TypebotClient(fetchFn, cfg),
+      store,
+      lock: new KeyedAsyncLock(),
+      conversations,
+      now: () => 1000,
+      log: () => {},
+    },
+    'sess',
+    'Engine',
+    msg,
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://typebot.io/api/v1/sessions/S1/continueChat');
+  const body = JSON.parse(calls[0].init!.body as string);
+  assert.equal('message' in body, false);
+  assert.equal(body.textBubbleContentFormat, 'markdown');
+  assert.deepEqual(sent.map(s => s.text), ['Noted']);
+  assert.equal((await store.get('sess:c@c.us'))?.awaiting.blockId, 'blk2');
+});

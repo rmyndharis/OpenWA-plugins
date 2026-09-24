@@ -27,10 +27,13 @@ function renderInputPrompt(input: InputSpec): OutgoingPart | null {
     }
     case 'rating':
       return { type: 'text', text: `Reply with a number${input.max ? ` from 1 to ${input.max}` : ''}.` };
-    case 'file':
+    case 'file': {
       // Typebot accepts only the uploaded file here and answers typed text with "Invalid message", so
-      // offering to type would promise an answer mapReply has to refuse.
-      return { type: 'text', text: 'Send a file or photo to continue.' };
+      // offering to type would promise an answer mapReply has to refuse. The one exception is the skip
+      // word at an optional step.
+      const ask = input.placeholder ?? 'Send a file or photo to continue.';
+      return { type: 'text', text: input.skipLabel ? `${ask}\n\n(Or reply "${input.skipLabel}" to skip this step.)` : ask };
+    }
     case 'text':
       return input.placeholder ? { type: 'text', text: input.placeholder } : null;
     case 'unsupported':
