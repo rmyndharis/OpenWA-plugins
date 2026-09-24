@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chat-flow` |
-| **Version** | 1.1.9 |
-| **Released** | 2026-09-23 |
+| **Version** | 1.1.10 |
+| **Released** | 2026-09-24 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -135,6 +135,12 @@ interfere.
   arrives as type `unknown` with the catalog title as the body, the same type a whatsapp-web.js button
   reply carries, so it cannot be told apart and still reaches the menu: with an empty `trigger` it
   starts the flow.
+- **Messages delivered late after a reconnect:** from OpenWA 0.23.6 a Baileys session delivers, once it
+  reconnects, what WhatsApp held while it was disconnected, each message with its original send time.
+  A message written more than 5 minutes before the menu it
+  would answer, and delivered more than 5 minutes late, is ignored: no reply and no miss. A reply to a
+  menu shown before the outage still counts if it arrives within the 15-minute expiry; after that it
+  is treated as a new message. A backlog under 5 minutes old is handled as live.
 
 ## Security
 

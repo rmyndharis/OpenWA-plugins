@@ -296,3 +296,50 @@ test('a rejected write on the advance path does not deliver a sub-menu the state
   );
   assert.equal(replies.length, 1, 'the sub-menu must not be sent when the move could not be recorded');
 });
+
+// From OpenWA 0.23.6 a Baileys session delivers, after it reconnects, what the contact sent while it
+// was disconnected, each message with its original send time (unix seconds).
+const minsAgo = (n: number) => Math.floor((Date.now() - n * 60_000) / 1000);
+
+test('a backlog replayed after a reconnect opens the menu once and answers none of it', async () => {
+  // Matched as live input, '2' and '1' walked into a sub-menu and then a leaf the contact never saw.
+  const { ctx, storage, replies } = makeCtx();
+  const results = await Promise.all([
+    FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'hello', 'm1', undefined, minsAgo(60)),
+    FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', '2', 'm2', undefined, minsAgo(59)),
+    FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', '1', 'm3', undefined, minsAgo(58)),
+  ]);
+  assert.deepEqual(replies.map(r => r.text), [xyz.greeting]);
+  assert.deepEqual(results, [true, true, true], 'claimed, so a sibling plugin does not answer the backlog either');
+  assert.deepEqual((storage.get('state__xyz__user1') as { path: string[] }).path, []);
+});
+
+test('late chatter does not spend the miss budget or draw "Invalid option"', async () => {
+  const { ctx, storage, replies } = makeCtx();
+  await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'hello', 'm0', undefined, minsAgo(60));
+  for (let i = 1; i <= 5; i++) {
+    await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', `ada orang? ${i}`, `m${i}`, undefined, minsAgo(60 - i));
+  }
+  assert.deepEqual(replies.map(r => r.text), [xyz.greeting]);
+  assert.equal((storage.get('state__xyz__user1') as { misses?: number }).misses ?? 0, 0);
+});
+
+test('a reply typed during an outage to a menu shown before it still answers it', async () => {
+  const { ctx, storage, replies } = makeCtx();
+  storage.set(key, { path: [], lastActive: Date.now() - 10 * 60_000 });
+  const r = await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', '1', 'm1', undefined, minsAgo(9));
+  assert.equal(r, true);
+  assert.deepEqual(replies.map(x => x.text), ['hosting https://abc.com']);
+});
+
+test('fast typing within the skew tolerance is still live', async t => {
+  // Exactly five minutes is still live: only a message written MORE than five minutes before the menu,
+  // and delivered more than five minutes late, is ignored.
+  t.mock.timers.enable({ apis: ['Date'], now: 1_800_000_000_000 });
+  const { ctx, storage, replies } = makeCtx();
+  storage.set(key, { path: [], lastActive: Date.now() });
+  const sentAt = (Date.now() - 5 * 60_000) / 1000;
+  const r = await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', '1', 'm1', undefined, sentAt);
+  assert.equal(r, true);
+  assert.deepEqual(replies.map(x => x.text), ['hosting https://abc.com']);
+});

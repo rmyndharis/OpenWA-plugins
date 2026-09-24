@@ -73,7 +73,8 @@ function strText(value: unknown): string {
 
 export function buildRow(ctx: HookContext): string[] {
   const event = ctx.event;
-  const timestamp = new Date(ctx.timestamp ?? Date.now()).toISOString();
+  const handledAt = new Date(ctx.timestamp ?? Date.now());
+  const timestamp = handledAt.toISOString(); // failed and ack payloads carry no time of their own
   const sessionId = strId(ctx.sessionId);
   const direction = event === 'message:received' ? 'in' : 'out';
 
@@ -93,6 +94,12 @@ export function buildRow(ctx: HookContext): string[] {
   // message:received / message:sent carry an IncomingMessage
   const m = (ctx.data ?? {}) as Partial<IncomingMessage>;
   const senderName = m.contact?.pushName || m.contact?.name || '';
-  return [timestamp, sessionId, event, direction, strId(m.chatId), strId(m.from), strId(m.to),
+  // The message's own send time: from OpenWA 0.23.6 a Baileys session delivers what WhatsApp queued during a
+  // disconnect after it reconnects, hours after it was sent. Unix seconds; a missing, zero, negative or
+  // unrepresentable value reads as NaN or <= 0 and falls back to the handling time (an Invalid Date would
+  // make toISOString throw and lose the row).
+  const sent = new Date((m.timestamp ?? 0) * 1000);
+  const sentAt = (sent.getTime() > 0 ? sent : handledAt).toISOString();
+  return [sentAt, sessionId, event, direction, strId(m.chatId), strId(m.from), strId(m.to),
           strText(senderName), strId(m.isGroup), strId(m.type), strText(m.body), strId(m.id), '', ''];
 }
