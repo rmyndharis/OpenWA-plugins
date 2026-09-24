@@ -8,6 +8,21 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.3.9] - 2026-09-24
+
+### Fixed
+
+- A message that reaches the plugin more than 5 minutes after it was sent is no longer translated.
+  From OpenWA 0.23.6 a Baileys session delivers what WhatsApp queued during a disconnect once it
+  reconnects.
+- A `/tr` command that late is still claimed but no longer run, since a replay can arrive out of order.
+- A `/tr` command is claimed as soon as it is recognized, so another auto-reply plugin no longer
+  answers it when the group admin lookup fails or outlasts the host's 5 s hook budget.
+- A failed group admin lookup counts as an empty admin list: delegated controllers still work and
+  `denyReply` decides whether the sender is told.
+- A failed `@lid` identity lookup is no longer remembered, so one slow engine read cannot lock a group
+  admin out until the plugin restarts.
+
 ## [1.3.8] - 2026-09-23
 
 ### Fixed

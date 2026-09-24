@@ -43,7 +43,7 @@ function makeDeps(state: GroupState) {
   const sendTextCalls: unknown[][] = [];
   const sendCombinedReplyCalls: unknown[][] = [];
   const getGroupAdminsCalls: unknown[][] = [];
-  let getGroupAdminsResult: string[] = [];
+  let getGroupAdminsImpl: () => Promise<string[]> = async () => [];
   const sendText = async (_sessionId: string, _chatId: string, _text: string): Promise<void> => {
     sendTextCalls.push([_sessionId, _chatId, _text]);
   };
@@ -52,14 +52,14 @@ function makeDeps(state: GroupState) {
   };
   const getGroupAdmins = async (_sessionId: string, _chatId: string): Promise<string[]> => {
     getGroupAdminsCalls.push([_sessionId, _chatId]);
-    return getGroupAdminsResult;
+    return getGroupAdminsImpl();
   };
   const resolveCanonicalWidCalls: unknown[][] = [];
   // Default: the host resolves nothing, which is the pre-existing behaviour every older test asserts.
-  let resolveCanonicalWidResult: string | null = null;
+  let resolveCanonicalWidImpl: () => Promise<string | null> = async () => null;
   const resolveCanonicalWid = async (_sessionId: string, _wid: string): Promise<string | null> => {
     resolveCanonicalWidCalls.push([_sessionId, _wid]);
-    return resolveCanonicalWidResult;
+    return resolveCanonicalWidImpl();
   };
 
   // translator spies
@@ -108,11 +108,13 @@ function makeDeps(state: GroupState) {
     sendCombinedReply: { calls: sendCombinedReplyCalls },
     getGroupAdmins: {
       calls: getGroupAdminsCalls,
-      mockResolvedValue: (v: string[]) => { getGroupAdminsResult = v; },
+      mockResolvedValue: (v: string[]) => { getGroupAdminsImpl = async () => v; },
+      mockRejectedValue: (e: unknown) => { getGroupAdminsImpl = () => Promise.reject(e); },
     },
     resolveCanonicalWid: {
       calls: resolveCanonicalWidCalls,
-      mockResolvedValue: (v: string | null) => { resolveCanonicalWidResult = v; },
+      mockResolvedValue: (v: string | null) => { resolveCanonicalWidImpl = async () => v; },
+      mockRejectedValue: (e: unknown) => { resolveCanonicalWidImpl = () => Promise.reject(e); },
     },
     detect: {
       calls: detectCalls,
@@ -299,7 +301,7 @@ describe('TranslationCoordinator', () => {
     const state = freshState({ announced: true });
     const { store, gateway, translator, saved, mocks } = makeDeps(state);
     mocks.getGroupAdmins.mockResolvedValue(['6281770008896@c.us']);
-    mocks.resolveCanonicalWid.mockResolvedValue(null); // unknown contact, slow engine, dead session
+    mocks.resolveCanonicalWid.mockResolvedValue(null); // the host has no mapping for this contact
     const c = new TranslationCoordinator(translator, store, gateway, OPTS);
 
     await c.handleMessage('s', msg({ author: '148004841455867@lid', body: '/tr on' }));
@@ -746,4 +748,121 @@ test('records why a message was left untranslated when detect fails', async () =
   );
   assert.ok(warned, 'the failure must leave a trace naming why');
   assert.match(String((warned![1] as { error?: string }).error), /allowlist/);
+});
+
+// From OpenWA 0.23.6 a Baileys session delivers, after it reconnects, what WhatsApp queued while it was
+// disconnected. Every member already saw those messages live, and a replay is not dispatched in send
+// order, so a late translation is a burst of stale quote-replies and a late command can land reversed.
+test('a message delivered late is not translated and teaches nothing', async () => {
+  const state = freshState({
+    announced: true,
+    active: true,
+    participants: {
+      '111@c.us': { lang: 'en', source: 'learned', enabled: true, samples: 2, updatedAt: 'x' },
+      '222@c.us': { lang: 'es', source: 'learned', enabled: true, samples: 2, updatedAt: 'x' },
+    },
+  });
+  const { store, gateway, translator, mocks } = makeDeps(state);
+  mocks.detect.mockResolvedValue({ lang: 'es', confidence: 0.99 });
+  mocks.translate.mockResolvedValue('hello everyone');
+  const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+
+  const res = await c.handleMessage('s', msg({ body: 'hola a todos', author: '222@c.us', late: true }));
+
+  assert.deepEqual(res, { swallow: false }, 'conversation is passed on, late or not');
+  assert.equal(mocks.detect.calls.length, 0);
+  assert.equal(mocks.sendCombinedReply.calls.length, 0);
+  assert.equal(mocks.save.calls.length, 0);
+});
+
+test('a late /tr command is claimed but not run', async () => {
+  const state = freshState({ announced: true });
+  const { store, gateway, translator, mocks } = makeDeps(state);
+  mocks.getGroupAdmins.mockResolvedValue(['111@c.us']);
+  const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+
+  const res = await c.handleMessage('s', msg({ body: '/tr on', late: true }));
+
+  assert.deepEqual(res, { swallow: true }, 'no other bot answers a control message addressed to this plugin');
+  assert.equal(state.active, false);
+  assert.equal(mocks.sendText.calls.length, 0);
+  assert.equal(mocks.getGroupAdmins.calls.length, 0);
+});
+
+test('a late message does not draw the group introduction', async () => {
+  const { store, gateway, translator, mocks } = makeDeps(freshState());
+  const c = new TranslationCoordinator(translator, store, gateway, { ...OPTS, announceInGroups: true });
+
+  await c.handleMessage('s', msg({ late: true }));
+
+  assert.equal(mocks.sendText.calls.length, 0);
+  assert.equal(mocks.save.calls.length, 0);
+});
+
+// From OpenWA 0.23.6 a whatsapp-web.js group read that outruns the protocol timeout throws where it
+// used to return null. Both mean the same thing here: the admin list is unknown, so nobody is an admin.
+test('an admin lookup that throws reads as an empty admin list', async () => {
+  for (const denyReply of [false, true]) {
+    const state = freshState({ announced: true });
+    const { store, gateway, translator, logger, mocks } = makeDeps(state);
+    mocks.getGroupAdmins.mockRejectedValue(new Error('WhatsApp Web did not answer the read of group g@g.us in time'));
+    const c = new TranslationCoordinator(translator, store, gateway, { ...OPTS, denyReply }, logger);
+
+    const res = await c.handleMessage('s', msg({ body: '/tr on' }));
+
+    assert.deepEqual(res, { swallow: true });
+    assert.equal(state.active, false);
+    assert.equal(mocks.sendText.calls.length, denyReply ? 1 : 0, 'denyReply alone decides whether the sender is told');
+    assert.ok(
+      mocks.warn.calls.some((w) => (w[1] as { action?: string } | undefined)?.action === 'translation_admin_lookup_failed'),
+    );
+  }
+
+  // A delegated controller is authorized from the plugin's own state, whatever the admin list says.
+  const state = freshState({ announced: true, delegatedControllers: ['111@c.us'] });
+  const { store, gateway, translator, mocks } = makeDeps(state);
+  mocks.getGroupAdmins.mockRejectedValue(new Error('timed out'));
+  const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+  await c.handleMessage('s', msg({ body: '/tr on' }));
+  assert.equal(state.active, true);
+});
+
+test('a canonical lookup that threw is not remembered', async () => {
+  const state = freshState({ announced: true });
+  const { store, gateway, translator, mocks } = makeDeps(state);
+  mocks.getGroupAdmins.mockResolvedValue(['6281770008896@c.us']);
+  mocks.resolveCanonicalWid.mockRejectedValue(new Error('timed out'));
+  const c = new TranslationCoordinator(translator, store, gateway, OPTS);
+
+  await c.handleMessage('s', msg({ author: '148004841455867@lid', body: '/tr on' }));
+  assert.equal(state.active, false, 'no answer denies, never fails open');
+
+  mocks.resolveCanonicalWid.mockResolvedValue('6281770008896@c.us');
+  await c.handleMessage('s', msg({ author: '148004841455867@lid', body: '/tr on' }));
+  assert.equal(state.active, true, 'the admin is recognized once the engine answers');
+});
+
+// The hook claims on isCommand alone and runs the command after it returns, so isCommand must agree
+// with what handleMessage claims for the same message, under the configured prefix, late or not.
+test('isCommand is true exactly when handleMessage claims the message', async () => {
+  for (const prefix of ['/tr', '!t']) {
+    const { store, gateway, translator } = makeDeps(freshState({ announced: true }));
+    const c = new TranslationCoordinator(translator, store, gateway, { ...OPTS, prefix });
+    const cases: Array<[Partial<InboundMessage>, boolean]> = [
+      [{ body: `${prefix} on` }, true],
+      [{ body: `${prefix} on`, isGroup: false }, false],
+      [{ body: `${prefix} on`, fromMe: true }, false],
+      [{ body: `${prefix} on`, author: '' }, false],
+      [{ body: prefix === '/tr' ? '!t on' : '/tr on' }, false],
+      [{ body: 'hello' }, false],
+    ];
+    for (const [over, expected] of cases) {
+      for (const late of [false, true]) {
+        const m = msg({ ...over, late });
+        const label = `${JSON.stringify(over)}, prefix ${prefix}, late ${late}`;
+        assert.equal(c.isCommand(m), expected, label);
+        assert.deepEqual(await c.handleMessage('s', m), { swallow: expected }, label);
+      }
+    }
+  }
 });

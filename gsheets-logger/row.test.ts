@@ -185,3 +185,51 @@ test('a cell cap never splits a surrogate pair', () => {
   // Well-formedness is the actual invariant, and it survives the UTF-8 round trip the host performs.
   assert.equal(new TextDecoder().decode(new TextEncoder().encode(cell)), cell);
 });
+
+// From OpenWA 0.23.6 a Baileys session delivers what WhatsApp queued during a disconnect once it
+// reconnects, hours after it was sent. The row must record when the message was sent, not when the
+// plugin happened to handle it.
+const SENT = '2026-06-22T04:00:00.000Z';
+const SENT_S = Date.parse(SENT) / 1000;
+
+test('a message delivered after a reconnect is logged at its own send time', () => {
+  const row = buildRow({
+    event: 'message:received', sessionId: 's1', timestamp: T, source: 'Engine',
+    data: { id: 'M1', from: '62811@c.us', to: 'me', chatId: '62811@c.us', body: 'hi',
+            type: 'text', fromMe: false, isGroup: false, timestamp: SENT_S },
+  });
+  assert.equal(row[0], SENT);
+});
+
+test('a phone-typed send replayed on message:sent is logged at its own send time', () => {
+  const row = buildRow({
+    event: 'message:sent', sessionId: 's1', timestamp: T, source: 'Engine',
+    data: { id: 'M2', from: 'me', to: '62811@c.us', chatId: '62811@c.us', body: 'yo',
+            type: 'text', fromMe: true, isGroup: false, timestamp: SENT_S },
+  });
+  assert.equal(row[3], 'out');
+  assert.equal(row[0], SENT);
+});
+
+test('a message without a usable timestamp falls back to the handling time and never throws', () => {
+  for (const ts of [undefined, 0, -5, NaN, 1e20]) {
+    const row = buildRow({
+      event: 'message:received', sessionId: 's1', timestamp: T, source: 'Engine',
+      data: { id: 'M1', from: 'x', to: 'y', chatId: 'c', type: 'text', fromMe: false, isGroup: false, timestamp: ts },
+    });
+    assert.equal(row[0], T.toISOString(), `timestamp ${ts}`);
+  }
+});
+
+test('ack and failure rows keep the handling time', () => {
+  const ack = buildRow({
+    event: 'message:ack', sessionId: 's1', timestamp: T, source: 'Engine',
+    data: { messageId: 'M1', status: 'read', timestamp: 1 },
+  } as never);
+  const failed = buildRow({
+    event: 'message:failed', sessionId: 's1', timestamp: T, source: 'MessageService',
+    data: { sessionId: 's1', error: 'boom', input: { chatId: 'c' }, timestamp: 1 },
+  } as never);
+  assert.equal(ack[0], T.toISOString());
+  assert.equal(failed[0], T.toISOString());
+});

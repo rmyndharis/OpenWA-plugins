@@ -8,6 +8,14 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.3.11] - 2026-09-24
+
+### Fixed
+
+- Message rows carry the message's own send time instead of the time the plugin handled it, so a
+  message delivered after a reconnect is logged at the time it was sent. Ack and failure rows keep
+  the handling time.
+
 ## [0.3.10] - 2026-09-23
 
 ### Changed

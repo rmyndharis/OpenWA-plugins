@@ -40,17 +40,26 @@ export class FlowEngine {
    * a choice and then ignore it.
    */
   private static readonly MAX_MISSES = 3;
+  /**
+   * From OpenWA 0.23.6 a Baileys session delivers, after it reconnects, what WhatsApp queued while it
+   * was disconnected, each message with its original send time. Five minutes is far above clock skew
+   * between WhatsApp and the gateway and matches the host's own auto-reply age limit.
+   */
+  private static readonly LATE_AFTER_MS = 5 * 60_000;
   /** Per (session,chat) promise chain serializing the state read→write. Self-evicts when drained. */
   private static readonly locks = new Map<string, Promise<unknown>>();
 
   /**
    * Process an incoming message and send auto-replies according to `flow` (the resolved per-session
-   * config). Returns true if a reply was sent, false otherwise. Serializes per (session, conversation)
-   * so concurrent messages for the same conversation can't interleave the state read→write.
+   * config). Returns true if the message was consumed (a reply was sent, or it arrived late inside an
+   * open flow), false otherwise. Serializes per (session, conversation) so concurrent messages for the
+   * same conversation can't interleave the state read→write.
    *
    * `actor` scopes the flow state to a participant: in a group, pass the sender so each member walks
    * their own menu (a group chat is shared by many people); in a 1:1 chat leave it undefined so the
    * state key is just the chatId (unchanged). Replies always go to `chatId`.
+   *
+   * `sentAt` is the message's own send time in unix seconds; missing or invalid reads as now.
    */
   public static async processMessage(
     context: PluginContext,
@@ -60,6 +69,7 @@ export class FlowEngine {
     messageBody: string,
     messageId: string,
     actor?: string,
+    sentAt?: number,
   ): Promise<boolean> {
     const conversation = actor ? `${chatId}|${actor}` : chatId;
     // The bounded re-process inside the body calls processLocked directly (bypassing this lock) so a
@@ -68,7 +78,7 @@ export class FlowEngine {
     const lockKey = `${sessionId}__${conversation}`;
     const prev = this.locks.get(lockKey) ?? Promise.resolve();
     const run = prev.then(() =>
-      this.processLocked(context, flow, sessionId, chatId, conversation, messageBody, messageId, 0),
+      this.processLocked(context, flow, sessionId, chatId, conversation, messageBody, messageId, sentAt, 0),
     );
     const tail = run.catch(() => {});
     this.locks.set(lockKey, tail);
@@ -108,6 +118,7 @@ export class FlowEngine {
     conversation: string,
     messageBody: string,
     messageId: string,
+    sentAt: number | undefined,
     depth = 0,
   ): Promise<boolean> {
     // Not the message body: this line runs for every inbound message, and the dashboard renders plugin
@@ -126,6 +137,16 @@ export class FlowEngine {
       context.logger.debug('[FlowEngine] Flow state expired', { stateKey });
       await context.storage.delete(stateKey);
       state = null;
+    }
+
+    // A message written more than LATE_AFTER_MS before the menu on screen, and delivered that late, was
+    // never typed at that menu: a backlog from a disconnect. Matched here it would walk into sub-menus
+    // the contact never saw or spend the miss budget. Claim it without a reply so no sibling answers it.
+    const sent = new Date((sentAt ?? 0) * 1000);
+    const at = sent.getTime() > 0 ? sent.getTime() : Date.now();
+    if (state && Date.now() - at > this.LATE_AFTER_MS && state.lastActive - at > this.LATE_AFTER_MS) {
+      context.logger.debug('[FlowEngine] Message sent before the current menu. Ignoring.', { stateKey });
+      return true;
     }
 
     const trigger = flow.trigger.trim();
@@ -174,7 +195,7 @@ export class FlowEngine {
         }
         // Recurse on the locked body, NOT processMessage — re-entering the lock would deadlock on this
         // conversation's own still-pending chain entry.
-        return this.processLocked(context, flow, sessionId, chatId, conversation, messageBody, messageId, depth + 1);
+        return this.processLocked(context, flow, sessionId, chatId, conversation, messageBody, messageId, sentAt, depth + 1);
       }
     }
 

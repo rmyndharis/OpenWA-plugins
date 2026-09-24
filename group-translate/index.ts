@@ -28,6 +28,11 @@ import { PluginConfigStore } from "./plugin-config.store";
 // responder registered after it.
 const HOOK_PRIORITY = 50;
 
+// From OpenWA 0.23.6 a Baileys session delivers, after it reconnects, what WhatsApp queued while it was
+// disconnected, each message with its original send time. Five minutes is far above clock skew between
+// WhatsApp and the gateway, and matches the host's own auto-reply age limit.
+const LATE_AFTER_MS = 5 * 60_000;
+
 function readString(
   cfg: Record<string, unknown>,
   key: string,
@@ -225,6 +230,9 @@ export class TranslationPlugin implements IPlugin {
       this.coordinatorSignature = sig;
     }
     if (!this.coordinator) return { continue: true };
+    // `timestamp` is unix seconds; a missing, zero, negative or unrepresentable one reads as sent now.
+    // Judged here, at arrival, so a wait in the coordinator's per-group lock is never counted.
+    const sent = new Date((msg.timestamp ?? 0) * 1000);
     try {
       const inbound: InboundMessage = {
         id: msg.id,
@@ -235,7 +243,20 @@ export class TranslationPlugin implements IPlugin {
         fromMe: msg.fromMe,
         mentionedIds: msg.mentionedIds ?? [],
         pushName: msg.contact?.pushName,
+        late: sent.getTime() > 0 && Date.now() - sent.getTime() > LATE_AFTER_MS,
       };
+      // A command is claimed on the parse and run off-dispatch, so a failed or slow admin lookup can
+      // never pass "/tr on" to the next responder: past the 5 s hook budget the host passes it on itself.
+      if (this.coordinator.isCommand(inbound)) {
+        const sessionId = ctx.sessionId;
+        void this.coordinator.handleMessage(sessionId, inbound).catch((error) =>
+          context.logger.error("Translation command failed", error, {
+            sessionId,
+            action: "translation_command_error",
+          }),
+        );
+        return { continue: false };
+      }
       const { swallow } = await this.coordinator.handleMessage(
         ctx.sessionId,
         inbound,

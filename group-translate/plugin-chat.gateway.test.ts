@@ -64,3 +64,15 @@ test('an empty or whitespace-only translation is dropped, not sent', async () =>
   assert.equal(messages.calls.sendText.length, 0);
   assert.equal(messages.calls.reply.length, 0);
 });
+
+test('resolveCanonicalWid resolves null for an unknown contact and rejects when the host gave no answer', async () => {
+  const messages = makeMessages();
+  const unknown = new PluginChatGateway(messages as never, { getContactById: async () => null } as never);
+  assert.equal(await unknown.resolveCanonicalWid('s', '1@lid'), null);
+
+  const engine = {
+    getContactById: async () => { throw new Error('capability engine.getContactById timed out after 30000ms'); },
+  };
+  const silent = new PluginChatGateway(messages as never, engine as never);
+  await assert.rejects(silent.resolveCanonicalWid('s', '1@lid'), /timed out/);
+});

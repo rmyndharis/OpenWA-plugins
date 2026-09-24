@@ -95,7 +95,7 @@ test("registers in the transformer band, ahead of every responder", async () => 
   assert.equal(getPriority(), 50);
 });
 
-// ── Claim wiring: the coordinator's `swallow` must reach the host as `continue` ──────────────────────
+// ── Claim wiring: the coordinator's claim must reach the host as `continue` ──────────────────────────
 // The coordinator suites pin `{swallow: true/false}`, but nothing pinned that this plugin forwards it.
 // The README, the CHANGELOG and PLUGIN-STANDARD.md all publish the resulting behavior — "claims only its
 // own /tr admin commands, never a translated conversational message" — so a hook that hardcoded
@@ -103,6 +103,8 @@ test("registers in the transformer band, ahead of every responder", async () => 
 
 const GROUP_KEY = "group:s1:group@g.us";
 const AUTHOR = "x@s.whatsapp.net";
+// A claimed command runs after the hook returns; its work is all microtasks, so one turn drains it.
+const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 test("claims a /tr admin command, so no responder answers a message addressed to this plugin", async () => {
   const sent: string[] = [];
@@ -129,8 +131,62 @@ test("claims a /tr admin command, so no responder answers a message addressed to
   await plugin.onEnable(ctx);
 
   const result = await getHook()!(engineCtx({ body: "/tr on" }));
-  assert.equal(sent.length, 1, "the command was handled (its confirmation was sent)");
   assert.equal(result.continue, false, "a control message addressed to this plugin is claimed");
+  await settle();
+  assert.equal(sent.length, 1, "the command was handled (its confirmation was sent)");
+});
+
+// The claim is decided on the parse, not on how the command ends. A group admin lookup that fails, or
+// outlasts the host's 5 s hook budget (which then passes the message on by itself), must not hand
+// "/tr on" to the next responder.
+function commandContext(getGroupInfo: () => Promise<unknown>) {
+  const sent: string[] = [];
+  const { ctx, getHook } = fakeContext(
+    {},
+    {
+      seed: {
+        [GROUP_KEY]: {
+          sessionId: "s1",
+          chatId: "group@g.us",
+          active: false,
+          participants: {},
+          delegatedControllers: [],
+          announced: true,
+        },
+      },
+      messages: { sendText: async (_s: string, _c: string, t: string) => void sent.push(t) },
+      engine: { getGroupInfo, getContactById: async () => null },
+    },
+  );
+  return { ctx, getHook, sent };
+}
+
+test("a /tr command is claimed at once when the admin lookup throws", async () => {
+  const { ctx, getHook, sent } = commandContext(async () => {
+    throw new Error("WhatsApp Web did not answer the read of group group@g.us in time");
+  });
+  await new TranslationPlugin().onEnable(ctx);
+
+  const result = await getHook()!(engineCtx({ body: "/tr on" }));
+  assert.equal(result.continue, false);
+  await settle();
+  assert.deepEqual(sent, [], "an unknown admin list denies, silently by default");
+});
+
+test("a /tr command is claimed at once when the admin lookup never answers", async () => {
+  const { ctx, getHook, sent } = commandContext(() => new Promise(() => {}));
+  await new TranslationPlugin().onEnable(ctx);
+
+  // The host's hook budget in miniature: whichever settles first is what the next responder sees.
+  let timer: NodeJS.Timeout | undefined;
+  const budget = new Promise<HookResult>((resolve) => {
+    timer = setTimeout(() => resolve({ continue: true }), 100);
+  });
+  const result = await Promise.race([getHook()!(engineCtx({ body: "/tr on" })), budget]);
+  clearTimeout(timer);
+  assert.equal(result.continue, false);
+  await settle();
+  assert.deepEqual(sent, []);
 });
 
 test("does NOT claim a translated conversational message — a co-installed responder still sees it", async () => {
@@ -329,4 +385,103 @@ test("coordinator rebuilds when coordinator-affecting config changes, is reused 
     coordAfterEnable,
     "coordinator rebuilt for changed config",
   );
+});
+
+// From OpenWA 0.23.6 a Baileys session delivers, after it reconnects, what WhatsApp queued while it was
+// disconnected, each message with its original send time in `timestamp` (unix seconds).
+async function translatingHook() {
+  const replies: string[] = [];
+  const { ctx, getHook } = fakeContext(
+    {},
+    {
+      seed: {
+        [GROUP_KEY]: {
+          sessionId: "s1",
+          chatId: "group@g.us",
+          active: true,
+          participants: {
+            [AUTHOR]: { lang: "en", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+            "z@s.whatsapp.net": { lang: "id", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+          },
+          delegatedControllers: [],
+          announced: true,
+        },
+      },
+      net: {
+        fetch: async (url: string) =>
+          ({
+            ok: true,
+            status: 200,
+            statusText: "",
+            headers: {},
+            body: url.endsWith("/detect")
+              ? '[{"language":"en","confidence":0.99}]'
+              : '{"translatedText":"halo dunia"}',
+          }) as PluginNetResponse,
+      },
+      messages: {
+        sendText: async () => {},
+        reply: async (_s: string, _c: string, _q: string, t: string) => void replies.push(t),
+      },
+    },
+  );
+  const plugin = new TranslationPlugin();
+  await plugin.onEnable(ctx);
+  return { hook: getHook()!, replies };
+}
+
+test("a message sent more than 5 minutes before it arrives is not translated; a fresh one is", async (t) => {
+  const nowSec = 1_790_000_000;
+  t.mock.timers.enable({ apis: ["Date"], now: nowSec * 1000 });
+  const cases: Array<[string, unknown, boolean]> = [
+    ["10 minutes old", nowSec - 600, true],
+    ["301 s old", nowSec - 301, true],
+    ["exactly 5 minutes old", nowSec - 300, false],
+    ["299 s old", nowSec - 299, false],
+    ["a minute in the future", nowSec + 60, false],
+    ["ten minutes in the future", nowSec + 600, false],
+    ["zero", 0, false],
+    ["missing", undefined, false],
+    ["null", null, false],
+    ["NaN", NaN, false],
+    ["not a number", "x", false],
+    ["negative", -5, false],
+  ];
+  for (const [label, timestamp, late] of cases) {
+    const { hook, replies } = await translatingHook();
+    const result = await hook(engineCtx({ body: "hello world", timestamp: timestamp as number }));
+    assert.equal(result.continue, true, `${label}: conversation is passed on`);
+    assert.equal(replies.length, late ? 0 : 1, `${label}: ${late ? "late, not" : "fresh, so"} translated`);
+  }
+});
+
+test("a late /tr command is still claimed, but not run", async () => {
+  const sent: string[] = [];
+  const { ctx, getHook } = fakeContext(
+    {},
+    {
+      seed: {
+        [GROUP_KEY]: {
+          sessionId: "s1",
+          chatId: "group@g.us",
+          active: false,
+          participants: {},
+          delegatedControllers: [],
+          announced: true,
+        },
+      },
+      messages: { sendText: async (_s: string, _c: string, t: string) => void sent.push(t) },
+      engine: {
+        getGroupInfo: async () => ({ participants: [{ id: AUTHOR, isAdmin: true }] }),
+      },
+    },
+  );
+  const plugin = new TranslationPlugin();
+  await plugin.onEnable(ctx);
+
+  const tenMinutesAgo = Math.floor(Date.now() / 1000) - 600;
+  const result = await getHook()!(engineCtx({ body: "/tr on", timestamp: tenMinutesAgo }));
+  assert.equal(result.continue, false, "no other bot answers a control message addressed to this plugin");
+  await settle();
+  assert.deepEqual(sent, [], "the command is not run, so no confirmation is posted");
 });

@@ -33,7 +33,10 @@ export class TypebotClient {
     return this.postJson(url, { isStreamEnabled: false, textBubbleContentFormat: 'markdown', prefilledVariables: opts.prefilledVariables });
   }
 
-  continueChat(sessionId: string, message: ContinueMessage): Promise<NormalizedResponse> {
+  // An absent message is Typebot's skip of an optional file step. JSON.stringify omits the key, which is
+  // what Typebot's web client sends; never null, because Typebot up to at least v3.0 declares it optional
+  // but not nullable and answers null with a 400, which turn.ts reads as an expired session.
+  continueChat(sessionId: string, message?: ContinueMessage): Promise<NormalizedResponse> {
     const url = `${this.cfg.apiHost}/api/v1/sessions/${encodeURIComponent(sessionId)}/continueChat`;
     return this.postJson(url, { message, textBubbleContentFormat: 'markdown' });
   }
@@ -110,6 +113,14 @@ function richToText(rich: any[]): string {
   return (rich ?? []).map(n => (n?.children ?? []).map((c: any) => c?.text ?? '').join('')).join('\n');
 }
 
+// A file step's placeholder is the web upload box's HTML caption, and Typebot's own default is markup with
+// web-only wording ("Click to upload or drag and drop"). Only plain text is fit to send; markup is dropped,
+// not stripped, since stripping would still leave that web-only wording.
+function plainText(v: unknown): string | undefined {
+  const s = typeof v === 'string' ? v.trim() : '';
+  return s && !/<\/?[a-z][^>]*>|&#?\w+;/i.test(s) ? s : undefined;
+}
+
 function normalizeInput(inp: any): InputSpec {
   const blockId = String(inp?.id ?? '');
   switch (inp?.type) {
@@ -124,7 +135,13 @@ function normalizeInput(inp: any): InputSpec {
     case 'rating input':
       return { kind: 'rating', blockId, max: typeof inp.options?.length === 'number' ? inp.options.length : undefined };
     case 'file input':
-      return { kind: 'file', blockId };
+      return {
+        kind: 'file',
+        blockId,
+        placeholder: plainText(inp.options?.labels?.placeholder),
+        // Typebot treats an absent isRequired as required, and names the skip button 'Skip' by default.
+        skipLabel: inp.options?.isRequired === false ? String(inp.options?.labels?.skip ?? '').trim() || 'Skip' : undefined,
+      };
     case 'text input':
       return {
         kind: 'text',

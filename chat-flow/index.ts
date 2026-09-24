@@ -126,7 +126,7 @@ export default class ChatFlow implements IPlugin {
     try {
       // In a group, scope flow state to the sender so members don't clobber each other's menu position.
       const actor = m.isGroup ? m.author : undefined;
-      const handled = await FlowEngine.processMessage(ctx, liveCfg.flow, hook.sessionId, m.chatId, m.body, m.id, actor);
+      const handled = await FlowEngine.processMessage(ctx, liveCfg.flow, hook.sessionId, m.chatId, m.body, m.id, actor, m.timestamp);
       return { continue: !handled };
     } catch (err) {
       ctx.logger.error('chat-flow: flow processing failed', err);

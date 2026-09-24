@@ -14,7 +14,7 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `typebot-connector` |
-| **Version** | 0.2.10 |
+| **Version** | 0.3.0 |
 | **Released** | 2026-09-24 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
@@ -35,8 +35,8 @@
   numeric reply is mapped back to the option.
 - **Typed inputs validated by Typebot** — email, number, date, … are re-asked on a bad value. A file
   input step accepts a photo/file the contact sends and uploads it to Typebot. Typebot takes only the
-  file there, so typed text is answered with a request for one, and a file step marked optional cannot
-  be skipped from WhatsApp.
+  file there, so typed text is answered with a request for one. A file step marked optional in Typebot
+  is skipped when the contact replies with the step's Skip label ("Skip" unless you renamed it).
 - **Auto-reset** — the session resets when the flow ends or after the idle timeout, so the next message
   starts fresh.
 - **No public URL or webhook** — runs sandboxed in the plugin worker and polls Typebot's live Chat API
@@ -55,6 +55,9 @@ timeout.
 **placeholder is sent to the contact as the prompt**. A placeholder written for a form ("Type here…")
 arrives as a nonsense message; write it as something you would actually say ("Send your order number").
 The same applies to a `choice` step, which arrives as a numbered list the contact answers with a digit.
+A file step's placeholder is its prompt too, but only when it is plain text: Typebot's own default is
+HTML for the web upload box ("Click to upload or drag and drop"), so a placeholder containing markup is
+replaced with "Send a file or photo to continue."
 
 ## Setup
 
@@ -118,6 +121,12 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 - **In a group, each participant gets their own flow**, keyed by the sender. A group message the
   engine delivers with no identifiable sender is skipped rather than answered: there is no way to
   tell whose flow it belongs to, and guessing would feed one contact's answer into another's session.
+- **Messages delivered late after a reconnect.** From OpenWA 0.23.6 a Baileys session delivers, after
+  it reconnects, what WhatsApp held while it was disconnected, each message with its original send
+  time. A message written more than 5 minutes before the current step was sent, and delivered more
+  than 5 minutes late, is ignored: the contact had not seen that step. A reply to a step shown before
+  the outage still answers it, and the idle reset counts from when it was written. A backlog under 5
+  minutes old cannot be told apart from fast typing and is handled as live.
 - `payment` steps and non-renderable embeds can't be shown on WhatsApp and get a short fallback
   message. Streaming AI blocks are resolved server-side into normal text bubbles.
 - **Link bubbles look plainer from OpenWA 0.14.0 on the Baileys engine.** A link bubble and a redirect

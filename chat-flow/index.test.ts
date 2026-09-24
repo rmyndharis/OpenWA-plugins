@@ -259,3 +259,38 @@ test('a channel or broadcast post never starts a flow', async () => {
   await fire('628123456789@c.us');
   assert.deepEqual(replies, ['menu']);
 });
+
+// From host 0.23.6 a Baileys session delivers, after it reconnects, what the contact sent while it was
+// disconnected. Inside an open flow such a message is claimed without a reply, so neither the menu nor
+// a sibling auto-replier answers something written before the menu it would be matched against.
+test('a late backlog inside an open flow is claimed without a reply', async () => {
+  const ChatFlow = (await import('./index.ts')).default;
+  const sent: string[] = [];
+  let handler: ((h: unknown) => Promise<{ continue: boolean }>) | undefined;
+  const store = new Map<string, unknown>();
+  const ctx = {
+    config: { greeting: 'halo', trigger: '', options: [{ key: '1', text: 'satu' }] },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    messages: { sendText: async (_s: string, _c: string, t: string) => { sent.push(t); return { messageId: 'x', timestamp: 0 }; },
+                reply: async (_s: string, _c: string, _q: string, t: string) => { sent.push(t); return { messageId: 'x', timestamp: 0 }; } },
+    storage: {
+      get: async (k: string) => store.get(k) ?? null,
+      set: async (k: string, v: unknown) => void store.set(k, v),
+      delete: async (k: string) => void store.delete(k),
+      list: async () => [...store.keys()],
+    },
+    registerHook: (_e: string, h: (x: unknown) => Promise<{ continue: boolean }>) => { handler = h; },
+  } as never;
+
+  const plugin = new ChatFlow();
+  await plugin.onEnable(ctx);
+  const hourAgo = Math.floor(Date.now() / 1000) - 3600;
+  const fire = (body: string, id: string) =>
+    handler!({ source: 'Engine', sessionId: 's1',
+      data: { id, chatId: 'c@wa', body, type: 'text', timestamp: hourAgo, fromMe: false, isGroup: false } });
+
+  await fire('halo', 'm1');
+  assert.deepEqual(await fire('ada orang?', 'm2'), { continue: false }, 'claimed inside the open flow');
+  assert.deepEqual(sent, ['halo'], 'only the greeting goes out');
+  await plugin.onDisable();
+});

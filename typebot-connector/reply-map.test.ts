@@ -76,3 +76,25 @@ test('typed/free-text and rating pass the raw text through', () => {
   const rating: Awaiting = { kind: 'rating', blockId: 'b', max: 5 };
   assert.deepEqual(mapReply(rating, msg({ body: '4' })), { kind: 'text', message: '4' });
 });
+
+test('an optional file step skips only on its skip label, and only when typed', () => {
+  const optional: Awaiting = { kind: 'file', blockId: 'b', skipLabel: 'Lewati' };
+  assert.deepEqual(mapReply(optional, msg({ body: ' LEWATI ', type: 'text' })), { kind: 'skip' });
+  const other = mapReply(optional, msg({ body: 'sebentar ya' }));
+  assert.equal(other.kind, 'fallback', 'any other text leaves the step where it is');
+  assert.match(other.kind === 'fallback' ? other.text : '', /"Lewati"/);
+  const photo = mapReply(optional, msg({ body: 'Lewati', media: { mimetype: 'image/png', filename: 'p.png', data: 'AAA' } }));
+  assert.equal(photo.kind, 'file', 'a photo captioned with the word is the file');
+  assert.equal(mapReply(optional, msg({ body: 'Lewati', type: 'contact' })).kind, 'fallback', 'a card never skips');
+});
+
+test('an attachment that did not come through at a file step does not invite typing', () => {
+  const omitted = msg({ media: { mimetype: 'image/png', omitted: true } });
+  const required = mapReply({ kind: 'file', blockId: 'b' }, omitted);
+  assert.equal(required.kind, 'fallback');
+  assert.doesNotMatch(required.kind === 'fallback' ? required.text : '', /type/);
+  const optional = mapReply({ kind: 'file', blockId: 'b', skipLabel: 'Skip' }, omitted);
+  assert.match(optional.kind === 'fallback' ? optional.text : '', /reply "Skip" to skip/);
+  const text = mapReply({ kind: 'text', blockId: 'b', attachmentsEnabled: true }, omitted);
+  assert.match(text.kind === 'fallback' ? text.text : '', /or type to continue/);
+});

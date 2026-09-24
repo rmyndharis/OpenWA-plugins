@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseConfig } from './index.ts';
 import { allowCooldown as allowFallback } from './cooldown.ts';
@@ -340,4 +340,70 @@ test('a channel or broadcast post never draws an FAQ reply', async () => {
   // Guard rail: the same body in a real chat still answers.
   await runHook({ rules, chatId: '628123456789@c.us' }, 'promo hari ini', (t) => replies.push(t));
   assert.deepEqual(replies, ['Here is the promo']);
+});
+
+// From OpenWA 0.23.6 a Baileys session delivers the messages WhatsApp queued during a disconnect once
+// it reconnects, each carrying its original send time in `timestamp` (unix seconds). Fires `messages`
+// in order on one fresh plugin with the clock pinned to NOW, and records every reply text, the id each
+// reply quoted, and the {continue} result of each message.
+const NOW = Date.UTC(2026, 8, 24, 10, 0, 0);
+const NOW_S = NOW / 1000;
+const HOUR = 3_600;
+async function fireAt(config: Record<string, unknown>, messages: Array<{ id: string; body: string; timestamp: unknown }>) {
+  const sent: string[] = [];
+  const quoted: string[] = [];
+  const results: boolean[] = [];
+  let handler: ((hook: unknown) => Promise<{ continue: boolean }>) | undefined;
+  const ctx = makeCtx({
+    config,
+    registerHook: (_e, h) => { handler = h as (hook: unknown) => Promise<{ continue: boolean }>; },
+    reply: async (_s, _c, q, text) => { quoted.push(q); sent.push(text); return { messageId: 'x', timestamp: 0 }; },
+  });
+  const { default: FaqBot } = await import('./index.ts');
+  await new FaqBot().onEnable(ctx as never);
+  mock.timers.enable({ apis: ['Date'], now: NOW });
+  try {
+    for (const { id, body, timestamp } of messages) {
+      const r = await handler!({
+        source: 'Engine', sessionId: 's1', timestamp: new Date(),
+        data: { id, chatId: 'c@x', body, type: 'text', fromMe: false, isGroup: false, timestamp },
+      });
+      results.push(r.continue);
+    }
+  } finally {
+    mock.timers.reset();
+  }
+  return { sent, quoted, results };
+}
+
+const priceRule = JSON.stringify([{ mode: 'contains', pattern: 'harga', reply: 'Harga mulai 50rb' }]);
+
+test('a message replayed long after it was sent draws neither a rule answer nor the fallback', async () => {
+  // Staff may have answered these from the phone during the outage. The matched one stays claimed, so
+  // no other bot answers a question this plugin owns; the unmatched one passes down the chain.
+  const { sent, results } = await fireAt({ rules: priceRule, fallbackReply: 'Maaf, belum paham.' }, [
+    { id: 'm1', body: 'berapa harga paket A?', timestamp: NOW_S - HOUR },
+    { id: 'm2', body: 'halo', timestamp: NOW_S - HOUR },
+  ]);
+  assert.deepEqual(sent, [], 'nothing may be sent for an hour-old message');
+  assert.deepEqual(results, [false, true]);
+});
+
+test('the stale backlog does not spend the cooldown slot of a fresh message after it', async () => {
+  const { quoted } = await fireAt({ rules: priceRule, fallbackReply: 'Maaf, belum paham.' }, [
+    { id: 'm1', body: 'halo', timestamp: NOW_S - HOUR },
+    { id: 'm2', body: 'berapa harga?', timestamp: NOW_S - HOUR },
+    { id: 'm3', body: 'halo lagi', timestamp: NOW_S },
+    { id: 'm4', body: 'berapa harga?', timestamp: NOW_S },
+  ]);
+  assert.deepEqual(quoted, ['m3', 'm4'], 'only the fresh messages draw the fallback and the rule answer');
+});
+
+test('recent, future-skewed and unusable send times are all answered', async () => {
+  // Exactly five minutes is still fresh, a clock ahead of the gateway is not late, and a missing or
+  // unusable timestamp counts as sent now.
+  for (const timestamp of [NOW_S - 299, NOW_S - 300, NOW_S + 120, undefined, 0, -1, NaN, null, 'abc']) {
+    const { sent } = await fireAt({ rules: priceRule }, [{ id: 'm1', body: 'berapa harga?', timestamp }]);
+    assert.deepEqual(sent, ['Harga mulai 50rb'], `timestamp ${String(timestamp)} must be answered`);
+  }
 });

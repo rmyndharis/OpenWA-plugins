@@ -3,7 +3,7 @@ import type { TypebotConfig } from './typebot-types.ts';
 import { KeyedAsyncLock } from './chat-lock.ts';
 import { SessionStore } from './session-store.ts';
 import { TypebotClient } from './typebot-client.ts';
-import { handleTurn } from './turn.ts';
+import { handleTurn, LATE_AFTER_MS } from './turn.ts';
 import { inScope } from './filters.ts';
 
 // Responder band, late: this plugin auto-starts a flow for every chat it is in scope for, so it is a
@@ -71,7 +71,11 @@ export default class TypebotConnector implements IPlugin {
         // never delay a reply, and it is deliberately driven by traffic rather than a timer so a disabled
         // plugin leaves nothing running.
         const now = Date.now();
-        if (now - (this.lastSweepAt.get(sessionId) ?? 0) > SWEEP_INTERVAL_MS) {
+        // A reconnect replay does not sweep: the rows it would prune are the ones its own late replies
+        // may still continue, since turn.ts judges idle from when a message was written.
+        const sent = new Date((msg.timestamp ?? 0) * 1000);
+        const late = sent.getTime() > 0 && now - sent.getTime() > LATE_AFTER_MS;
+        if (!late && now - (this.lastSweepAt.get(sessionId) ?? 0) > SWEEP_INTERVAL_MS) {
           this.lastSweepAt.set(sessionId, now);
           void store
             .pruneIdle(now, cfg.sessionTimeoutMinutes * 60_000, sessionId)

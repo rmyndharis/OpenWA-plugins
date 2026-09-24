@@ -4,9 +4,11 @@ import type { Awaiting, ReplyIntent } from './typebot-types.ts';
 // Map a WhatsApp reply to the argument for continueChat, given what the bot is waiting for.
 export function mapReply(awaiting: Awaiting, msg: IncomingMessage): ReplyIntent {
   const text = (msg.body ?? '').trim();
+  const card = msg.type === 'contact' || msg.type === 'poll' || msg.type === 'order' || msg.type === 'product';
 
   // File input, or a text input that accepts attachments: prefer the media.
   if (awaiting.kind === 'file' || (awaiting.kind === 'text' && awaiting.attachmentsEnabled)) {
+    const skip = awaiting.kind === 'file' && awaiting.skipLabel ? ` Or reply "${awaiting.skipLabel}" to skip this step.` : '';
     if (msg.media?.data && !msg.media.omitted) {
       return { kind: 'file', mime: msg.media.mimetype, filename: msg.media.filename ?? 'file', data: msg.media.data };
     }
@@ -16,10 +18,15 @@ export function mapReply(awaiting: Awaiting, msg: IncomingMessage): ReplyIntent 
       // Host 0.23.4 added the failed download on both engines, which is the retryable one, so naming
       // size told most of these contacts to do the one thing that cannot help. The vendored contract
       // says so directly: see the `omitted` note in types/openwa.d.ts.
-      return { kind: 'fallback', text: 'That attachment did not come through. Please try sending it again, or type to continue.' };
+      // A file step refuses typed text, so only a text step may offer it.
+      return awaiting.kind === 'text'
+        ? { kind: 'fallback', text: 'That attachment did not come through. Please try sending it again, or type to continue.' }
+        : { kind: 'fallback', text: `That attachment did not come through. Please try sending it again.${skip}` };
     }
     if (awaiting.kind === 'text') return { kind: 'text', message: text }; // attachment optional → plain text ok
-    return { kind: 'fallback', text: 'Please send a file or photo to continue.' };
+    // Only the exact skip word skips: a skip cannot be undone, and contacts often type a line before the photo.
+    if (awaiting.skipLabel && !card && text.toLowerCase() === awaiting.skipLabel.toLowerCase()) return { kind: 'skip' };
+    return { kind: 'fallback', text: `Please send a file or photo to continue.${skip}` };
   }
 
   // Since host 0.23.2 a shared contact card arrives with its full vCard as the body and a poll with its
@@ -28,7 +35,7 @@ export function mapReply(awaiting: Awaiting, msg: IncomingMessage): ReplyIntent 
   // four advances the flow with garbage, and a bare in-range digit (a street number, a pack size) would
   // silently select a numbered choice. Prompt instead and leave the step where it is. Deliberately after
   // the file branch above, so sharing a card at a file step still gets that step's own wording.
-  if (msg.type === 'contact' || msg.type === 'poll' || msg.type === 'order' || msg.type === 'product') {
+  if (card) {
     return { kind: 'fallback', text: 'Please type your answer to continue.' };
   }
 

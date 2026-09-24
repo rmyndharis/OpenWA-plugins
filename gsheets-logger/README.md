@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `gsheets-logger` |
-| **Version** | 0.3.10 |
-| **Released** | 2026-09-23 |
+| **Version** | 0.3.11 |
+| **Released** | 2026-09-24 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -54,6 +54,12 @@ One row per event, columns:
 ```
 timestamp | sessionId | event | direction | chatId | from | to | senderName | isGroup | type | body | messageId | ackStatus | error
 ```
+
+`timestamp` is UTC. On `message:received` and `message:sent` rows it is the message's own send time
+from WhatsApp, in whole seconds. On `message:ack` and `message:failed` rows, which carry no time of
+their own, it is when the plugin handled the event. Rows are appended as events arrive, so from
+OpenWA 0.23.6 on Baileys a message sent while the session was disconnected is logged after it
+reconnects, below newer rows and with its original time. Sort by `timestamp` for chronological order.
 
 `message:ack` rows fill the `messageId` and `ackStatus` columns and require OpenWA ≥ v0.6.1 (older
 builds never emitted the hook).

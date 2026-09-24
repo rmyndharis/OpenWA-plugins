@@ -43,6 +43,8 @@ export interface InboundMessage {
   fromMe: boolean;
   mentionedIds: string[];
   pushName?: string;
+  /** Reached the plugin more than 5 minutes after it was sent; neither translated nor run. */
+  late?: boolean;
 }
 
 export type CommandName =
@@ -84,7 +86,8 @@ export interface ChatGateway {
   /**
    * The `<phone>@c.us` form of a wid the host delivered in another dialect — in practice a `@lid`
    * message author, which carries a different user number than the `@c.us` ids the group participant
-   * list uses, so the two can never be compared directly. Returns null when the host cannot resolve it.
+   * list uses, so the two can never be compared directly. Resolves null when the host has no mapping
+   * for it, and rejects when the host gave no answer.
    */
   resolveCanonicalWid(sessionId: string, wid: string): Promise<string | null>;
 }
