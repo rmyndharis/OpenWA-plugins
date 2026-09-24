@@ -15,13 +15,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chatwoot-adapter` |
-| **Version** | 0.9.8 |
-| **Released** | 2026-09-18 |
+| **Version** | 0.9.9 |
+| **Released** | 2026-09-24 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.7 (tested 0.23.4) |
+| **Requires OpenWA** | ≥ 0.8.7 (tested 0.23.6) |
 | **Keywords** | chatwoot, helpdesk, inbox, handover, two-way, agent, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/chatwoot-adapter](https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter) |
 <!-- END DETAILS -->
@@ -156,6 +156,16 @@ instance id or route — so re-copy the ingress URL from the mint response.
   gate, `net.allowConfigHosts`), the `conversation.send` media/voice types for outbound attachments, the
   sandbox-bridged `engine.getChatHistory` for the history backfill, and `engine.canonicalChatId` for `@lid`
   resolution.
+- **Messages that arrived while the session was disconnected are relayed after it reconnects** (from
+  OpenWA 0.23.6 on the Baileys engine). Chatwoot shows each at the time it was relayed, not when it was
+  sent, and in the order they reached the gateway, which during that catch-up can differ from the order
+  they were written. The Chatwoot API cannot change the displayed time: `external_created_at` is stored
+  but the dashboard shows only the creation time.
+- **Catalog orders and product cards are labelled from OpenWA 0.23.5.** An order appears as
+  `🛒 Order <id>` followed by the customer's note, a product card as `🛍️ <title> (product <id>)` followed
+  by any text sent with it, with the product image attached when the engine delivers one. The order's
+  token is never relayed, and neither is a body that is only the image thumbnail (whatsapp-web.js). On
+  older hosts both arrive as an unlabelled message, as before.
 - **Polls, contact cards, shared events and button taps carry their text from OpenWA 0.23.2 on the
   Baileys engine.** A poll's question, a shared contact's vCard, an event name and a tapped button's
   label now appear as the Chatwoot message text instead of the `📊 Poll` / `👤 Contact` marker, which

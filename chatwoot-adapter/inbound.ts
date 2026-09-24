@@ -104,11 +104,13 @@ export async function handleInbound(
     // message. It is NOT the "relayed" signal — a failed relay is enqueued below, and the pending-queue
     // entry is what drives retry, independent of this marker. Scoped by session so two tenants' WA message
     // ids can't collide in the shared plugin store.
-    if (await deps.store.hasSeen('wa', msg.id, sessionId)) return;
     try {
-      // markSeen is INSIDE the try so that a storage failure here takes the same enqueue-for-retry path as
-      // a failed relay. Left outside, a rejected marker write (the host rejects every `set` once the plugin
-      // is at its storage quota) threw straight out of the hook with the message neither relayed nor queued.
+      // The dedup read and markSeen are INSIDE the try so that a storage failure here takes the same
+      // enqueue-for-retry path as a failed relay. Left outside, a rejected call (the host rejects every `set`
+      // once the plugin is at its storage quota, and a plugin's 33rd concurrent capability call, which a
+      // reconnect delivering a backlog across many chats can reach) threw straight out of the hook with the
+      // message neither relayed nor queued.
+      if (await deps.store.hasSeen('wa', msg.id, sessionId)) return;
       await deps.store.markSeen('wa', msg.id, sessionId);
       await relayInbound(deps, sessionId, msg);
     } catch (err) {

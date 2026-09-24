@@ -34,9 +34,37 @@ function senderLabel(msg: IncomingMessage): string {
   return msg.contact?.pushName || msg.senderPhone || msg.author || 'unknown';
 }
 
+// On whatsapp-web.js the body of an order or product can be its base64 JPEG thumbnail rather than text, the
+// way a location's body is its map thumbnail: one unbroken run of base64, never something a person typed.
+const IMAGE_DATA = /^(?:\/9j\/|iVBORw0KGgo)\S*$|^[A-Za-z0-9+/]{200,}={0,2}$/;
+
+// A catalog order or a shared product card: a marker line an agent can tell apart from typed text, then the
+// text the message carried. Never the order token, a single-order credential. Undefined for every other
+// message, and on hosts below 0.23.5, which set neither block. Without its block (no id) the text relays
+// as before, but a body that is only image data becomes the type marker.
+function commerceText(msg: IncomingMessage): string | undefined {
+  if (msg.type !== 'order' && msg.type !== 'product') return undefined;
+  const text = msg.body?.trim();
+  const body = text && !IMAGE_DATA.test(text) ? text : undefined;
+  if (msg.type === 'order' && msg.order) {
+    return [`🛒 Order ${msg.order.orderId}`, body].filter(Boolean).join('\n');
+  }
+  if (msg.type === 'product' && msg.product) {
+    const { productId, title } = msg.product;
+    const line = title ? `🛍️ ${title} (product ${productId})` : `🛍️ Product ${productId}`;
+    return [line, body !== title ? body : undefined].filter(Boolean).join('\n');
+  }
+  return text && !body ? `💬 ${msg.type}` : undefined;
+}
+
+// What a message relays as, before the group sender prefix.
+function textOf(msg: IncomingMessage): string {
+  return commerceText(msg) ?? msg.body;
+}
+
 function prefixSender(msg: IncomingMessage): string {
-  if (!msg.isGroup) return msg.body;
-  return `*${senderLabel(msg)}:* ${msg.body}`;
+  if (!msg.isGroup) return textOf(msg);
+  return `*${senderLabel(msg)}:* ${textOf(msg)}`;
 }
 
 // A shared location rendered for Chatwoot: a pin line (description/address when present) plus a link the
@@ -73,8 +101,8 @@ export function placeholderFor(msg: IncomingMessage): string {
   return msg.body?.trim() || `💬 ${msg.type || 'Message'}`;
 }
 
-// Render one WhatsApp message into Chatwoot (text / media / location / sticker / voice, with quote
-// threading). Live inbound always passes 'incoming'; history backfill derives the direction per message.
+// Render one WhatsApp message into Chatwoot (text / media / location / sticker / voice / order / product,
+// with quote threading). Live inbound always passes 'incoming'; backfill derives the direction per message.
 // An 'outgoing' post is echo-guarded before returning (see below) — the caller need not.
 export async function relayMessage(
   deps: InboundDeps,
@@ -108,7 +136,7 @@ export async function relayMessage(
       { ...post, isVoiceMessage: isVoice },
     );
   } else {
-    created = await deps.client.postText(conversationId, msg.body?.trim() ? content : placeholderFor(msg), post);
+    created = await deps.client.postText(conversationId, textOf(msg)?.trim() ? content : placeholderFor(msg), post);
   }
   // Echo guard for the own-send mirror (#615), the mirror image of the 'wa' marker outbound.relay writes.
   // A message posted as 'outgoing' comes straight back as a Chatwoot `message_created` that

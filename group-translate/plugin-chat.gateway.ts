@@ -52,16 +52,12 @@ export class PluginChatGateway implements ChatGateway {
    * value that cannot be compared with a participant list.) Read-only and permission-gated by
    * `engine:read`, which this plugin already declares for the admin lookup above.
    *
-   * Best-effort by contract: an unknown contact, a slow engine or a torn-down session all resolve to
-   * null, and the caller falls back to the direct comparison rather than failing the command.
+   * An unknown contact resolves to null. A slow engine or a torn-down session rejects, so the caller
+   * can deny this command without remembering the answer it never got.
    */
   async resolveCanonicalWid(sessionId: string, wid: string): Promise<string | null> {
-    try {
-      const contact = (await this.engine.getContactById(sessionId, wid)) as { id?: unknown } | null | undefined;
-      const id = contact?.id;
-      return typeof id === 'string' && id.length > 0 ? id : null;
-    } catch {
-      return null;
-    }
+    const contact = (await this.engine.getContactById(sessionId, wid)) as { id?: unknown } | null | undefined;
+    const id = contact?.id;
+    return typeof id === 'string' && id.length > 0 ? id : null;
   }
 }

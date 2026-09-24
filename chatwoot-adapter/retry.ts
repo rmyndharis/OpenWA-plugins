@@ -22,8 +22,9 @@ export const MAX_PENDING_RETRIES = 80;
 
 // Return a copy safe to persist in the retry queue: an oversized media blob is dropped (marked omitted)
 // so the retry posts a type placeholder instead of failing to persist. Small media is kept for a faithful
-// retry. Pure.
-export function slimForRetry(msg: IncomingMessage): IncomingMessage {
+// retry. An order's token, a single-order credential the relay never renders, is never stored. Pure.
+export function slimForRetry(input: IncomingMessage): IncomingMessage {
+  const msg = input.order?.token ? { ...input, order: { orderId: input.order.orderId } } : input;
   const media = msg.media;
   if (media?.data && media.data.length > RETRY_MAX_MEDIA_B64) {
     return { ...msg, media: { ...media, data: undefined, omitted: true } };

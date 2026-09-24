@@ -112,3 +112,21 @@ test('claims an in-scope chat and passes an out-of-scope one on', async () => {
   const outOfScope = await runHook({ source: 'Webhook', isGroup: false });
   assert.equal(outOfScope.continue, true, 'not from the engine — not ours');
 });
+
+// A reconnect replay must not sweep: the rows it would prune are the ones its own late replies may
+// still continue, and whether the prune or the reply reached a row first would decide the outcome.
+test('a replayed backlog does not trigger the idle sweep', async () => {
+  let handler: HookHandler | undefined;
+  let lists = 0;
+  const ctx = makeCtx({ registerHook: (_e, h) => { handler = h; } });
+  ctx.storage.list = async () => { lists++; return []; };
+  await new Plugin().onEnable(ctx as never);
+  const fire = (timestamp: number) => handler!({
+    event: 'message:received', source: 'Engine', sessionId: 's1', timestamp: new Date(),
+    data: { id: 'm', from: 'x@c.us', to: 'y', chatId: 'c@c.us', body: 'hi', type: 'chat', timestamp, fromMe: false, isGroup: false },
+  });
+  await fire(Math.floor(Date.now() / 1000) - 3600);
+  assert.equal(lists, 0, 'a message written an hour ago does not sweep');
+  await fire(Math.floor(Date.now() / 1000));
+  assert.ok(lists > 0, 'the next live message does');
+});

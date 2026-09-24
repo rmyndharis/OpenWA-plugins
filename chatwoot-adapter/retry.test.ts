@@ -62,6 +62,12 @@ test('slimForRetry strips an oversized media blob (so it retries as a placeholde
   assert.equal(slimForRetry(msg('m3')).media, undefined); // no media → unchanged
 });
 
+test('slimForRetry never persists an order token, and keeps the order id the relay renders', () => {
+  const order = { ...msg('m1'), type: 'order', order: { orderId: '1', token: 'SECRET' } } as IncomingMessage;
+  assert.deepEqual(slimForRetry(order).order, { orderId: '1' });
+  assert.equal(order.order?.token, 'SECRET', 'the input is not mutated');
+});
+
 test('drain: a successful relay whose deleteRetry throws is NOT re-posted or bumped (treated as delivered)', async () => {
   let posts = 0;
   let bumps = 0;
