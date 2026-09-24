@@ -695,7 +695,7 @@
   {
     "id": "faq-bot",
     "name": "FAQ / Auto-Reply Bot",
-    "version": "0.2.11",
+    "version": "0.2.12",
     "type": "extension",
     "status": "stable",
     "description": "Auto-replies to inbound WhatsApp messages from configurable FAQ keyword/regex rules.",
@@ -711,11 +711,11 @@
     ],
     "minOpenWAVersion": "0.6.1",
     "testedOpenWAVersion": "0.23.6",
-    "releasedAt": "2026-09-23",
+    "releasedAt": "2026-09-24",
     "repoPath": "faq-bot",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.2.11/faq-bot.zip#sha256=842d572ab0ff98f78fcee45706100606b2a7531dbfdb6ed778d52fa106dc6ca2",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.2.12/faq-bot.zip#sha256=376a91480aefcdf7f017e937d125ee9685380ab5b913b6f0796322635c739ec6",
     "permissions": [
       "messages:send"
     ],
@@ -1363,7 +1363,7 @@
   {
     "id": "http-action",
     "name": "HTTP Action Bot",
-    "version": "0.2.9",
+    "version": "0.2.10",
     "type": "extension",
     "status": "stable",
     "description": "Triggers safe REST API requests from WhatsApp commands and renders JSON responses back to chat.",
@@ -1379,11 +1379,11 @@
     ],
     "minOpenWAVersion": "0.8.0",
     "testedOpenWAVersion": "0.23.6",
-    "releasedAt": "2026-09-23",
+    "releasedAt": "2026-09-24",
     "repoPath": "http-action",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/http-action-v0.2.9/http-action.zip#sha256=a0b6984278adff5a0d3e7deba78e3683159d673e102869da654edae4be95205e",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/http-action-v0.2.10/http-action.zip#sha256=3360a9a2901e81082ea5d0a0953bffa2eec1c32fd46745eabf1f4a793133c2f1",
     "permissions": [
       "net:fetch",
       "conversation:send",

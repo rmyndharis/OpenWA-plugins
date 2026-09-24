@@ -12,6 +12,11 @@ const PLUGIN = 'http-action';
 const REPLY_MAX = 4000;
 const DEFAULT_NOT_FOUND = 'Not found.';
 const DEFAULT_ERROR = 'Service is temporarily unavailable. Please try again later.';
+const LATE_NOTICE = 'This command arrived late and was not run. Please send it again if you still need it.';
+// From OpenWA 0.23.6 a Baileys session delivers, after it reconnects, what WhatsApp queued while it was
+// disconnected, each message with its original send time. Five minutes is far above clock skew between
+// WhatsApp and the gateway and matches the host's own auto-reply age limit.
+const LATE_AFTER_MS = 5 * 60_000;
 
 // Responder band, first: a command prefix is the most specific trigger any of these plugins has, so a
 // message addressed to it should never also be answered by a keyword bot or a flow.
@@ -71,9 +76,10 @@ function buildCtx(msg: IncomingMessage, sessionId: string, args: string[], respo
 }
 
 /**
- * Per-message work: match → dedup CHECK (fail-closed) → cooldown (fail-open) → fetch → map status →
- * render → send → mark seen. The dedup MARK is written only after a successful send, so a transient send
- * failure retries on redelivery instead of being silently dropped (mirrors chatwoot's hasSeen/markSeen).
+ * Per-message work: match → dedup CHECK (fail-closed) → late-POST refusal → cooldown (fail-open) →
+ * fetch → map status → render → send → mark seen. The dedup MARK is written only after a successful
+ * send, so a transient send failure retries on redelivery instead of being silently dropped (mirrors
+ * chatwoot's hasSeen/markSeen).
  */
 export async function handleMessage(deps: HandleDeps, sessionId: string, msg: IncomingMessage): Promise<void> {
   const hit = matchAction(deps.cfg.actions, msg.body);
@@ -88,6 +94,21 @@ export async function handleMessage(deps: HandleDeps, sessionId: string, msg: In
   void prune(deps.storage, deps.now(), DEDUP_TTL_MS, PRUNE_INTERVAL_MS).catch((e) =>
     deps.logger.error(`${PLUGIN}: prune failed`, e),
   );
+  // A late POST is refused rather than run: a write the contact sent before an outage (and may have given
+  // up on, or done another way) would otherwise fire now. A GET only reads and still runs. A missing,
+  // zero, negative or unrepresentable timestamp counts as sent now. After the dedup read, so a redelivery
+  // of a command that already ran is never told it did not; before the cooldown, so the notice does not
+  // hold back a fresh command.
+  const sent = new Date((msg.timestamp ?? 0) * 1000);
+  const ageMs = sent.getTime() > 0 ? deps.now() - sent.getTime() : 0;
+  if (hit.action.request.method === 'POST' && ageMs > LATE_AFTER_MS) {
+    deps.logger.warn(`${PLUGIN}: action '${hit.action.id}' not run, the command arrived late`,
+      { ageSeconds: Math.round(ageMs / 1000) });
+    // Send-then-mark, as for the reply below: a failed notice stays un-marked and a redelivery retries it.
+    await deps.conversations.send({ sessionId, chatId: msg.chatId, type: 'text', text: LATE_NOTICE, replyTo: msg.id });
+    await markSeen(deps.storage, sessionId, msg.id, deps.now());
+    return;
+  }
   // Cooldown (fail-open): one reply per chat per window. Checked before the mark so a blocked message
   // consumes nothing and a later message (after the window) still goes through.
   const cooldownMs = Math.max(0, deps.cfg.cooldownSeconds) * 1000;

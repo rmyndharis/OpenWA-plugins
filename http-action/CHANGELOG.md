@@ -5,6 +5,13 @@ and the top entry's version must match `manifest.json`.
 
 ## [Unreleased]
 
+## [0.2.10] - 2026-09-24
+
+### Fixed
+
+- A `POST` command that arrives more than five minutes late, as queued messages do after a Baileys
+  reconnect from OpenWA 0.23.6, is no longer run; the contact is asked to send it again.
+
 ## [0.2.9] - 2026-09-23
 
 ### Fixed
