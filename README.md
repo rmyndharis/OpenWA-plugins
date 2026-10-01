@@ -10,6 +10,7 @@ Extend your WhatsApp gateway with drop-in capabilities: log conversations to a s
 [![Built for OpenWA](https://img.shields.io/badge/built%20for-OpenWA-25D366.svg)](https://github.com/rmyndharis/OpenWA)
 [![Plugin type](https://img.shields.io/badge/plugin%20type-extension-blue.svg)](#plugin-contract)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/rmyndharis)
 
 [Install a plugin](#installing-a-plugin) · [Plugin catalog](#plugin-catalog) · [Write your own](#authoring-a-plugin) · [Contributing](#contributing)
 
@@ -312,6 +313,12 @@ Plugins run in a **sandboxed worker thread** (since OpenWA v0.6.0): capabilities
 - Store secrets via the dashboard's `secret`-flagged config fields, never in source.
 
 Found a security issue in a plugin here? Please report it privately via the [OpenWA security policy](https://github.com/rmyndharis/OpenWA/security) rather than opening a public issue.
+
+## Support
+
+If these plugins are useful to you, you can support OpenWA development by buying me a coffee.
+
+<a href="https://buymeacoffee.com/rmyndharis"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" height="50"/></a>
 
 ## License
 
