@@ -6,6 +6,12 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-10-15
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.25.0 and complete dashboard translations for all supported locales.
+
 ## [1.3.1] - 2026-09-24
 
 ### Added

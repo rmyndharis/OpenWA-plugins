@@ -92,7 +92,7 @@ test('onDisable awaits an in-flight failing flush and persists the restored rows
   };
   harness.client = { appendRows: async (): Promise<void> => { await appendGate; throw new Error('sheets 500'); } };
   harness.ctx = {
-    storage: { set: async (_key: string, value: string[][]): Promise<void> => { setCalls.push(value.map((r) => [...r])); } },
+    storage: { set: async (_key: string, value: { rows: string[][] }): Promise<void> => { setCalls.push(value.rows.map((r) => [...r])); } },
     logger: { error: (): void => {}, warn: (): void => {} },
   };
   harness.buffer = [['a'], ['b']];
@@ -209,6 +209,17 @@ const enableCtx = (stored: unknown, warns: string[] = []): unknown => ({
   registerHook: (): void => {},
 });
 
+test('a legacy buffer migration must persist before hooks become active', async () => {
+  let registered = 0;
+  const ctx = enableCtx([['retained row']]) as { storage: unknown; registerHook: () => void };
+  ctx.storage = { get: async () => [['retained row']], set: async () => { throw new Error('quota exceeded'); } };
+  ctx.registerHook = () => { registered++; };
+  const logger = new GSheetsLogger();
+  await assert.rejects(logger.onEnable(ctx as never), /quota exceeded/);
+  assert.equal(registered, 0);
+  await logger.onUnload();
+});
+
 test('a restored buffer is filtered to rows of strings before anything uses it', async () => {
   // The buffer comes back from ctx.storage, and everything downstream assumes rows of strings — the
   // size accounting reads every cell's length, and the Sheets append sends them verbatim. A stored
@@ -267,7 +278,7 @@ test('rows buffered for the old spreadsheet never cross into the new one', async
       storage: { get: async (k: string) => stored[k] ?? null, set: async (k: string, v: unknown) => void (stored[k] = v) },
       logger: { warn: (m: string): void => void warns.push(m), error: (): void => {}, log: (): void => {} },
     } as never,
-    {},
+    { spreadsheetId: 'NEW-SHEET', serviceAccountJson: validSa },
   );
   await logger.onUnload();
 
@@ -301,7 +312,7 @@ test('a config change that keeps the same sheet and credentials retains the rows
   // Same spreadsheet, same credentials; only the flush interval moved.
   await logger.onConfigChange(
     { ...base, config: { spreadsheetId: 'SAME', serviceAccountJson: validSa, flushIntervalSec: 30 } } as never,
-    {},
+    { spreadsheetId: 'SAME', serviceAccountJson: validSa, flushIntervalSec: 30 },
   );
   await logger.onUnload();
 
@@ -311,6 +322,147 @@ test('a config change that keeps the same sheet and credentials retains the rows
     false,
     `nothing may be parked when the target did not move, stored keys: ${Object.keys(stored)}`,
   );
+});
+
+test('a failed parking write retains buffered rows and the old destination', async () => {
+  const logger = new GSheetsLogger();
+  const oldClient = { appendRows: async (): Promise<void> => { throw new Error('sheets unavailable'); } };
+  const harness = logger as unknown as { client: unknown; ctx: unknown; buffer: string[][]; target: string };
+  const ctx = {
+    config: { spreadsheetId: 'NEW-SHEET', serviceAccountJson: validSa },
+    storage: {
+      get: async () => null,
+      set: async (): Promise<void> => { throw new Error('storage quota exceeded'); },
+    },
+    net: { fetch: async () => ({ ok: true, status: 200, body: '{}' }) },
+    logger: { log() {}, warn() {}, error() {} },
+  };
+  harness.client = oldClient;
+  harness.ctx = ctx;
+  harness.target = 'old-target';
+  harness.buffer = [['old-row']];
+  try {
+    await assert.rejects(logger.onConfigChange(ctx as never, ctx.config), /storage quota exceeded/);
+    assert.deepEqual(harness.buffer, [['old-row']]);
+    assert.equal(harness.client, oldClient);
+    assert.equal(harness.target, 'old-target');
+  } finally {
+    await logger.onUnload();
+  }
+});
+
+for (const shutdown of ['graceful', 'abrupt']) {
+test(`${shutdown} restart after failed parking keeps old rows away from the new destination`, async () => {
+  const stored: Record<string, unknown> = { buffer: [['private old row']] };
+  let rejectParking = true;
+  const ctx = {
+    config: { spreadsheetId: 'OLD-SHEET', serviceAccountJson: validSa },
+    storage: {
+      get: async (key: string) => structuredClone(stored[key] ?? null),
+      set: async (key: string, value: unknown) => {
+        if (key === 'buffer:undelivered' && rejectParking) throw new Error('quota exceeded');
+        stored[key] = structuredClone(value);
+      },
+    },
+    net: { fetch: async () => ({ ok: true, status: 200, body: '{}' }) },
+    logger: { log() {}, warn() {}, error() {} },
+    registerHook() {},
+  };
+  const first = new GSheetsLogger();
+  const second = new GSheetsLogger();
+  const third = new GSheetsLogger();
+  try {
+    await first.onEnable(ctx as never);
+    const harness = first as unknown as { client: unknown; buffer: string[][] };
+    harness.client = { appendRows: async () => { throw new Error('sheets unavailable'); } };
+    harness.buffer = [['private old row']];
+    ctx.config = { ...ctx.config, spreadsheetId: 'NEW-SHEET' };
+    await assert.rejects(first.onConfigChange(ctx as never, ctx.config), /quota exceeded/);
+    if (shutdown === 'graceful') await first.onDisable();
+    else await first.onUnload();
+    assert.ok(!JSON.stringify(stored.buffer).includes('KEY'), 'saved identity must not contain credentials');
+
+    await assert.rejects(second.onEnable(ctx as never), /quota exceeded/);
+    await second.onDisable();
+    rejectParking = false;
+    await third.onEnable(ctx as never);
+    assert.deepEqual((third as unknown as { buffer: string[][] }).buffer, []);
+    assert.deepEqual(stored['buffer:undelivered'], [['private old row']]);
+  } finally {
+    await Promise.all([first.onUnload(), second.onUnload(), third.onUnload()]);
+  }
+});
+}
+
+test('a persisted buffer resumes under the same destination after restart', async () => {
+  const stored: Record<string, unknown> = { buffer: [['retained row']] };
+  const ctx = {
+    config: { spreadsheetId: 'SAME', serviceAccountJson: validSa },
+    storage: {
+      get: async (key: string) => structuredClone(stored[key] ?? null),
+      set: async (key: string, value: unknown) => { stored[key] = structuredClone(value); },
+    },
+    net: { fetch: async () => ({ ok: true, status: 200, body: '{}' }) },
+    logger: { log() {}, warn() {}, error() {} },
+    registerHook() {},
+  };
+  const first = new GSheetsLogger();
+  const second = new GSheetsLogger();
+  try {
+    await first.onEnable(ctx as never);
+    (first as unknown as { client: unknown }).client = { appendRows: async () => { throw new Error('unavailable'); } };
+    await first.onDisable();
+    ctx.config.serviceAccountJson = JSON.stringify({ private_key: 'KEY', client_email: 'a@b.iam.gserviceaccount.com' }, null, 2);
+    await second.onEnable(ctx as never);
+    const delivered: string[][] = [];
+    (second as unknown as { client: unknown }).client = { appendRows: async (rows: string[][]) => { delivered.push(...rows); } };
+    await second.onDisable();
+    assert.deepEqual(delivered, [['retained row']]);
+    assert.equal(stored['buffer:undelivered'], undefined);
+  } finally {
+    await Promise.all([first.onUnload(), second.onUnload()]);
+  }
+});
+
+test('overlapping config changes leave the latest requested destination active', async () => {
+  let release = () => {};
+  let entered = () => {};
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const parking = new Promise<void>(resolve => { entered = resolve; });
+  const stored: Record<string, unknown> = {};
+  const ctx = {
+    config: { spreadsheetId: 'B', serviceAccountJson: validSa },
+    storage: {
+      get: async (key: string) => {
+        if (key === 'buffer:undelivered') { entered(); await gate; }
+        return stored[key] ?? null;
+      },
+      set: async (key: string, value: unknown) => { stored[key] = structuredClone(value); },
+    },
+    net: { fetch: async () => ({ ok: true, status: 200, body: '{}' }) },
+    logger: { log() {}, warn() {}, error() {} },
+  };
+  const logger = new GSheetsLogger();
+  const harness = logger as unknown as { ctx: unknown; target: string; client: unknown; buffer: string[][] };
+  harness.ctx = ctx;
+  harness.target = 'A';
+  harness.client = { appendRows: async () => { throw new Error('unavailable'); } };
+  harness.buffer = [['old row']];
+  try {
+    const first = logger.onConfigChange(ctx as never, ctx.config);
+    await parking;
+    harness.buffer.push(['arrived during parking']);
+    ctx.config = { ...ctx.config, spreadsheetId: 'C' };
+    const second = logger.onConfigChange(ctx as never, ctx.config);
+    release();
+    await Promise.all([first, second]);
+    assert.equal((harness.client as { spreadsheetId: string }).spreadsheetId, 'C');
+    assert.deepEqual(harness.buffer, []);
+    assert.deepEqual(stored['buffer:undelivered'], [['old row'], ['arrived during parking']]);
+  } finally {
+    release();
+    await logger.onUnload();
+  }
 });
 
 test('a credential rotation parks the rows, but re-pasting the same key reformatted does not', async () => {
@@ -331,7 +483,8 @@ test('a credential rotation parks the rows, but re-pasting the same key reformat
     await logger.onEnable({ ...base, config: { spreadsheetId: 'SAME', serviceAccountJson: validSa } } as never);
     harness.client = { appendRows: async (): Promise<void> => { throw new Error('sheets unreachable'); } };
     harness.buffer = [['row-1']];
-    await logger.onConfigChange({ ...base, config: { spreadsheetId: 'SAME', serviceAccountJson: nextSa } } as never, {});
+    const newConfig = { spreadsheetId: 'SAME', serviceAccountJson: nextSa };
+    await logger.onConfigChange({ ...base, config: newConfig } as never, newConfig);
     await logger.onUnload();
     return { parked: Object.keys(stored).some((k) => k.includes('undelivered')), buffered: harness.buffer.length };
   };

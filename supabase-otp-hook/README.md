@@ -15,13 +15,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `supabase-otp-hook` |
-| **Version** | 0.3.10 |
-| **Released** | 2026-09-24 |
+| **Version** | 0.3.11 |
+| **Released** | 2026-10-15 |
 | **Status** | beta |
 | **Author** | maplerichie |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.16 (tested 0.23.6) |
+| **Requires OpenWA** | ≥ 0.8.16 (tested 0.25.0) |
 | **Keywords** | supabase, auth, otp, sms, whatsapp, verification, standard-webhooks, openwa |
 | **Repository** | [OpenWA-plugins/supabase-otp-hook](https://github.com/rmyndharis/OpenWA-plugins/tree/main/supabase-otp-hook) |
 <!-- END DETAILS -->
@@ -162,6 +162,8 @@ this config — the host uses it to verify the Standard Webhooks signature befor
 Session scope (which session sends) is also set at instance mint time, not in this config.
 
 ## Compatibility
+
+Checked against the OpenWA v0.25.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
 
 - **OpenWA** ≥ 0.8.16 — Integration SDK v1 with the `standard-webhooks` ingress signature scheme and
   the `response`/preflight contract (`ctx.registerWebhook`, `webhook:ingress` permission).

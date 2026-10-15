@@ -1,7 +1,7 @@
 {
   "id": "group-translate",
   "name": "Group Auto-Translation",
-  "version": "1.3.10",
+  "version": "1.3.11",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled.",
@@ -19,7 +19,7 @@
   ],
   "status": "stable",
   "minOpenWAVersion": "0.8.0",
-  "testedOpenWAVersion": "0.23.6",
+  "testedOpenWAVersion": "0.25.0",
   "provides": [
     "translation"
   ],
@@ -365,6 +365,156 @@
         },
         "announceInGroups": {
           "title": "नए ग्रुप्स में इस बॉट की घोषणा करें"
+        }
+      }
+    },
+    "de": {
+      "name": "Automatische Gruppenübersetzung",
+      "description": "Übersetzt Gruppennachrichten mit LibreTranslate. Administratoren steuern die zunächst deaktivierte Übersetzung über /tr.",
+      "config": {
+        "libretranslateUrl": {
+          "title": "LibreTranslate-URL"
+        },
+        "libretranslateApiKey": {
+          "title": "LibreTranslate-API-Schlüssel"
+        },
+        "timeoutMs": {
+          "title": "Anfragezeitlimit (ms)"
+        },
+        "commandPrefix": {
+          "title": "Befehlspräfix"
+        },
+        "minLength": {
+          "title": "Minimale Nachrichtenlänge für Übersetzungen"
+        },
+        "maxLength": {
+          "title": "Maximale Nachrichtenlänge für Übersetzungen"
+        },
+        "denyReply": {
+          "title": "Auf abgelehnte Befehle antworten"
+        },
+        "announceInGroups": {
+          "title": "Bot in neuen Gruppen vorstellen"
+        }
+      }
+    },
+    "tr": {
+      "name": "Otomatik Grup Çevirisi",
+      "description": "Grup mesajlarını LibreTranslate ile çevirir. Başlangıçta kapalıdır; yöneticiler /tr komutlarıyla yönetir.",
+      "config": {
+        "libretranslateUrl": {
+          "title": "LibreTranslate URL adresi"
+        },
+        "libretranslateApiKey": {
+          "title": "LibreTranslate API anahtarı"
+        },
+        "timeoutMs": {
+          "title": "İstek zaman aşımı (ms)"
+        },
+        "commandPrefix": {
+          "title": "Komut öneki"
+        },
+        "minLength": {
+          "title": "Çevrilecek en kısa mesaj uzunluğu"
+        },
+        "maxLength": {
+          "title": "Çevrilecek en uzun mesaj uzunluğu"
+        },
+        "denyReply": {
+          "title": "Reddedilen komutlara yanıt ver"
+        },
+        "announceInGroups": {
+          "title": "Botu yeni gruplarda duyur"
+        }
+      }
+    },
+    "pt-BR": {
+      "name": "Tradução automática de grupos",
+      "description": "Traduz mensagens de grupos com LibreTranslate. Começa desativado e é gerenciado por administradores com /tr.",
+      "config": {
+        "libretranslateUrl": {
+          "title": "URL do LibreTranslate"
+        },
+        "libretranslateApiKey": {
+          "title": "Chave da API do LibreTranslate"
+        },
+        "timeoutMs": {
+          "title": "Tempo limite da requisição (ms)"
+        },
+        "commandPrefix": {
+          "title": "Prefixo dos comandos"
+        },
+        "minLength": {
+          "title": "Comprimento mínimo para tradução"
+        },
+        "maxLength": {
+          "title": "Comprimento máximo para tradução"
+        },
+        "denyReply": {
+          "title": "Responder a comandos negados"
+        },
+        "announceInGroups": {
+          "title": "Apresentar o bot em novos grupos"
+        }
+      }
+    },
+    "ko": {
+      "name": "그룹 자동 번역",
+      "description": "LibreTranslate로 그룹 메시지를 번역합니다. 기본적으로 꺼져 있으며 관리자가 /tr 명령으로 제어합니다.",
+      "config": {
+        "libretranslateUrl": {
+          "title": "LibreTranslate URL"
+        },
+        "libretranslateApiKey": {
+          "title": "LibreTranslate API 키"
+        },
+        "timeoutMs": {
+          "title": "요청 제한 시간 (ms)"
+        },
+        "commandPrefix": {
+          "title": "명령 접두사"
+        },
+        "minLength": {
+          "title": "번역할 최소 메시지 길이"
+        },
+        "maxLength": {
+          "title": "번역할 최대 메시지 길이"
+        },
+        "denyReply": {
+          "title": "거부된 명령에 응답"
+        },
+        "announceInGroups": {
+          "title": "새 그룹에 봇 소개"
+        }
+      }
+    },
+    "id": {
+      "name": "Penerjemah Grup Otomatis",
+      "description": "Menerjemahkan pesan grup melalui LibreTranslate. Nonaktif secara default dan dikelola admin melalui perintah /tr.",
+      "config": {
+        "libretranslateUrl": {
+          "title": "URL LibreTranslate"
+        },
+        "libretranslateApiKey": {
+          "title": "Kunci API LibreTranslate"
+        },
+        "timeoutMs": {
+          "title": "Batas waktu permintaan (ms)"
+        },
+        "commandPrefix": {
+          "title": "Awalan perintah"
+        },
+        "minLength": {
+          "title": "Panjang minimum pesan untuk diterjemahkan"
+        },
+        "maxLength": {
+          "title": "Panjang maksimum pesan untuk diterjemahkan"
+        },
+        "denyReply": {
+          "title": "Balas perintah yang ditolak"
+        },
+        "announceInGroups": {
+          "title": "Perkenalkan bot di grup baru"
         }
       }
     }

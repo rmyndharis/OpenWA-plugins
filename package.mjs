@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { zipStore } from './scripts/zip-store.mjs';
 import { configUiMember, collectMembers } from './scripts/entry-path.mjs';
+import { SUPPORTED_LOCALES } from './scripts/locales.mjs';
 
 const plugin = process.argv[2];
 if (!plugin) {
@@ -28,11 +29,7 @@ const missing = ['id', 'name', 'version', 'type', 'main'].filter((f) => !manifes
 if (missing.length) fail(`manifest.json missing required field(s): ${missing.join(', ')}`);
 if (manifest.type !== 'extension') fail(`type must be "extension" to be installable (got "${manifest.type}")`);
 
-// Warn on unsupported i18n locale codes. Kept in lockstep with the host's `supportedLanguages`
-// (dashboard/src/i18n/index.ts) and duplicated in scripts/catalog.mjs, which warns on the gaps; when
-// the host adds a locale, both copies move together. Four were missing here (de, tr, pt-BR, ko), so a
-// correct manifest translating into them was reported as "not a dashboard-supported code".
-const SUPPORTED_LOCALES = ['en', 'de', 'es', 'he', 'tr', 'zh-CN', 'zh-HK', 'ar', 'te', 'fr', 'it', 'pt-BR', 'ko', 'hi'];
+// Warn on locale codes the target host does not support.
 if (manifest.i18n && typeof manifest.i18n === 'object') {
   for (const code of Object.keys(manifest.i18n)) {
     if (!SUPPORTED_LOCALES.includes(code)) console.warn(`⚠ ${plugin}: i18n locale "${code}" is not a dashboard-supported code`);

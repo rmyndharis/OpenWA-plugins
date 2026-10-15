@@ -54,6 +54,13 @@ test('two tenants sharing a conversationId are isolated when looked up with thei
   assert.deepEqual(await store.getByConversation(55, 'sessB'), { sessionId: 'sessB', chatId: 'bob@wa' });
 });
 
+test('a scoped lookup never falls back to another session legacy mapping', async () => {
+  const store = new MappingStore(fakeStorage(), fakeMappings());
+  await store.link('sessA', 'alice@wa', 'instA', { conversationId: 55, contactId: 1, sourceId: 'a' });
+  assert.equal(await store.getByConversation(55, 'sessB'), null);
+  assert.deepEqual(await store.getByConversation(55, 'sessA'), { sessionId: 'sessA', chatId: 'alice@wa' });
+});
+
 test('hasSeen/markSeen: scoped markers isolate tenants; unscoped stays global', async () => {
   const store = new MappingStore(fakeStorage(), fakeMappings());
   assert.equal(await store.hasSeen('cw', '5', 'sessA'), false);

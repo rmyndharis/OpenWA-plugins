@@ -1,7 +1,7 @@
 {
   "id": "chat-flow",
   "name": "Chat Flow",
-  "version": "1.1.11",
+  "version": "1.1.12",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Interactive, stateful auto-reply: a trigger word starts a greeting + numbered menu, replies traverse a configurable menu tree, and per-chat state expires after 15 minutes.",
@@ -20,7 +20,7 @@
   ],
   "status": "stable",
   "minOpenWAVersion": "0.7.0",
-  "testedOpenWAVersion": "0.23.6",
+  "testedOpenWAVersion": "0.25.0",
   "provides": [
     "auto-reply"
   ],
@@ -256,6 +256,96 @@
         },
         "options": {
           "title": "मेनू विकल्प"
+        }
+      }
+    },
+    "de": {
+      "name": "Chat-Menü",
+      "description": "Ein Auslösewort startet ein konfigurierbares Menü. Der Gesprächsstatus läuft nach 15 Minuten ab.",
+      "config": {
+        "trigger": {
+          "title": "Auslösewort"
+        },
+        "greeting": {
+          "title": "Begrüßung und Menü"
+        },
+        "respondInGroups": {
+          "title": "Auch in Gruppenchats antworten"
+        },
+        "options": {
+          "title": "Menüoptionen"
+        }
+      }
+    },
+    "tr": {
+      "name": "Sohbet Akışı",
+      "description": "Bir tetikleyici sözcük yapılandırılabilir bir menüyü başlatır. Sohbet durumu 15 dakika sonra sona erer.",
+      "config": {
+        "trigger": {
+          "title": "Tetikleyici sözcük"
+        },
+        "greeting": {
+          "title": "Karşılama ve menü"
+        },
+        "respondInGroups": {
+          "title": "Grup sohbetlerinde de yanıtla"
+        },
+        "options": {
+          "title": "Menü seçenekleri"
+        }
+      }
+    },
+    "pt-BR": {
+      "name": "Fluxo de conversa",
+      "description": "Uma palavra inicia um menu configurável. O estado da conversa expira após 15 minutos.",
+      "config": {
+        "trigger": {
+          "title": "Palavra de ativação"
+        },
+        "greeting": {
+          "title": "Saudação e menu"
+        },
+        "respondInGroups": {
+          "title": "Responder também em grupos"
+        },
+        "options": {
+          "title": "Opções do menu"
+        }
+      }
+    },
+    "ko": {
+      "name": "채팅 흐름",
+      "description": "시작 단어로 설정 가능한 메뉴를 열며 대화 상태는 15분 후 만료됩니다.",
+      "config": {
+        "trigger": {
+          "title": "시작 단어"
+        },
+        "greeting": {
+          "title": "인사말 및 메뉴"
+        },
+        "respondInGroups": {
+          "title": "그룹 채팅에도 응답"
+        },
+        "options": {
+          "title": "메뉴 항목"
+        }
+      }
+    },
+    "id": {
+      "name": "Alur Percakapan",
+      "description": "Kata pemicu memulai menu yang dapat dikonfigurasi. Status percakapan kedaluwarsa setelah 15 menit.",
+      "config": {
+        "trigger": {
+          "title": "Kata pemicu"
+        },
+        "greeting": {
+          "title": "Sapaan dan menu"
+        },
+        "respondInGroups": {
+          "title": "Balas juga di chat grup"
+        },
+        "options": {
+          "title": "Pilihan menu"
         }
       }
     }

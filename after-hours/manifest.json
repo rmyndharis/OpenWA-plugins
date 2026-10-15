@@ -1,7 +1,7 @@
 {
   "id": "after-hours",
   "name": "After-Hours Auto-Reply",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Auto-replies with a configurable away/closing message to messages received outside business hours.",
@@ -19,7 +19,7 @@
   ],
   "status": "stable",
   "minOpenWAVersion": "0.7.0",
-  "testedOpenWAVersion": "0.23.6",
+  "testedOpenWAVersion": "0.25.0",
   "provides": [
     "auto-reply"
   ],
@@ -254,6 +254,111 @@
         },
         "respondInGroups": {
           "title": "ग्रुप चैट्स में भी रिप्लाई करें"
+        }
+      }
+    },
+    "de": {
+      "name": "Antworten außerhalb der Geschäftszeiten",
+      "description": "Antwortet mit einer konfigurierbaren Nachricht außerhalb der Geschäftszeiten.",
+      "config": {
+        "schedule": {
+          "title": "Wochenplan (JSON)"
+        },
+        "timezone": {
+          "title": "IANA-Zeitzone"
+        },
+        "awayMessage": {
+          "title": "Antwort außerhalb der Geschäftszeiten"
+        },
+        "cooldownSec": {
+          "title": "Wartezeit (Sekunden pro Chat)"
+        },
+        "respondInGroups": {
+          "title": "Auch in Gruppenchats antworten"
+        }
+      }
+    },
+    "tr": {
+      "name": "Mesai Dışı Otomatik Yanıt",
+      "description": "Mesai saatleri dışında gelen mesajlara yapılandırılabilir bir yanıt gönderir.",
+      "config": {
+        "schedule": {
+          "title": "Haftalık program (JSON)"
+        },
+        "timezone": {
+          "title": "IANA saat dilimi"
+        },
+        "awayMessage": {
+          "title": "Mesai dışı yanıt"
+        },
+        "cooldownSec": {
+          "title": "Bekleme süresi (sohbet başına saniye)"
+        },
+        "respondInGroups": {
+          "title": "Grup sohbetlerinde de yanıtla"
+        }
+      }
+    },
+    "pt-BR": {
+      "name": "Resposta fora do expediente",
+      "description": "Responde às mensagens recebidas fora do expediente com uma mensagem configurável.",
+      "config": {
+        "schedule": {
+          "title": "Agenda semanal (JSON)"
+        },
+        "timezone": {
+          "title": "Fuso horário IANA"
+        },
+        "awayMessage": {
+          "title": "Resposta fora do expediente"
+        },
+        "cooldownSec": {
+          "title": "Intervalo (segundos por conversa)"
+        },
+        "respondInGroups": {
+          "title": "Responder também em grupos"
+        }
+      }
+    },
+    "ko": {
+      "name": "업무 시간 외 자동 응답",
+      "description": "업무 시간 외에 받은 메시지에 설정한 내용으로 자동 응답합니다.",
+      "config": {
+        "schedule": {
+          "title": "주간 일정 (JSON)"
+        },
+        "timezone": {
+          "title": "IANA 시간대"
+        },
+        "awayMessage": {
+          "title": "업무 시간 외 응답"
+        },
+        "cooldownSec": {
+          "title": "대기 시간 (채팅별 초)"
+        },
+        "respondInGroups": {
+          "title": "그룹 채팅에도 응답"
+        }
+      }
+    },
+    "id": {
+      "name": "Balasan di Luar Jam Kerja",
+      "description": "Membalas pesan di luar jam kerja dengan pesan yang dapat dikonfigurasi.",
+      "config": {
+        "schedule": {
+          "title": "Jadwal mingguan (JSON)"
+        },
+        "timezone": {
+          "title": "Zona waktu IANA"
+        },
+        "awayMessage": {
+          "title": "Balasan di luar jam kerja"
+        },
+        "cooldownSec": {
+          "title": "Jeda (detik per chat)"
+        },
+        "respondInGroups": {
+          "title": "Balas juga di chat grup"
         }
       }
     }

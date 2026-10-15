@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { validateManifest } from './catalog.mjs';
+import { SUPPORTED_LOCALES } from './locales.mjs';
 
 // Three of the checks below iterate a list that can come back empty — no plugin directories, no stable
 // entries, no catalog entries at all — and an empty loop is indistinguishable from a passing one. Proven
@@ -54,10 +55,19 @@ test('plugins.json carries i18n for a plugin whose manifest has it', () => {
 test('every stable plugin ships a full i18n block', () => {
   const catalog = JSON.parse(readFileSync(new URL('../plugins.json', import.meta.url), 'utf8'));
   const entries = catalog.plugins ?? catalog;
-  const LOCALES = ['es', 'fr', 'it', 'ar', 'he', 'te', 'zh-CN', 'zh-HK'];
+  const LOCALES = SUPPORTED_LOCALES.filter(locale => locale !== 'en');
   for (const e of entries.filter(e => e.status === 'stable')) {
     assert.ok(e.i18n, `${e.id} (stable) has no i18n block`);
     for (const l of LOCALES) assert.ok(e.i18n[l], `${e.id} i18n missing locale ${l}`);
+  }
+});
+
+test('an invalid host version floor is refused before packaging', () => {
+  for (const minOpenWAVersion of [25, 'latest', '0.25', '>=0.25.0', '']) {
+    assert.throws(() => validateManifest('demo', { ...OK, minOpenWAVersion }), /minOpenWAVersion/);
+  }
+  for (const minOpenWAVersion of [undefined, null, '0.25.0', '0.25.0-rc.1']) {
+    assert.doesNotThrow(() => validateManifest('demo', { ...OK, minOpenWAVersion }));
   }
 });
 

@@ -6,6 +6,16 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.11] - 2026-10-15
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.25.0 and complete dashboard translations for all supported locales.
+
+### Fixed
+
+- Refuse legacy conversation mappings owned by a different scoped WhatsApp session.
+
 ## [0.9.10] - 2026-09-24
 
 ### Added

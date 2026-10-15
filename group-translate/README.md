@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `group-translate` |
-| **Version** | 1.3.10 |
-| **Released** | 2026-09-24 |
+| **Version** | 1.3.11 |
+| **Released** | 2026-10-15 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.0 (tested 0.23.6) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.25.0) |
 | **Keywords** | translation, libretranslate, i18n, groups, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/group-translate](https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate) |
 <!-- END DETAILS -->
@@ -86,7 +86,7 @@ curl -X POST "https://your-openwa-host/api/plugins/install" \
 
 curl -X PUT "https://your-openwa-host/api/plugins/group-translate/config" \
   -H "X-API-Key: <ADMIN_API_KEY>" -H "Content-Type: application/json" \
-  -d '{ "config": { "libretranslateUrl": "http://libretranslate:7001", "timeoutMs": 4000 } }'
+  -d '{ "config": { "libretranslateUrl": "https://translate.example.com", "timeoutMs": 4000 } }'
 
 curl -X POST "https://your-openwa-host/api/plugins/group-translate/enable" \
   -H "X-API-Key: <ADMIN_API_KEY>"
@@ -109,6 +109,8 @@ Then, in the group, an admin runs `/tr on`. Or install the packaged `.zip` from
 | `announceInGroups` | no | `false` | Post an introduction into a group the first time the plugin sees a message there, once per group. **Off by default** — it fires per group, so turning it on announces the bot into every group the WhatsApp account belongs to. `/tr help` gives anyone the same text on request |
 
 ## Compatibility
+
+Checked against the OpenWA v0.25.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
 
 Targets OpenWA **≥ 0.8.0**, the release that introduced `net.allowConfigHosts`. Outbound HTTP itself
 uses the v0.7 `ctx.net.fetch` capability, but on a 0.7.x host only the shipped loopback entries are

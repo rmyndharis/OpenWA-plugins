@@ -2,7 +2,7 @@
   {
     "id": "after-hours",
     "name": "After-Hours Auto-Reply",
-    "version": "0.2.9",
+    "version": "0.2.10",
     "type": "extension",
     "status": "stable",
     "description": "Auto-replies with a configurable away/closing message to messages received outside business hours.",
@@ -17,12 +17,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.7.0",
-    "testedOpenWAVersion": "0.23.6",
-    "releasedAt": "2026-09-24",
+    "testedOpenWAVersion": "0.25.0",
+    "releasedAt": "2026-10-15",
     "repoPath": "after-hours",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/after-hours",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/after-hours-v0.2.9/after-hours.zip#sha256=1dcb1fff6183ddc852c67c812464157bf1e6ad4ed71838ca8a764eff8efc1b6a",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/after-hours-v0.2.10/after-hours.zip#sha256=6a62cd1bdb64361cd57651e0acd78e327ab32dae6ff96f81b4d9d2cf30dfa7cb",
     "permissions": [
       "messages:send"
     ],
@@ -218,13 +218,118 @@
             "title": "ग्रुप चैट्स में भी रिप्लाई करें"
           }
         }
+      },
+      "de": {
+        "name": "Antworten außerhalb der Geschäftszeiten",
+        "description": "Antwortet mit einer konfigurierbaren Nachricht außerhalb der Geschäftszeiten.",
+        "config": {
+          "schedule": {
+            "title": "Wochenplan (JSON)"
+          },
+          "timezone": {
+            "title": "IANA-Zeitzone"
+          },
+          "awayMessage": {
+            "title": "Antwort außerhalb der Geschäftszeiten"
+          },
+          "cooldownSec": {
+            "title": "Wartezeit (Sekunden pro Chat)"
+          },
+          "respondInGroups": {
+            "title": "Auch in Gruppenchats antworten"
+          }
+        }
+      },
+      "tr": {
+        "name": "Mesai Dışı Otomatik Yanıt",
+        "description": "Mesai saatleri dışında gelen mesajlara yapılandırılabilir bir yanıt gönderir.",
+        "config": {
+          "schedule": {
+            "title": "Haftalık program (JSON)"
+          },
+          "timezone": {
+            "title": "IANA saat dilimi"
+          },
+          "awayMessage": {
+            "title": "Mesai dışı yanıt"
+          },
+          "cooldownSec": {
+            "title": "Bekleme süresi (sohbet başına saniye)"
+          },
+          "respondInGroups": {
+            "title": "Grup sohbetlerinde de yanıtla"
+          }
+        }
+      },
+      "pt-BR": {
+        "name": "Resposta fora do expediente",
+        "description": "Responde às mensagens recebidas fora do expediente com uma mensagem configurável.",
+        "config": {
+          "schedule": {
+            "title": "Agenda semanal (JSON)"
+          },
+          "timezone": {
+            "title": "Fuso horário IANA"
+          },
+          "awayMessage": {
+            "title": "Resposta fora do expediente"
+          },
+          "cooldownSec": {
+            "title": "Intervalo (segundos por conversa)"
+          },
+          "respondInGroups": {
+            "title": "Responder também em grupos"
+          }
+        }
+      },
+      "ko": {
+        "name": "업무 시간 외 자동 응답",
+        "description": "업무 시간 외에 받은 메시지에 설정한 내용으로 자동 응답합니다.",
+        "config": {
+          "schedule": {
+            "title": "주간 일정 (JSON)"
+          },
+          "timezone": {
+            "title": "IANA 시간대"
+          },
+          "awayMessage": {
+            "title": "업무 시간 외 응답"
+          },
+          "cooldownSec": {
+            "title": "대기 시간 (채팅별 초)"
+          },
+          "respondInGroups": {
+            "title": "그룹 채팅에도 응답"
+          }
+        }
+      },
+      "id": {
+        "name": "Balasan di Luar Jam Kerja",
+        "description": "Membalas pesan di luar jam kerja dengan pesan yang dapat dikonfigurasi.",
+        "config": {
+          "schedule": {
+            "title": "Jadwal mingguan (JSON)"
+          },
+          "timezone": {
+            "title": "Zona waktu IANA"
+          },
+          "awayMessage": {
+            "title": "Balasan di luar jam kerja"
+          },
+          "cooldownSec": {
+            "title": "Jeda (detik per chat)"
+          },
+          "respondInGroups": {
+            "title": "Balas juga di chat grup"
+          }
+        }
       }
     }
   },
   {
     "id": "ai-responder",
     "name": "AI Responder",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "type": "extension",
     "status": "beta",
     "description": "Auto-replies to inbound WhatsApp messages with an OpenAI-compatible Chat Completions API. Single-turn, rate-limited per chat and per session, and last in the responder chain.",
@@ -240,12 +345,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.8.0",
-    "testedOpenWAVersion": null,
-    "releasedAt": "2026-09-24",
+    "testedOpenWAVersion": "0.25.0",
+    "releasedAt": "2026-10-15",
     "repoPath": "ai-responder",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/ai-responder",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/ai-responder-v0.1.0/ai-responder.zip#sha256=548dc52bdd90f272100c8d42a405f3c22ed3b6ccf1421a33bdfe42b0d4c012a3",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/ai-responder-v0.1.1/ai-responder.zip#sha256=8d24b4ec36459be7a38ae47ae7f8bfcd647000c057c872579b7c30a2b922c2d5",
     "permissions": [
       "net:fetch",
       "messages:send"
@@ -370,13 +475,445 @@
             "title": "请求超时（毫秒）"
           }
         }
+      },
+      "de": {
+        "name": "KI-Antwortassistent",
+        "description": "Antwortet über eine OpenAI-kompatible Chat-API mit Limits pro Chat und Sitzung, nach allen anderen Antwort-Plugins.",
+        "config": {
+          "apiBaseUrl": {
+            "title": "API-Basis-URL"
+          },
+          "apiKey": {
+            "title": "API-Schlüssel"
+          },
+          "model": {
+            "title": "Modell"
+          },
+          "systemPrompt": {
+            "title": "Systemanweisung"
+          },
+          "respondInGroups": {
+            "title": "Auch in Gruppenchats antworten"
+          },
+          "maxRepliesPerChatPerHour": {
+            "title": "Max. Antworten pro Chat und Stunde"
+          },
+          "maxRepliesPerSessionPerHour": {
+            "title": "Max. Antworten pro Sitzung und Stunde"
+          },
+          "maxInputChars": {
+            "title": "Max. Eingabezeichen"
+          },
+          "maxOutputTokens": {
+            "title": "Max. Ausgabetokens"
+          },
+          "timeoutMs": {
+            "title": "Anfragezeitlimit (ms)"
+          }
+        }
+      },
+      "tr": {
+        "name": "Yapay Zeka Yanıtlayıcı",
+        "description": "Diğer yanıt eklentilerinden sonra, sohbet ve oturum sınırlarıyla OpenAI uyumlu bir API üzerinden yanıt verir.",
+        "config": {
+          "apiBaseUrl": {
+            "title": "API temel URL adresi"
+          },
+          "apiKey": {
+            "title": "API anahtarı"
+          },
+          "model": {
+            "title": "Model"
+          },
+          "systemPrompt": {
+            "title": "Sistem istemi"
+          },
+          "respondInGroups": {
+            "title": "Grup sohbetlerinde de yanıtla"
+          },
+          "maxRepliesPerChatPerHour": {
+            "title": "Sohbet başına saatlik yanıt sınırı"
+          },
+          "maxRepliesPerSessionPerHour": {
+            "title": "Oturum başına saatlik yanıt sınırı"
+          },
+          "maxInputChars": {
+            "title": "En fazla girdi karakteri"
+          },
+          "maxOutputTokens": {
+            "title": "En fazla çıktı belirteci"
+          },
+          "timeoutMs": {
+            "title": "İstek zaman aşımı (ms)"
+          }
+        }
+      },
+      "pt-BR": {
+        "name": "Assistente de respostas com IA",
+        "description": "Responde por uma API compatível com OpenAI, com limites por conversa e sessão, após os demais plugins de resposta.",
+        "config": {
+          "apiBaseUrl": {
+            "title": "URL base da API"
+          },
+          "apiKey": {
+            "title": "Chave da API"
+          },
+          "model": {
+            "title": "Modelo"
+          },
+          "systemPrompt": {
+            "title": "Instrução do sistema"
+          },
+          "respondInGroups": {
+            "title": "Responder também em grupos"
+          },
+          "maxRepliesPerChatPerHour": {
+            "title": "Máx. de respostas por conversa por hora"
+          },
+          "maxRepliesPerSessionPerHour": {
+            "title": "Máx. de respostas por sessão por hora"
+          },
+          "maxInputChars": {
+            "title": "Máx. de caracteres de entrada"
+          },
+          "maxOutputTokens": {
+            "title": "Máx. de tokens de saída"
+          },
+          "timeoutMs": {
+            "title": "Tempo limite da requisição (ms)"
+          }
+        }
+      },
+      "ko": {
+        "name": "AI 자동 응답",
+        "description": "다른 응답 플러그인 다음에 OpenAI 호환 API로 응답하며 채팅 및 세션별 한도를 적용합니다.",
+        "config": {
+          "apiBaseUrl": {
+            "title": "API 기본 URL"
+          },
+          "apiKey": {
+            "title": "API 키"
+          },
+          "model": {
+            "title": "모델"
+          },
+          "systemPrompt": {
+            "title": "시스템 프롬프트"
+          },
+          "respondInGroups": {
+            "title": "그룹 채팅에도 응답"
+          },
+          "maxRepliesPerChatPerHour": {
+            "title": "채팅별 시간당 최대 응답 수"
+          },
+          "maxRepliesPerSessionPerHour": {
+            "title": "세션별 시간당 최대 응답 수"
+          },
+          "maxInputChars": {
+            "title": "최대 입력 문자 수"
+          },
+          "maxOutputTokens": {
+            "title": "최대 출력 토큰 수"
+          },
+          "timeoutMs": {
+            "title": "요청 제한 시간 (ms)"
+          }
+        }
+      },
+      "id": {
+        "name": "Penjawab AI",
+        "description": "Membalas melalui API yang kompatibel dengan OpenAI, dengan batas per chat dan sesi, setelah plugin penjawab lainnya.",
+        "config": {
+          "apiBaseUrl": {
+            "title": "URL dasar API"
+          },
+          "apiKey": {
+            "title": "Kunci API"
+          },
+          "model": {
+            "title": "Model"
+          },
+          "systemPrompt": {
+            "title": "Instruksi sistem"
+          },
+          "respondInGroups": {
+            "title": "Balas juga di chat grup"
+          },
+          "maxRepliesPerChatPerHour": {
+            "title": "Maks. balasan per chat per jam"
+          },
+          "maxRepliesPerSessionPerHour": {
+            "title": "Maks. balasan per sesi per jam"
+          },
+          "maxInputChars": {
+            "title": "Maks. karakter masukan"
+          },
+          "maxOutputTokens": {
+            "title": "Maks. token keluaran"
+          },
+          "timeoutMs": {
+            "title": "Batas waktu permintaan (ms)"
+          }
+        }
+      },
+      "he": {
+        "name": "משיב AI",
+        "description": "משיב דרך API תואם OpenAI, עם מגבלות לכל שיחה והפעלה, אחרי תוספי המענה האחרים.",
+        "config": {
+          "apiBaseUrl": {
+            "title": "כתובת בסיס של API"
+          },
+          "apiKey": {
+            "title": "מפתח API"
+          },
+          "model": {
+            "title": "מודל"
+          },
+          "systemPrompt": {
+            "title": "הנחיית מערכת"
+          },
+          "respondInGroups": {
+            "title": "מענה גם בקבוצות"
+          },
+          "maxRepliesPerChatPerHour": {
+            "title": "מספר תשובות מרבי לשיחה בשעה"
+          },
+          "maxRepliesPerSessionPerHour": {
+            "title": "מספר תשובות מרבי להפעלה בשעה"
+          },
+          "maxInputChars": {
+            "title": "מספר תווי קלט מרבי"
+          },
+          "maxOutputTokens": {
+            "title": "מספר טוקנים מרבי בפלט"
+          },
+          "timeoutMs": {
+            "title": "זמן קצוב לבקשה (ms)"
+          }
+        }
+      },
+      "zh-HK": {
+        "name": "AI 自動回覆",
+        "description": "透過相容 OpenAI 的 API 回覆，設有每個對話及工作階段的限制，並在其他回覆外掛之後執行。",
+        "config": {
+          "apiBaseUrl": {
+            "title": "API 基礎網址"
+          },
+          "apiKey": {
+            "title": "API 金鑰"
+          },
+          "model": {
+            "title": "模型"
+          },
+          "systemPrompt": {
+            "title": "系統提示"
+          },
+          "respondInGroups": {
+            "title": "同時回覆群組對話"
+          },
+          "maxRepliesPerChatPerHour": {
+            "title": "每個對話每小時最多回覆數"
+          },
+          "maxRepliesPerSessionPerHour": {
+            "title": "每個工作階段每小時最多回覆數"
+          },
+          "maxInputChars": {
+            "title": "最多輸入字元數"
+          },
+          "maxOutputTokens": {
+            "title": "最多輸出 token 數"
+          },
+          "timeoutMs": {
+            "title": "請求逾時 (ms)"
+          }
+        }
+      },
+      "ar": {
+        "name": "مجيب الذكاء الاصطناعي",
+        "description": "يرد عبر واجهة متوافقة مع OpenAI، بحدود لكل محادثة وجلسة، بعد إضافات الرد الأخرى.",
+        "config": {
+          "apiBaseUrl": {
+            "title": "عنوان API الأساسي"
+          },
+          "apiKey": {
+            "title": "مفتاح API"
+          },
+          "model": {
+            "title": "النموذج"
+          },
+          "systemPrompt": {
+            "title": "تعليمات النظام"
+          },
+          "respondInGroups": {
+            "title": "الرد في محادثات المجموعات أيضاً"
+          },
+          "maxRepliesPerChatPerHour": {
+            "title": "الحد الأقصى للردود لكل محادثة في الساعة"
+          },
+          "maxRepliesPerSessionPerHour": {
+            "title": "الحد الأقصى للردود لكل جلسة في الساعة"
+          },
+          "maxInputChars": {
+            "title": "الحد الأقصى لأحرف الإدخال"
+          },
+          "maxOutputTokens": {
+            "title": "الحد الأقصى لرموز الإخراج"
+          },
+          "timeoutMs": {
+            "title": "مهلة الطلب (ms)"
+          }
+        }
+      },
+      "te": {
+        "name": "AI ప్రత్యుత్తర సహాయకుడు",
+        "description": "ఇతర ప్రత్యుత్తర ప్లగిన్‌ల తర్వాత, చాట్ మరియు సెషన్ పరిమితులతో OpenAI అనుకూల API ద్వారా బదులిస్తుంది.",
+        "config": {
+          "apiBaseUrl": {
+            "title": "API మూల URL"
+          },
+          "apiKey": {
+            "title": "API కీ"
+          },
+          "model": {
+            "title": "మోడల్"
+          },
+          "systemPrompt": {
+            "title": "సిస్టమ్ సూచన"
+          },
+          "respondInGroups": {
+            "title": "గ్రూప్ చాట్‌లలో కూడా బదులివ్వండి"
+          },
+          "maxRepliesPerChatPerHour": {
+            "title": "చాట్‌కు గంటకు గరిష్ఠ ప్రత్యుత్తరాలు"
+          },
+          "maxRepliesPerSessionPerHour": {
+            "title": "సెషన్‌కు గంటకు గరిష్ఠ ప్రత్యుత్తరాలు"
+          },
+          "maxInputChars": {
+            "title": "గరిష్ఠ ఇన్‌పుట్ అక్షరాలు"
+          },
+          "maxOutputTokens": {
+            "title": "గరిష్ఠ అవుట్‌పుట్ టోకెన్‌లు"
+          },
+          "timeoutMs": {
+            "title": "అభ్యర్థన గడువు (ms)"
+          }
+        }
+      },
+      "fr": {
+        "name": "Assistant de réponse IA",
+        "description": "Répond via une API compatible OpenAI, avec des limites par conversation et session, après les autres extensions de réponse.",
+        "config": {
+          "apiBaseUrl": {
+            "title": "URL de base de l’API"
+          },
+          "apiKey": {
+            "title": "Clé API"
+          },
+          "model": {
+            "title": "Modèle"
+          },
+          "systemPrompt": {
+            "title": "Instruction système"
+          },
+          "respondInGroups": {
+            "title": "Répondre aussi dans les groupes"
+          },
+          "maxRepliesPerChatPerHour": {
+            "title": "Réponses maximales par conversation et par heure"
+          },
+          "maxRepliesPerSessionPerHour": {
+            "title": "Réponses maximales par session et par heure"
+          },
+          "maxInputChars": {
+            "title": "Caractères d’entrée maximum"
+          },
+          "maxOutputTokens": {
+            "title": "Jetons de sortie maximum"
+          },
+          "timeoutMs": {
+            "title": "Délai de la requête (ms)"
+          }
+        }
+      },
+      "it": {
+        "name": "Assistente di risposta IA",
+        "description": "Risponde tramite una API compatibile con OpenAI, con limiti per chat e sessione, dopo gli altri plugin di risposta.",
+        "config": {
+          "apiBaseUrl": {
+            "title": "URL di base API"
+          },
+          "apiKey": {
+            "title": "Chiave API"
+          },
+          "model": {
+            "title": "Modello"
+          },
+          "systemPrompt": {
+            "title": "Istruzione di sistema"
+          },
+          "respondInGroups": {
+            "title": "Rispondi anche nelle chat di gruppo"
+          },
+          "maxRepliesPerChatPerHour": {
+            "title": "Risposte massime per chat ogni ora"
+          },
+          "maxRepliesPerSessionPerHour": {
+            "title": "Risposte massime per sessione ogni ora"
+          },
+          "maxInputChars": {
+            "title": "Caratteri massimi in ingresso"
+          },
+          "maxOutputTokens": {
+            "title": "Token massimi in uscita"
+          },
+          "timeoutMs": {
+            "title": "Timeout della richiesta (ms)"
+          }
+        }
+      },
+      "hi": {
+        "name": "AI उत्तर सहायक",
+        "description": "अन्य उत्तर प्लगइन के बाद, प्रति चैट और सत्र की सीमाओं के साथ OpenAI-संगत API से उत्तर देता है।",
+        "config": {
+          "apiBaseUrl": {
+            "title": "API आधार URL"
+          },
+          "apiKey": {
+            "title": "API कुंजी"
+          },
+          "model": {
+            "title": "मॉडल"
+          },
+          "systemPrompt": {
+            "title": "सिस्टम निर्देश"
+          },
+          "respondInGroups": {
+            "title": "समूह चैट में भी उत्तर दें"
+          },
+          "maxRepliesPerChatPerHour": {
+            "title": "प्रति चैट प्रति घंटे अधिकतम उत्तर"
+          },
+          "maxRepliesPerSessionPerHour": {
+            "title": "प्रति सत्र प्रति घंटे अधिकतम उत्तर"
+          },
+          "maxInputChars": {
+            "title": "अधिकतम इनपुट अक्षर"
+          },
+          "maxOutputTokens": {
+            "title": "अधिकतम आउटपुट टोकन"
+          },
+          "timeoutMs": {
+            "title": "अनुरोध समय सीमा (ms)"
+          }
+        }
       }
     }
   },
   {
     "id": "chat-flow",
     "name": "Chat Flow",
-    "version": "1.1.11",
+    "version": "1.1.12",
     "type": "extension",
     "status": "stable",
     "description": "Interactive, stateful auto-reply: a trigger word starts a greeting + numbered menu, replies traverse a configurable menu tree, and per-chat state expires after 15 minutes.",
@@ -392,12 +929,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.7.0",
-    "testedOpenWAVersion": "0.23.6",
-    "releasedAt": "2026-09-24",
+    "testedOpenWAVersion": "0.25.0",
+    "releasedAt": "2026-10-15",
     "repoPath": "chat-flow",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/chat-flow",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chat-flow-v1.1.11/chat-flow.zip#sha256=f3650a380ed2215a1df19d4e92755ec4573830a7ae0f1088b0d8131f14f10f87",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chat-flow-v1.1.12/chat-flow.zip#sha256=9b782d3a16a20e6de511f0b71d9f3522005dc87acf87ce415097777908bce7c1",
     "permissions": [
       "messages:send",
       "storage:use"
@@ -567,13 +1104,103 @@
             "title": "मेनू विकल्प"
           }
         }
+      },
+      "de": {
+        "name": "Chat-Menü",
+        "description": "Ein Auslösewort startet ein konfigurierbares Menü. Der Gesprächsstatus läuft nach 15 Minuten ab.",
+        "config": {
+          "trigger": {
+            "title": "Auslösewort"
+          },
+          "greeting": {
+            "title": "Begrüßung und Menü"
+          },
+          "respondInGroups": {
+            "title": "Auch in Gruppenchats antworten"
+          },
+          "options": {
+            "title": "Menüoptionen"
+          }
+        }
+      },
+      "tr": {
+        "name": "Sohbet Akışı",
+        "description": "Bir tetikleyici sözcük yapılandırılabilir bir menüyü başlatır. Sohbet durumu 15 dakika sonra sona erer.",
+        "config": {
+          "trigger": {
+            "title": "Tetikleyici sözcük"
+          },
+          "greeting": {
+            "title": "Karşılama ve menü"
+          },
+          "respondInGroups": {
+            "title": "Grup sohbetlerinde de yanıtla"
+          },
+          "options": {
+            "title": "Menü seçenekleri"
+          }
+        }
+      },
+      "pt-BR": {
+        "name": "Fluxo de conversa",
+        "description": "Uma palavra inicia um menu configurável. O estado da conversa expira após 15 minutos.",
+        "config": {
+          "trigger": {
+            "title": "Palavra de ativação"
+          },
+          "greeting": {
+            "title": "Saudação e menu"
+          },
+          "respondInGroups": {
+            "title": "Responder também em grupos"
+          },
+          "options": {
+            "title": "Opções do menu"
+          }
+        }
+      },
+      "ko": {
+        "name": "채팅 흐름",
+        "description": "시작 단어로 설정 가능한 메뉴를 열며 대화 상태는 15분 후 만료됩니다.",
+        "config": {
+          "trigger": {
+            "title": "시작 단어"
+          },
+          "greeting": {
+            "title": "인사말 및 메뉴"
+          },
+          "respondInGroups": {
+            "title": "그룹 채팅에도 응답"
+          },
+          "options": {
+            "title": "메뉴 항목"
+          }
+        }
+      },
+      "id": {
+        "name": "Alur Percakapan",
+        "description": "Kata pemicu memulai menu yang dapat dikonfigurasi. Status percakapan kedaluwarsa setelah 15 menit.",
+        "config": {
+          "trigger": {
+            "title": "Kata pemicu"
+          },
+          "greeting": {
+            "title": "Sapaan dan menu"
+          },
+          "respondInGroups": {
+            "title": "Balas juga di chat grup"
+          },
+          "options": {
+            "title": "Pilihan menu"
+          }
+        }
       }
     }
   },
   {
     "id": "chatwoot-adapter",
     "name": "Chatwoot Adapter",
-    "version": "0.9.10",
+    "version": "0.9.11",
     "type": "extension",
     "status": "stable",
     "description": "Two-way sync between a WhatsApp session and a Chatwoot inbox: relays WhatsApp messages (1:1 and groups, with media) into Chatwoot as an API-channel inbox, sends agent replies back to WhatsApp, and hands a chat over to a human agent — silencing other OpenWA bots — when an agent takes it in Chatwoot. First consumer of the OpenWA Integration SDK v1; runs sandboxed in the plugin worker.",
@@ -590,12 +1217,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.8.7",
-    "testedOpenWAVersion": "0.23.6",
-    "releasedAt": "2026-09-24",
+    "testedOpenWAVersion": "0.25.0",
+    "releasedAt": "2026-10-15",
     "repoPath": "chatwoot-adapter",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chatwoot-adapter-v0.9.10/chatwoot-adapter.zip#sha256=2383f5e2a0f387995590baf30ab4f76f780e3ba3d13eb196cf7a6b7e7c7ad806",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chatwoot-adapter-v0.9.11/chatwoot-adapter.zip#sha256=8a9acdbc276546a0975f4ee4f41d525542431f8f214c38c021ec9bf6f9dd66ba",
     "permissions": [
       "net:fetch",
       "conversation:send",
@@ -913,13 +1540,178 @@
             "title": "सेटअप पर एक बार में सभी चैट्स को बल्क-इंपोर्ट करें"
           }
         }
+      },
+      "de": {
+        "name": "Chatwoot-Anbindung",
+        "description": "Synchronisiert WhatsApp-Nachrichten und Medien mit Chatwoot und pausiert Bots bei menschlicher Übernahme.",
+        "config": {
+          "baseUrl": {
+            "title": "Basis-URL"
+          },
+          "apiToken": {
+            "title": "API-Zugriffstoken"
+          },
+          "accountId": {
+            "title": "Konto-ID"
+          },
+          "inboxId": {
+            "title": "API-Posteingangs-ID"
+          },
+          "relayGroups": {
+            "title": "Gruppenchats weiterleiten"
+          },
+          "relayMedia": {
+            "title": "Eingehende Medien an Chatwoot weiterleiten"
+          },
+          "relayOwnMessages": {
+            "title": "Eigene ausgehende Nachrichten weiterleiten"
+          },
+          "backfillLimit": {
+            "title": "Verlauf importieren (Nachrichten pro Chat)"
+          },
+          "backfillAllOnce": {
+            "title": "Alle Chats bei der Einrichtung einmal importieren"
+          }
+        }
+      },
+      "tr": {
+        "name": "Chatwoot Bağdaştırıcısı",
+        "description": "WhatsApp mesajlarını ve medyayı Chatwoot ile eşitler; bir temsilci devraldığında botları duraklatır.",
+        "config": {
+          "baseUrl": {
+            "title": "Temel URL adresi"
+          },
+          "apiToken": {
+            "title": "API erişim belirteci"
+          },
+          "accountId": {
+            "title": "Hesap kimliği"
+          },
+          "inboxId": {
+            "title": "API gelen kutusu kimliği"
+          },
+          "relayGroups": {
+            "title": "Grup sohbetlerini ilet"
+          },
+          "relayMedia": {
+            "title": "Gelen medyayı Chatwoot uygulamasına ilet"
+          },
+          "relayOwnMessages": {
+            "title": "Kendi giden mesajlarını ilet"
+          },
+          "backfillLimit": {
+            "title": "Geçmişi aktar (sohbet başına mesaj)"
+          },
+          "backfillAllOnce": {
+            "title": "Kurulumda tüm sohbetleri bir kez içe aktar"
+          }
+        }
+      },
+      "pt-BR": {
+        "name": "Adaptador Chatwoot",
+        "description": "Sincroniza mensagens e mídia do WhatsApp com o Chatwoot e pausa os bots durante o atendimento humano.",
+        "config": {
+          "baseUrl": {
+            "title": "URL base"
+          },
+          "apiToken": {
+            "title": "Token de acesso da API"
+          },
+          "accountId": {
+            "title": "ID da conta"
+          },
+          "inboxId": {
+            "title": "ID da caixa de entrada da API"
+          },
+          "relayGroups": {
+            "title": "Encaminhar conversas de grupos"
+          },
+          "relayMedia": {
+            "title": "Encaminhar mídia recebida ao Chatwoot"
+          },
+          "relayOwnMessages": {
+            "title": "Encaminhar suas mensagens enviadas"
+          },
+          "backfillLimit": {
+            "title": "Importar histórico (mensagens por conversa)"
+          },
+          "backfillAllOnce": {
+            "title": "Importar todas as conversas uma vez na configuração"
+          }
+        }
+      },
+      "ko": {
+        "name": "Chatwoot 어댑터",
+        "description": "WhatsApp 메시지와 미디어를 Chatwoot과 동기화하고 상담원이 인계받으면 봇 응답을 중지합니다.",
+        "config": {
+          "baseUrl": {
+            "title": "기본 URL"
+          },
+          "apiToken": {
+            "title": "API 액세스 토큰"
+          },
+          "accountId": {
+            "title": "계정 ID"
+          },
+          "inboxId": {
+            "title": "API 수신함 ID"
+          },
+          "relayGroups": {
+            "title": "그룹 채팅 전달"
+          },
+          "relayMedia": {
+            "title": "수신 미디어를 Chatwoot으로 전달"
+          },
+          "relayOwnMessages": {
+            "title": "직접 보낸 메시지 전달"
+          },
+          "backfillLimit": {
+            "title": "기록 가져오기 (채팅별 메시지 수)"
+          },
+          "backfillAllOnce": {
+            "title": "설정 시 모든 채팅을 한 번 가져오기"
+          }
+        }
+      },
+      "id": {
+        "name": "Adaptor Chatwoot",
+        "description": "Menyinkronkan pesan dan media WhatsApp dengan Chatwoot serta menghentikan balasan bot saat agen mengambil alih.",
+        "config": {
+          "baseUrl": {
+            "title": "URL dasar"
+          },
+          "apiToken": {
+            "title": "Token akses API"
+          },
+          "accountId": {
+            "title": "ID akun"
+          },
+          "inboxId": {
+            "title": "ID kotak masuk API"
+          },
+          "relayGroups": {
+            "title": "Teruskan chat grup"
+          },
+          "relayMedia": {
+            "title": "Teruskan media masuk ke Chatwoot"
+          },
+          "relayOwnMessages": {
+            "title": "Teruskan pesan keluar sendiri"
+          },
+          "backfillLimit": {
+            "title": "Impor riwayat (pesan per chat)"
+          },
+          "backfillAllOnce": {
+            "title": "Impor semua chat sekali saat penyiapan"
+          }
+        }
       }
     }
   },
   {
     "id": "faq-bot",
     "name": "FAQ / Auto-Reply Bot",
-    "version": "0.2.13",
+    "version": "0.2.14",
     "type": "extension",
     "status": "stable",
     "description": "Auto-replies to inbound WhatsApp messages from configurable FAQ keyword/regex rules.",
@@ -934,12 +1726,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.6.1",
-    "testedOpenWAVersion": "0.23.6",
-    "releasedAt": "2026-09-24",
+    "testedOpenWAVersion": "0.25.0",
+    "releasedAt": "2026-10-15",
     "repoPath": "faq-bot",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.2.13/faq-bot.zip#sha256=1e337ce53ce8a2419caeaf85519704ba388c3e2740197bc8c619f0398da0348a",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.2.14/faq-bot.zip#sha256=d72ad6a05a0658459cfe23b42586f9a1fb7a1fb14e9aa3d7fa3421843b1a229e",
     "permissions": [
       "messages:send"
     ],
@@ -1108,13 +1900,103 @@
             "title": "ग्रुप चैट्स में भी रिप्लाई करें"
           }
         }
+      },
+      "de": {
+        "name": "FAQ-Antwortbot",
+        "description": "Antwortet auf WhatsApp-Nachrichten anhand konfigurierbarer Schlüsselwort- und Regex-Regeln.",
+        "config": {
+          "rules": {
+            "title": "Regeln (JSON)"
+          },
+          "fallbackReply": {
+            "title": "Standardantwort"
+          },
+          "fallbackCooldownSec": {
+            "title": "Wartezeit der Standardantwort (Sekunden pro Chat)"
+          },
+          "respondInGroups": {
+            "title": "Auch in Gruppenchats antworten"
+          }
+        }
+      },
+      "tr": {
+        "name": "SSS Otomatik Yanıt Botu",
+        "description": "WhatsApp mesajlarını yapılandırılabilir anahtar sözcük ve düzenli ifade kurallarıyla yanıtlar.",
+        "config": {
+          "rules": {
+            "title": "Kurallar (JSON)"
+          },
+          "fallbackReply": {
+            "title": "Varsayılan yanıt"
+          },
+          "fallbackCooldownSec": {
+            "title": "Varsayılan yanıt bekleme süresi (sohbet başına saniye)"
+          },
+          "respondInGroups": {
+            "title": "Grup sohbetlerinde de yanıtla"
+          }
+        }
+      },
+      "pt-BR": {
+        "name": "Bot de perguntas frequentes",
+        "description": "Responde a mensagens do WhatsApp com regras configuráveis de palavras-chave e expressões regulares.",
+        "config": {
+          "rules": {
+            "title": "Regras (JSON)"
+          },
+          "fallbackReply": {
+            "title": "Resposta padrão"
+          },
+          "fallbackCooldownSec": {
+            "title": "Intervalo da resposta padrão (segundos por conversa)"
+          },
+          "respondInGroups": {
+            "title": "Responder também em grupos"
+          }
+        }
+      },
+      "ko": {
+        "name": "FAQ 자동 응답 봇",
+        "description": "설정 가능한 키워드 및 정규식 규칙으로 WhatsApp 메시지에 응답합니다.",
+        "config": {
+          "rules": {
+            "title": "규칙 (JSON)"
+          },
+          "fallbackReply": {
+            "title": "기본 응답"
+          },
+          "fallbackCooldownSec": {
+            "title": "기본 응답 대기 시간 (채팅별 초)"
+          },
+          "respondInGroups": {
+            "title": "그룹 채팅에도 응답"
+          }
+        }
+      },
+      "id": {
+        "name": "Bot FAQ",
+        "description": "Membalas pesan WhatsApp berdasarkan aturan kata kunci dan ekspresi reguler yang dapat dikonfigurasi.",
+        "config": {
+          "rules": {
+            "title": "Aturan (JSON)"
+          },
+          "fallbackReply": {
+            "title": "Balasan cadangan"
+          },
+          "fallbackCooldownSec": {
+            "title": "Jeda balasan cadangan (detik per chat)"
+          },
+          "respondInGroups": {
+            "title": "Balas juga di chat grup"
+          }
+        }
       }
     }
   },
   {
     "id": "group-translate",
     "name": "Group Auto-Translation",
-    "version": "1.3.10",
+    "version": "1.3.11",
     "type": "extension",
     "status": "stable",
     "description": "Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled.",
@@ -1129,12 +2011,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.8.0",
-    "testedOpenWAVersion": "0.23.6",
-    "releasedAt": "2026-09-24",
+    "testedOpenWAVersion": "0.25.0",
+    "releasedAt": "2026-10-15",
     "repoPath": "group-translate",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/group-translate-v1.3.10/group-translate.zip#sha256=99bb850b49fd152c5e7e807380914e0dab898fbd981629375c257c45a1d30656",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/group-translate-v1.3.11/group-translate.zip#sha256=134fb5b722c79f69e34cb90c1cd16bec81e6ac9e7956cb00b77835324a1c48a3",
     "permissions": [
       "messages:send",
       "engine:read",
@@ -1422,13 +2304,163 @@
             "title": "नए ग्रुप्स में इस बॉट की घोषणा करें"
           }
         }
+      },
+      "de": {
+        "name": "Automatische Gruppenübersetzung",
+        "description": "Übersetzt Gruppennachrichten mit LibreTranslate. Administratoren steuern die zunächst deaktivierte Übersetzung über /tr.",
+        "config": {
+          "libretranslateUrl": {
+            "title": "LibreTranslate-URL"
+          },
+          "libretranslateApiKey": {
+            "title": "LibreTranslate-API-Schlüssel"
+          },
+          "timeoutMs": {
+            "title": "Anfragezeitlimit (ms)"
+          },
+          "commandPrefix": {
+            "title": "Befehlspräfix"
+          },
+          "minLength": {
+            "title": "Minimale Nachrichtenlänge für Übersetzungen"
+          },
+          "maxLength": {
+            "title": "Maximale Nachrichtenlänge für Übersetzungen"
+          },
+          "denyReply": {
+            "title": "Auf abgelehnte Befehle antworten"
+          },
+          "announceInGroups": {
+            "title": "Bot in neuen Gruppen vorstellen"
+          }
+        }
+      },
+      "tr": {
+        "name": "Otomatik Grup Çevirisi",
+        "description": "Grup mesajlarını LibreTranslate ile çevirir. Başlangıçta kapalıdır; yöneticiler /tr komutlarıyla yönetir.",
+        "config": {
+          "libretranslateUrl": {
+            "title": "LibreTranslate URL adresi"
+          },
+          "libretranslateApiKey": {
+            "title": "LibreTranslate API anahtarı"
+          },
+          "timeoutMs": {
+            "title": "İstek zaman aşımı (ms)"
+          },
+          "commandPrefix": {
+            "title": "Komut öneki"
+          },
+          "minLength": {
+            "title": "Çevrilecek en kısa mesaj uzunluğu"
+          },
+          "maxLength": {
+            "title": "Çevrilecek en uzun mesaj uzunluğu"
+          },
+          "denyReply": {
+            "title": "Reddedilen komutlara yanıt ver"
+          },
+          "announceInGroups": {
+            "title": "Botu yeni gruplarda duyur"
+          }
+        }
+      },
+      "pt-BR": {
+        "name": "Tradução automática de grupos",
+        "description": "Traduz mensagens de grupos com LibreTranslate. Começa desativado e é gerenciado por administradores com /tr.",
+        "config": {
+          "libretranslateUrl": {
+            "title": "URL do LibreTranslate"
+          },
+          "libretranslateApiKey": {
+            "title": "Chave da API do LibreTranslate"
+          },
+          "timeoutMs": {
+            "title": "Tempo limite da requisição (ms)"
+          },
+          "commandPrefix": {
+            "title": "Prefixo dos comandos"
+          },
+          "minLength": {
+            "title": "Comprimento mínimo para tradução"
+          },
+          "maxLength": {
+            "title": "Comprimento máximo para tradução"
+          },
+          "denyReply": {
+            "title": "Responder a comandos negados"
+          },
+          "announceInGroups": {
+            "title": "Apresentar o bot em novos grupos"
+          }
+        }
+      },
+      "ko": {
+        "name": "그룹 자동 번역",
+        "description": "LibreTranslate로 그룹 메시지를 번역합니다. 기본적으로 꺼져 있으며 관리자가 /tr 명령으로 제어합니다.",
+        "config": {
+          "libretranslateUrl": {
+            "title": "LibreTranslate URL"
+          },
+          "libretranslateApiKey": {
+            "title": "LibreTranslate API 키"
+          },
+          "timeoutMs": {
+            "title": "요청 제한 시간 (ms)"
+          },
+          "commandPrefix": {
+            "title": "명령 접두사"
+          },
+          "minLength": {
+            "title": "번역할 최소 메시지 길이"
+          },
+          "maxLength": {
+            "title": "번역할 최대 메시지 길이"
+          },
+          "denyReply": {
+            "title": "거부된 명령에 응답"
+          },
+          "announceInGroups": {
+            "title": "새 그룹에 봇 소개"
+          }
+        }
+      },
+      "id": {
+        "name": "Penerjemah Grup Otomatis",
+        "description": "Menerjemahkan pesan grup melalui LibreTranslate. Nonaktif secara default dan dikelola admin melalui perintah /tr.",
+        "config": {
+          "libretranslateUrl": {
+            "title": "URL LibreTranslate"
+          },
+          "libretranslateApiKey": {
+            "title": "Kunci API LibreTranslate"
+          },
+          "timeoutMs": {
+            "title": "Batas waktu permintaan (ms)"
+          },
+          "commandPrefix": {
+            "title": "Awalan perintah"
+          },
+          "minLength": {
+            "title": "Panjang minimum pesan untuk diterjemahkan"
+          },
+          "maxLength": {
+            "title": "Panjang maksimum pesan untuk diterjemahkan"
+          },
+          "denyReply": {
+            "title": "Balas perintah yang ditolak"
+          },
+          "announceInGroups": {
+            "title": "Perkenalkan bot di grup baru"
+          }
+        }
       }
     }
   },
   {
     "id": "gsheets-logger",
     "name": "Google Sheets Logger",
-    "version": "0.3.12",
+    "version": "0.3.13",
     "type": "extension",
     "status": "stable",
     "description": "Logs WhatsApp message events to a Google Sheet via a service account.",
@@ -1443,12 +2475,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.7.0",
-    "testedOpenWAVersion": "0.23.6",
-    "releasedAt": "2026-09-24",
+    "testedOpenWAVersion": "0.25.0",
+    "releasedAt": "2026-10-15",
     "repoPath": "gsheets-logger",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/gsheets-logger-v0.3.12/gsheets-logger.zip#sha256=fc87675747f424af68ed5ed53f36ffef26ac3a673acee6afafc197e4116bdefa",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/gsheets-logger-v0.3.13/gsheets-logger.zip#sha256=3e1c98cb3d31b5a36b176e1d2a714fd70f7ea787ab704c70fd0223aac7834cac",
     "permissions": [
       "net:fetch",
       "storage:use"
@@ -1650,13 +2682,118 @@
             "title": "बफ़र की गई पंक्तियाँ यहाँ तक पहुँचने पर फ्लश करें"
           }
         }
+      },
+      "de": {
+        "name": "Google-Sheets-Protokollierung",
+        "description": "Protokolliert WhatsApp-Nachrichtenereignisse über ein Dienstkonto in Google Sheets.",
+        "config": {
+          "serviceAccountJson": {
+            "title": "Dienstkonto (JSON)"
+          },
+          "spreadsheetId": {
+            "title": "Tabellen-ID"
+          },
+          "sheetTab": {
+            "title": "Tabellenblattname"
+          },
+          "flushIntervalSec": {
+            "title": "Schreibintervall (Sekunden)"
+          },
+          "flushBatchSize": {
+            "title": "Ab dieser Zeilenanzahl schreiben"
+          }
+        }
+      },
+      "tr": {
+        "name": "Google E-Tablolar Kaydı",
+        "description": "WhatsApp mesaj olaylarını bir hizmet hesabıyla Google E-Tablolar dosyasına kaydeder.",
+        "config": {
+          "serviceAccountJson": {
+            "title": "Hizmet hesabı (JSON)"
+          },
+          "spreadsheetId": {
+            "title": "E-tablo kimliği"
+          },
+          "sheetTab": {
+            "title": "Sayfa sekmesi adı"
+          },
+          "flushIntervalSec": {
+            "title": "Yazma aralığı (saniye)"
+          },
+          "flushBatchSize": {
+            "title": "Tampondaki satır sayısı bu değere ulaşınca yaz"
+          }
+        }
+      },
+      "pt-BR": {
+        "name": "Registro no Google Sheets",
+        "description": "Registra eventos de mensagens do WhatsApp no Google Sheets usando uma conta de serviço.",
+        "config": {
+          "serviceAccountJson": {
+            "title": "Conta de serviço (JSON)"
+          },
+          "spreadsheetId": {
+            "title": "ID da planilha"
+          },
+          "sheetTab": {
+            "title": "Nome da aba"
+          },
+          "flushIntervalSec": {
+            "title": "Intervalo de gravação (segundos)"
+          },
+          "flushBatchSize": {
+            "title": "Gravar ao atingir esta quantidade de linhas"
+          }
+        }
+      },
+      "ko": {
+        "name": "Google Sheets 기록",
+        "description": "서비스 계정으로 WhatsApp 메시지 이벤트를 Google Sheets에 기록합니다.",
+        "config": {
+          "serviceAccountJson": {
+            "title": "서비스 계정 (JSON)"
+          },
+          "spreadsheetId": {
+            "title": "스프레드시트 ID"
+          },
+          "sheetTab": {
+            "title": "시트 탭 이름"
+          },
+          "flushIntervalSec": {
+            "title": "기록 간격 (초)"
+          },
+          "flushBatchSize": {
+            "title": "이 행 수에 도달하면 기록"
+          }
+        }
+      },
+      "id": {
+        "name": "Pencatat Google Sheets",
+        "description": "Mencatat peristiwa pesan WhatsApp ke Google Sheets menggunakan akun layanan.",
+        "config": {
+          "serviceAccountJson": {
+            "title": "Akun layanan (JSON)"
+          },
+          "spreadsheetId": {
+            "title": "ID spreadsheet"
+          },
+          "sheetTab": {
+            "title": "Nama tab sheet"
+          },
+          "flushIntervalSec": {
+            "title": "Interval penulisan (detik)"
+          },
+          "flushBatchSize": {
+            "title": "Tulis saat jumlah baris mencapai"
+          }
+        }
       }
     }
   },
   {
     "id": "http-action",
     "name": "HTTP Action Bot",
-    "version": "0.2.11",
+    "version": "0.2.12",
     "type": "extension",
     "status": "stable",
     "description": "Triggers safe REST API requests from WhatsApp commands and renders JSON responses back to chat.",
@@ -1671,12 +2808,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.8.0",
-    "testedOpenWAVersion": "0.23.6",
-    "releasedAt": "2026-09-24",
+    "testedOpenWAVersion": "0.25.0",
+    "releasedAt": "2026-10-15",
     "repoPath": "http-action",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/http-action-v0.2.11/http-action.zip#sha256=6b6cfbfae1bd9ad85031754b493eaf9dce947c47d03312dadbace3cf0033bebe",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/http-action-v0.2.12/http-action.zip#sha256=941650377b8a43c2a7b6c10cfc5287eee1660d19692dadcf2548dcda6d7f655e",
     "permissions": [
       "net:fetch",
       "conversation:send",
@@ -1960,13 +3097,163 @@
             "title": "एक्शन्स (JSON ऐरे)"
           }
         }
+      },
+      "de": {
+        "name": "HTTP-Aktionsbot",
+        "description": "Führt sichere REST-Anfragen aus WhatsApp-Befehlen aus und sendet die JSON-Ergebnisse zurück.",
+        "config": {
+          "baseUrl": {
+            "title": "Basis-URL"
+          },
+          "authType": {
+            "title": "Authentifizierungstyp"
+          },
+          "authToken": {
+            "title": "Token / API-Schlüssel"
+          },
+          "apiKeyHeader": {
+            "title": "API-Schlüssel-Header"
+          },
+          "respondInGroups": {
+            "title": "Auch in Gruppenchats antworten"
+          },
+          "timeoutMs": {
+            "title": "Anfragezeitlimit (ms)"
+          },
+          "cooldownSeconds": {
+            "title": "Wartezeit (Sekunden)"
+          },
+          "actions": {
+            "title": "Aktionen (JSON-Array)"
+          }
+        }
+      },
+      "tr": {
+        "name": "HTTP Eylem Botu",
+        "description": "WhatsApp komutlarından güvenli REST istekleri çalıştırır ve JSON sonuçlarını sohbete gönderir.",
+        "config": {
+          "baseUrl": {
+            "title": "Temel URL adresi"
+          },
+          "authType": {
+            "title": "Kimlik doğrulama türü"
+          },
+          "authToken": {
+            "title": "Belirteç / API anahtarı"
+          },
+          "apiKeyHeader": {
+            "title": "API anahtarı başlığı"
+          },
+          "respondInGroups": {
+            "title": "Grup sohbetlerinde de yanıtla"
+          },
+          "timeoutMs": {
+            "title": "İstek zaman aşımı (ms)"
+          },
+          "cooldownSeconds": {
+            "title": "Bekleme süresi (saniye)"
+          },
+          "actions": {
+            "title": "Eylemler (JSON dizisi)"
+          }
+        }
+      },
+      "pt-BR": {
+        "name": "Bot de ações HTTP",
+        "description": "Executa requisições REST seguras a partir de comandos do WhatsApp e envia os resultados JSON à conversa.",
+        "config": {
+          "baseUrl": {
+            "title": "URL base"
+          },
+          "authType": {
+            "title": "Tipo de autenticação"
+          },
+          "authToken": {
+            "title": "Token / chave da API"
+          },
+          "apiKeyHeader": {
+            "title": "Cabeçalho da chave da API"
+          },
+          "respondInGroups": {
+            "title": "Responder também em grupos"
+          },
+          "timeoutMs": {
+            "title": "Tempo limite da requisição (ms)"
+          },
+          "cooldownSeconds": {
+            "title": "Intervalo (segundos)"
+          },
+          "actions": {
+            "title": "Ações (array JSON)"
+          }
+        }
+      },
+      "ko": {
+        "name": "HTTP 작업 봇",
+        "description": "WhatsApp 명령으로 안전한 REST 요청을 실행하고 JSON 결과를 채팅으로 보냅니다.",
+        "config": {
+          "baseUrl": {
+            "title": "기본 URL"
+          },
+          "authType": {
+            "title": "인증 유형"
+          },
+          "authToken": {
+            "title": "토큰 / API 키"
+          },
+          "apiKeyHeader": {
+            "title": "API 키 헤더"
+          },
+          "respondInGroups": {
+            "title": "그룹 채팅에도 응답"
+          },
+          "timeoutMs": {
+            "title": "요청 제한 시간 (ms)"
+          },
+          "cooldownSeconds": {
+            "title": "대기 시간 (초)"
+          },
+          "actions": {
+            "title": "작업 (JSON 배열)"
+          }
+        }
+      },
+      "id": {
+        "name": "Bot Aksi HTTP",
+        "description": "Menjalankan permintaan REST yang aman dari perintah WhatsApp dan mengirim hasil JSON kembali ke chat.",
+        "config": {
+          "baseUrl": {
+            "title": "URL dasar"
+          },
+          "authType": {
+            "title": "Jenis autentikasi"
+          },
+          "authToken": {
+            "title": "Token / kunci API"
+          },
+          "apiKeyHeader": {
+            "title": "Header kunci API"
+          },
+          "respondInGroups": {
+            "title": "Balas juga di chat grup"
+          },
+          "timeoutMs": {
+            "title": "Batas waktu permintaan (ms)"
+          },
+          "cooldownSeconds": {
+            "title": "Jeda (detik)"
+          },
+          "actions": {
+            "title": "Aksi (array JSON)"
+          }
+        }
       }
     }
   },
   {
     "id": "supabase-otp-hook",
     "name": "Supabase Auth OTP",
-    "version": "0.3.10",
+    "version": "0.3.11",
     "type": "extension",
     "status": "beta",
     "description": "Deliver Supabase Auth phone OTPs over WhatsApp.",
@@ -1983,12 +3270,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.8.16",
-    "testedOpenWAVersion": "0.23.6",
-    "releasedAt": "2026-09-24",
+    "testedOpenWAVersion": "0.25.0",
+    "releasedAt": "2026-10-15",
     "repoPath": "supabase-otp-hook",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/supabase-otp-hook",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/supabase-otp-hook-v0.3.10/supabase-otp-hook.zip#sha256=08dfac75da9edee37fe0712e21176998667964894e1b03d2b876f2f3b198be65",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/supabase-otp-hook-v0.3.11/supabase-otp-hook.zip#sha256=0dcb3a91ed5803a61935530a06b63db756d8929d43a7371e8b664fb2d9a42163",
     "permissions": [
       "webhook:ingress",
       "messages:send"
@@ -2163,13 +3450,103 @@
             "title": "डीबग (Debug) मोड"
           }
         }
+      },
+      "de": {
+        "name": "Supabase-Auth-OTP",
+        "description": "Sendet Telefon-Bestätigungscodes von Supabase Auth über WhatsApp.",
+        "config": {
+          "appName": {
+            "title": "Anwendungsname"
+          },
+          "messageTemplate": {
+            "title": "Nachrichtenvorlage"
+          },
+          "fallbackSessionId": {
+            "title": "WhatsApp-Ersatzsitzung"
+          },
+          "debug": {
+            "title": "Debug-Modus"
+          }
+        }
+      },
+      "tr": {
+        "name": "Supabase Auth OTP",
+        "description": "Supabase Auth telefon doğrulama kodlarını WhatsApp üzerinden gönderir.",
+        "config": {
+          "appName": {
+            "title": "Uygulama adı"
+          },
+          "messageTemplate": {
+            "title": "Mesaj şablonu"
+          },
+          "fallbackSessionId": {
+            "title": "Yedek WhatsApp oturumu"
+          },
+          "debug": {
+            "title": "Hata ayıklama modu"
+          }
+        }
+      },
+      "pt-BR": {
+        "name": "OTP do Supabase Auth",
+        "description": "Envia códigos de verificação de telefone do Supabase Auth pelo WhatsApp.",
+        "config": {
+          "appName": {
+            "title": "Nome do aplicativo"
+          },
+          "messageTemplate": {
+            "title": "Modelo de mensagem"
+          },
+          "fallbackSessionId": {
+            "title": "Sessão alternativa do WhatsApp"
+          },
+          "debug": {
+            "title": "Modo de depuração"
+          }
+        }
+      },
+      "ko": {
+        "name": "Supabase Auth OTP",
+        "description": "Supabase Auth 전화 인증 코드를 WhatsApp으로 전송합니다.",
+        "config": {
+          "appName": {
+            "title": "앱 이름"
+          },
+          "messageTemplate": {
+            "title": "메시지 템플릿"
+          },
+          "fallbackSessionId": {
+            "title": "대체 WhatsApp 세션"
+          },
+          "debug": {
+            "title": "디버그 모드"
+          }
+        }
+      },
+      "id": {
+        "name": "OTP Supabase Auth",
+        "description": "Mengirim kode verifikasi telepon Supabase Auth melalui WhatsApp.",
+        "config": {
+          "appName": {
+            "title": "Nama aplikasi"
+          },
+          "messageTemplate": {
+            "title": "Templat pesan"
+          },
+          "fallbackSessionId": {
+            "title": "Sesi WhatsApp cadangan"
+          },
+          "debug": {
+            "title": "Mode debug"
+          }
+        }
       }
     }
   },
   {
     "id": "typebot-connector",
     "name": "Typebot Connector",
-    "version": "0.3.2",
+    "version": "0.3.3",
     "type": "extension",
     "status": "stable",
     "description": "Runs a Typebot flow as the brain of a WhatsApp bot: inbound messages drive a Typebot chat session via the live Chat API, and the bot's replies — text, media, and numbered-choice inputs — are sent back to WhatsApp. Auto-starts every chat, handles file-upload steps, and resets when the flow ends or after an idle timeout. Runs sandboxed in the plugin worker; no public URL or webhook required.",
@@ -2186,12 +3563,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.8.2",
-    "testedOpenWAVersion": "0.23.6",
-    "releasedAt": "2026-09-24",
+    "testedOpenWAVersion": "0.25.0",
+    "releasedAt": "2026-10-15",
     "repoPath": "typebot-connector",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/typebot-connector",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/typebot-connector-v0.3.2/typebot-connector.zip#sha256=313f13697581b36ac7249b10eff09ee8536bf35b12568b0b04d4a04c8c254959",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/typebot-connector-v0.3.3/typebot-connector.zip#sha256=199dd0e5960a2126c6271a1fee5757b24d181ad292d087b1caf5c81af76b757b",
     "permissions": [
       "net:fetch",
       "conversation:send",
@@ -2449,13 +3826,148 @@
             "title": "मीडिया/अपलोड होस्ट"
           }
         }
+      },
+      "de": {
+        "name": "Typebot-Anbindung",
+        "description": "Steuert einen WhatsApp-Bot über die Typebot-Chat-API mit Medien, Auswahlmenüs und Datei-Uploads, ohne öffentlichen Webhook.",
+        "config": {
+          "apiHost": {
+            "title": "Typebot-Host-URL"
+          },
+          "publicId": {
+            "title": "Öffentliche Typebot-ID"
+          },
+          "apiToken": {
+            "title": "API-Zugriffstoken"
+          },
+          "respondInGroups": {
+            "title": "Auch in Gruppenchats antworten"
+          },
+          "sessionTimeoutMinutes": {
+            "title": "Zurücksetzen bei Inaktivität (Minuten)"
+          },
+          "passContactVariables": {
+            "title": "Kontaktvariablen übergeben"
+          },
+          "mediaHost": {
+            "title": "Medien-/Upload-Host"
+          }
+        }
+      },
+      "tr": {
+        "name": "Typebot Bağlayıcısı",
+        "description": "Typebot Chat API ile medya, seçenek menüleri ve dosya yükleme içeren bir WhatsApp botunu herkese açık webhook olmadan çalıştırır.",
+        "config": {
+          "apiHost": {
+            "title": "Typebot sunucu URL adresi"
+          },
+          "publicId": {
+            "title": "Typebot genel kimliği"
+          },
+          "apiToken": {
+            "title": "API erişim belirteci"
+          },
+          "respondInGroups": {
+            "title": "Grup sohbetlerinde de yanıtla"
+          },
+          "sessionTimeoutMinutes": {
+            "title": "Hareketsizlikte sıfırla (dakika)"
+          },
+          "passContactVariables": {
+            "title": "Kişi değişkenlerini aktar"
+          },
+          "mediaHost": {
+            "title": "Medya/yükleme sunucusu"
+          }
+        }
+      },
+      "pt-BR": {
+        "name": "Conector Typebot",
+        "description": "Executa um bot do WhatsApp pela API de chat do Typebot, com mídia, opções e envio de arquivos, sem webhook público.",
+        "config": {
+          "apiHost": {
+            "title": "URL do servidor Typebot"
+          },
+          "publicId": {
+            "title": "ID público do Typebot"
+          },
+          "apiToken": {
+            "title": "Token de acesso da API"
+          },
+          "respondInGroups": {
+            "title": "Responder também em grupos"
+          },
+          "sessionTimeoutMinutes": {
+            "title": "Reiniciar por inatividade (minutos)"
+          },
+          "passContactVariables": {
+            "title": "Enviar variáveis do contato"
+          },
+          "mediaHost": {
+            "title": "Servidor de mídia/envio"
+          }
+        }
+      },
+      "ko": {
+        "name": "Typebot 커넥터",
+        "description": "공개 웹훅 없이 Typebot 채팅 API로 미디어, 선택 메뉴 및 파일 업로드를 지원하는 WhatsApp 봇을 실행합니다.",
+        "config": {
+          "apiHost": {
+            "title": "Typebot 호스트 URL"
+          },
+          "publicId": {
+            "title": "Typebot 공개 ID"
+          },
+          "apiToken": {
+            "title": "API 액세스 토큰"
+          },
+          "respondInGroups": {
+            "title": "그룹 채팅에도 응답"
+          },
+          "sessionTimeoutMinutes": {
+            "title": "비활성 시 초기화 (분)"
+          },
+          "passContactVariables": {
+            "title": "연락처 변수 전달"
+          },
+          "mediaHost": {
+            "title": "미디어/업로드 호스트"
+          }
+        }
+      },
+      "id": {
+        "name": "Konektor Typebot",
+        "description": "Menjalankan bot WhatsApp melalui API Chat Typebot dengan media, pilihan menu, dan unggahan berkas, tanpa webhook publik.",
+        "config": {
+          "apiHost": {
+            "title": "URL host Typebot"
+          },
+          "publicId": {
+            "title": "ID publik Typebot"
+          },
+          "apiToken": {
+            "title": "Token akses API"
+          },
+          "respondInGroups": {
+            "title": "Balas juga di chat grup"
+          },
+          "sessionTimeoutMinutes": {
+            "title": "Reset saat tidak aktif (menit)"
+          },
+          "passContactVariables": {
+            "title": "Kirim variabel kontak"
+          },
+          "mediaHost": {
+            "title": "Host media/unggahan"
+          }
+        }
       }
     }
   },
   {
     "id": "voice-transcription",
     "name": "Voice Note Transcription",
-    "version": "1.3.1",
+    "version": "1.3.2",
     "type": "extension",
     "status": "beta",
     "description": "Transcribes inbound WhatsApp voice notes to text via an OpenAI-compatible speech-to-text backend (self-hosted Speaches/faster-whisper or hosted Groq/OpenAI) and delivers a `message.transcription` event to your webhook — so bots and AI can read and reply to audio. Off the message-delivery path; disabled until enabled.",
@@ -2472,12 +3984,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.8.0",
-    "testedOpenWAVersion": "0.23.6",
-    "releasedAt": "2026-09-24",
+    "testedOpenWAVersion": "0.25.0",
+    "releasedAt": "2026-10-15",
     "repoPath": "voice-transcription",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/voice-transcription",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/voice-transcription-v1.3.1/voice-transcription.zip#sha256=67ee5a1ca5cad01a7e5faea1abc4b953efef2252d781dab85d0b61144a318d00",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/voice-transcription-v1.3.2/voice-transcription.zip#sha256=1ce1e4977e5f0ae05141a9f80aeb1b013fde7ff57c82054347315f962b186c10",
     "permissions": [
       "net:fetch",
       "messages:send",
@@ -2900,6 +4412,231 @@
           },
           "chatDelivery": {
             "title": "इन-चैट डिलीवरी"
+          }
+        }
+      },
+      "de": {
+        "name": "Sprachnachrichten-Transkription",
+        "description": "Transkribiert WhatsApp-Sprachnachrichten über einen OpenAI-kompatiblen Dienst und liefert message.transcription an Ihren Webhook.",
+        "config": {
+          "sttBaseUrl": {
+            "title": "STT-Basis-URL"
+          },
+          "sttApiKey": {
+            "title": "STT-API-Schlüssel"
+          },
+          "model": {
+            "title": "Modell"
+          },
+          "language": {
+            "title": "Sprachhinweis"
+          },
+          "provider": {
+            "title": "Anbieterbezeichnung"
+          },
+          "timeoutMs": {
+            "title": "Anfragezeitlimit (ms)"
+          },
+          "enabledMessageTypes": {
+            "title": "Zu transkribierende Nachrichtentypen"
+          },
+          "maxSizeBytes": {
+            "title": "Maximale Audiogröße (Bytes)"
+          },
+          "maxPerHour": {
+            "title": "Max. Transkriptionen pro Stunde und Sitzung"
+          },
+          "deliveryWebhookUrl": {
+            "title": "Webhook-URL für die Zustellung"
+          },
+          "deliverySecret": {
+            "title": "Zustellungsgeheimnis"
+          },
+          "deliveryTimeoutMs": {
+            "title": "Zustellungszeitlimit (ms)"
+          },
+          "chatDelivery": {
+            "title": "Zustellung im Chat"
+          }
+        }
+      },
+      "tr": {
+        "name": "Sesli Mesaj Yazıya Çevirme",
+        "description": "WhatsApp sesli mesajlarını OpenAI uyumlu bir hizmetle yazıya çevirir ve message.transcription olayını webhook adresinize gönderir.",
+        "config": {
+          "sttBaseUrl": {
+            "title": "STT temel URL adresi"
+          },
+          "sttApiKey": {
+            "title": "STT API anahtarı"
+          },
+          "model": {
+            "title": "Model"
+          },
+          "language": {
+            "title": "Dil ipucu"
+          },
+          "provider": {
+            "title": "Sağlayıcı etiketi"
+          },
+          "timeoutMs": {
+            "title": "İstek zaman aşımı (ms)"
+          },
+          "enabledMessageTypes": {
+            "title": "Yazıya çevrilecek mesaj türleri"
+          },
+          "maxSizeBytes": {
+            "title": "En fazla ses boyutu (bayt)"
+          },
+          "maxPerHour": {
+            "title": "Oturum başına saatlik yazıya çevirme sınırı"
+          },
+          "deliveryWebhookUrl": {
+            "title": "Teslimat webhook URL adresi"
+          },
+          "deliverySecret": {
+            "title": "Teslimat gizli anahtarı"
+          },
+          "deliveryTimeoutMs": {
+            "title": "Teslimat zaman aşımı (ms)"
+          },
+          "chatDelivery": {
+            "title": "Sohbet içi teslimat"
+          }
+        }
+      },
+      "pt-BR": {
+        "name": "Transcrição de mensagens de voz",
+        "description": "Transcreve mensagens de voz do WhatsApp por um serviço compatível com OpenAI e envia message.transcription ao seu webhook.",
+        "config": {
+          "sttBaseUrl": {
+            "title": "URL base de STT"
+          },
+          "sttApiKey": {
+            "title": "Chave da API de STT"
+          },
+          "model": {
+            "title": "Modelo"
+          },
+          "language": {
+            "title": "Idioma sugerido"
+          },
+          "provider": {
+            "title": "Nome do provedor"
+          },
+          "timeoutMs": {
+            "title": "Tempo limite da requisição (ms)"
+          },
+          "enabledMessageTypes": {
+            "title": "Tipos de mensagem para transcrever"
+          },
+          "maxSizeBytes": {
+            "title": "Tamanho máximo do áudio (bytes)"
+          },
+          "maxPerHour": {
+            "title": "Máx. de transcrições por hora por sessão"
+          },
+          "deliveryWebhookUrl": {
+            "title": "URL do webhook de entrega"
+          },
+          "deliverySecret": {
+            "title": "Segredo de entrega"
+          },
+          "deliveryTimeoutMs": {
+            "title": "Tempo limite de entrega (ms)"
+          },
+          "chatDelivery": {
+            "title": "Entrega na conversa"
+          }
+        }
+      },
+      "ko": {
+        "name": "음성 메시지 전사",
+        "description": "OpenAI 호환 서비스로 WhatsApp 음성 메시지를 텍스트로 변환하고 웹훅으로 message.transcription 이벤트를 전달합니다.",
+        "config": {
+          "sttBaseUrl": {
+            "title": "STT 기본 URL"
+          },
+          "sttApiKey": {
+            "title": "STT API 키"
+          },
+          "model": {
+            "title": "모델"
+          },
+          "language": {
+            "title": "언어 힌트"
+          },
+          "provider": {
+            "title": "제공업체 이름"
+          },
+          "timeoutMs": {
+            "title": "요청 제한 시간 (ms)"
+          },
+          "enabledMessageTypes": {
+            "title": "전사할 메시지 유형"
+          },
+          "maxSizeBytes": {
+            "title": "최대 오디오 크기 (바이트)"
+          },
+          "maxPerHour": {
+            "title": "세션별 시간당 최대 전사 수"
+          },
+          "deliveryWebhookUrl": {
+            "title": "전달 웹훅 URL"
+          },
+          "deliverySecret": {
+            "title": "전달 비밀 키"
+          },
+          "deliveryTimeoutMs": {
+            "title": "전달 제한 시간 (ms)"
+          },
+          "chatDelivery": {
+            "title": "채팅 내 전달"
+          }
+        }
+      },
+      "id": {
+        "name": "Transkripsi Pesan Suara",
+        "description": "Mentranskripsikan pesan suara WhatsApp melalui layanan yang kompatibel dengan OpenAI dan mengirim peristiwa message.transcription ke webhook Anda.",
+        "config": {
+          "sttBaseUrl": {
+            "title": "URL dasar STT"
+          },
+          "sttApiKey": {
+            "title": "Kunci API STT"
+          },
+          "model": {
+            "title": "Model"
+          },
+          "language": {
+            "title": "Petunjuk bahasa"
+          },
+          "provider": {
+            "title": "Label penyedia"
+          },
+          "timeoutMs": {
+            "title": "Batas waktu permintaan (ms)"
+          },
+          "enabledMessageTypes": {
+            "title": "Jenis pesan untuk ditranskripsikan"
+          },
+          "maxSizeBytes": {
+            "title": "Ukuran maksimum audio (byte)"
+          },
+          "maxPerHour": {
+            "title": "Maks. transkripsi per jam per sesi"
+          },
+          "deliveryWebhookUrl": {
+            "title": "URL webhook pengiriman"
+          },
+          "deliverySecret": {
+            "title": "Rahasia pengiriman"
+          },
+          "deliveryTimeoutMs": {
+            "title": "Batas waktu pengiriman (ms)"
+          },
+          "chatDelivery": {
+            "title": "Pengiriman ke chat"
           }
         }
       }

@@ -5,7 +5,7 @@ management/automation stays easy. Verified against OpenWA's plugin runtime (sand
 the same baseline as [`types/openwa.d.ts`](./types/openwa.d.ts) — re-check both together, since this
 document describes host behaviour that has moved repeatedly (per-session config in 0.7, boot re-enable
 in 0.10.5, the storage quota and `message:deleted` in 0.11.0, the `storage:use` gate in 0.17.0, hook
-result checks and sandboxed hook ordering in 0.23.6).
+result checks and sandboxed hook ordering in 0.23.6). The current baseline is OpenWA v0.25.0, including host-version floor enforcement and HTTPS origin grants for configured outbound endpoints.
 
 ## Principles
 
@@ -68,8 +68,8 @@ OpenWA-plugins/
   "repository": "https://github.com/rmyndharis/OpenWA-plugins",
   "keywords": ["…"],
   "status": "stable",           // "stable" | "beta" | "development"
-  "minOpenWAVersion": "0.7.0",  // compatibility convention (OpenWA does not enforce it yet)
-  "testedOpenWAVersion": "0.7.0"
+  "minOpenWAVersion": "0.7.0",  // enforced at install and boot load by OpenWA v0.25.0
+  "testedOpenWAVersion": "0.25.0" // newest host checked; describe the verification scope in the README
 }
 ```
 
@@ -84,7 +84,7 @@ plugin:
 `catalog.mjs` only *warns* about i18n — a missing block, or a missing locale — but the test suite does
 not: `npm test` fails when a `stable` plugin is missing any supported locale, and when any plugin ships
 a locale that translates its name and description without translating every `configSchema` field. Treat
-i18n as gated; the warning is where you notice a gap, not where it is stopped.
+i18n as gated; the warning is where you notice a gap, not where it is stopped. The shared locale list in `scripts/locales.mjs` matches OpenWA v0.25.0, including `id`; stable plugins must cover every non-English locale.
 
 ### `configSchema` field vocabulary (v0.7)
 
@@ -268,6 +268,7 @@ correct plugins and were each learned the hard way. Re-verify against OpenWA cor
    resolve to the manifest's, silently. (Top-level only — defaults nested under `properties`/`items`
    are not seeded. A required field with no declared default deliberately stays absent, because that
    needs real operator input; the host never enforces `required` itself.)
+   On v0.25.0 each configured URL grants only its HTTPS origin, including its port. Plain HTTP and embedded credentials do not grant access; a static `net.allow` entry and the host SSRF settings are still needed for a permitted local HTTP service.
 4. **Host boot re-enables every plugin the operator had enabled** (OpenWA ≥ 0.10.5; earlier hosts
    really did require a manual re-enable). The runtime `status` is still reset on load, but the operator's
    standing decision is persisted separately and replayed at boot. `ctx.config` and `ctx.storage`

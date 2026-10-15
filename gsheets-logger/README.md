@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `gsheets-logger` |
-| **Version** | 0.3.12 |
-| **Released** | 2026-09-24 |
+| **Version** | 0.3.13 |
+| **Released** | 2026-10-15 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.23.6) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.25.0) |
 | **Keywords** | google-sheets, logging, audit, crm, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/gsheets-logger](https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger) |
 <!-- END DETAILS -->
@@ -36,6 +36,7 @@ The installed version is also visible in the OpenWA dashboard Plugins list, via
 - **Buffered batch writes** with retain-on-failure (rows are kept and retried on a Sheets error),
   a 5000-row and ~4M-character cap (oldest dropped first, reported in the log), and persistence to
   plugin storage so the buffer survives restarts.
+- **Destination-safe restarts:** persisted rows carry a destination fingerprint without credentials. Rows for a previous spreadsheet or service account are parked under `buffer:undelivered` before the new destination starts. A failed parking write preserves the backlog and blocks activation; legacy array buffers are read under the configured destination.
 - **Service-account auth** (JWT RS256) using only Node built-ins (`crypto` + `fetch`) — **zero runtime
   dependencies**, so the package is tiny.
 - **Formula-injection safe** — writes with `valueInputOption=RAW` and neutralizes CSV/Sheets formula
@@ -209,6 +210,8 @@ and upload it in the dashboard **Plugins → Install**.
 The target tab must exist, **with a header row of your choosing** — the plugin appends data rows only.
 
 ## Compatibility
+
+Checked against the OpenWA v0.25.0 worker runtime with isolated services. On a spreadsheet or credential change, undelivered rows are parked before switching clients. If parking fails, the plugin logs the error, retains the rows and keeps the previous client so a later retry can deliver to the original destination.
 
 External plugins run **sandboxed in a worker thread** (since OpenWA **v0.6.0**). Requires OpenWA
 **≥ 0.7.0** — all outbound HTTP (OAuth token + Sheets append) goes through the host-proxied,

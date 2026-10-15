@@ -210,7 +210,7 @@ export class MappingStore {
     const legacy = await this.readMapped<LegacyRev>(this.legacyRevKey(conversationId));
     // Marked once a second session claimed the same conversation id. A scope-less delivery carries
     // nothing that says which tenant it belongs to, so there is no right answer to pick here.
-    if (!legacy || 'ambiguous' in legacy) return null;
+    if (!legacy || 'ambiguous' in legacy || (sessionId && legacy.sessionId !== sessionId)) return null;
     return legacy;
   }
 

@@ -1,7 +1,7 @@
 {
   "id": "voice-transcription",
   "name": "Voice Note Transcription",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Transcribes inbound WhatsApp voice notes to text via an OpenAI-compatible speech-to-text backend (self-hosted Speaches/faster-whisper or hosted Groq/OpenAI) and delivers a `message.transcription` event to your webhook \u2014 so bots and AI can read and reply to audio. Off the message-delivery path; disabled until enabled.",
@@ -21,7 +21,7 @@
   ],
   "status": "beta",
   "minOpenWAVersion": "0.8.0",
-  "testedOpenWAVersion": "0.23.6",
+  "testedOpenWAVersion": "0.25.0",
   "provides": [
     "transcription"
   ],
@@ -547,6 +547,231 @@
         },
         "chatDelivery": {
           "title": "\u0907\u0928-\u091a\u0948\u091f \u0921\u093f\u0932\u0940\u0935\u0930\u0940"
+        }
+      }
+    },
+    "de": {
+      "name": "Sprachnachrichten-Transkription",
+      "description": "Transkribiert WhatsApp-Sprachnachrichten über einen OpenAI-kompatiblen Dienst und liefert message.transcription an Ihren Webhook.",
+      "config": {
+        "sttBaseUrl": {
+          "title": "STT-Basis-URL"
+        },
+        "sttApiKey": {
+          "title": "STT-API-Schlüssel"
+        },
+        "model": {
+          "title": "Modell"
+        },
+        "language": {
+          "title": "Sprachhinweis"
+        },
+        "provider": {
+          "title": "Anbieterbezeichnung"
+        },
+        "timeoutMs": {
+          "title": "Anfragezeitlimit (ms)"
+        },
+        "enabledMessageTypes": {
+          "title": "Zu transkribierende Nachrichtentypen"
+        },
+        "maxSizeBytes": {
+          "title": "Maximale Audiogröße (Bytes)"
+        },
+        "maxPerHour": {
+          "title": "Max. Transkriptionen pro Stunde und Sitzung"
+        },
+        "deliveryWebhookUrl": {
+          "title": "Webhook-URL für die Zustellung"
+        },
+        "deliverySecret": {
+          "title": "Zustellungsgeheimnis"
+        },
+        "deliveryTimeoutMs": {
+          "title": "Zustellungszeitlimit (ms)"
+        },
+        "chatDelivery": {
+          "title": "Zustellung im Chat"
+        }
+      }
+    },
+    "tr": {
+      "name": "Sesli Mesaj Yazıya Çevirme",
+      "description": "WhatsApp sesli mesajlarını OpenAI uyumlu bir hizmetle yazıya çevirir ve message.transcription olayını webhook adresinize gönderir.",
+      "config": {
+        "sttBaseUrl": {
+          "title": "STT temel URL adresi"
+        },
+        "sttApiKey": {
+          "title": "STT API anahtarı"
+        },
+        "model": {
+          "title": "Model"
+        },
+        "language": {
+          "title": "Dil ipucu"
+        },
+        "provider": {
+          "title": "Sağlayıcı etiketi"
+        },
+        "timeoutMs": {
+          "title": "İstek zaman aşımı (ms)"
+        },
+        "enabledMessageTypes": {
+          "title": "Yazıya çevrilecek mesaj türleri"
+        },
+        "maxSizeBytes": {
+          "title": "En fazla ses boyutu (bayt)"
+        },
+        "maxPerHour": {
+          "title": "Oturum başına saatlik yazıya çevirme sınırı"
+        },
+        "deliveryWebhookUrl": {
+          "title": "Teslimat webhook URL adresi"
+        },
+        "deliverySecret": {
+          "title": "Teslimat gizli anahtarı"
+        },
+        "deliveryTimeoutMs": {
+          "title": "Teslimat zaman aşımı (ms)"
+        },
+        "chatDelivery": {
+          "title": "Sohbet içi teslimat"
+        }
+      }
+    },
+    "pt-BR": {
+      "name": "Transcrição de mensagens de voz",
+      "description": "Transcreve mensagens de voz do WhatsApp por um serviço compatível com OpenAI e envia message.transcription ao seu webhook.",
+      "config": {
+        "sttBaseUrl": {
+          "title": "URL base de STT"
+        },
+        "sttApiKey": {
+          "title": "Chave da API de STT"
+        },
+        "model": {
+          "title": "Modelo"
+        },
+        "language": {
+          "title": "Idioma sugerido"
+        },
+        "provider": {
+          "title": "Nome do provedor"
+        },
+        "timeoutMs": {
+          "title": "Tempo limite da requisição (ms)"
+        },
+        "enabledMessageTypes": {
+          "title": "Tipos de mensagem para transcrever"
+        },
+        "maxSizeBytes": {
+          "title": "Tamanho máximo do áudio (bytes)"
+        },
+        "maxPerHour": {
+          "title": "Máx. de transcrições por hora por sessão"
+        },
+        "deliveryWebhookUrl": {
+          "title": "URL do webhook de entrega"
+        },
+        "deliverySecret": {
+          "title": "Segredo de entrega"
+        },
+        "deliveryTimeoutMs": {
+          "title": "Tempo limite de entrega (ms)"
+        },
+        "chatDelivery": {
+          "title": "Entrega na conversa"
+        }
+      }
+    },
+    "ko": {
+      "name": "음성 메시지 전사",
+      "description": "OpenAI 호환 서비스로 WhatsApp 음성 메시지를 텍스트로 변환하고 웹훅으로 message.transcription 이벤트를 전달합니다.",
+      "config": {
+        "sttBaseUrl": {
+          "title": "STT 기본 URL"
+        },
+        "sttApiKey": {
+          "title": "STT API 키"
+        },
+        "model": {
+          "title": "모델"
+        },
+        "language": {
+          "title": "언어 힌트"
+        },
+        "provider": {
+          "title": "제공업체 이름"
+        },
+        "timeoutMs": {
+          "title": "요청 제한 시간 (ms)"
+        },
+        "enabledMessageTypes": {
+          "title": "전사할 메시지 유형"
+        },
+        "maxSizeBytes": {
+          "title": "최대 오디오 크기 (바이트)"
+        },
+        "maxPerHour": {
+          "title": "세션별 시간당 최대 전사 수"
+        },
+        "deliveryWebhookUrl": {
+          "title": "전달 웹훅 URL"
+        },
+        "deliverySecret": {
+          "title": "전달 비밀 키"
+        },
+        "deliveryTimeoutMs": {
+          "title": "전달 제한 시간 (ms)"
+        },
+        "chatDelivery": {
+          "title": "채팅 내 전달"
+        }
+      }
+    },
+    "id": {
+      "name": "Transkripsi Pesan Suara",
+      "description": "Mentranskripsikan pesan suara WhatsApp melalui layanan yang kompatibel dengan OpenAI dan mengirim peristiwa message.transcription ke webhook Anda.",
+      "config": {
+        "sttBaseUrl": {
+          "title": "URL dasar STT"
+        },
+        "sttApiKey": {
+          "title": "Kunci API STT"
+        },
+        "model": {
+          "title": "Model"
+        },
+        "language": {
+          "title": "Petunjuk bahasa"
+        },
+        "provider": {
+          "title": "Label penyedia"
+        },
+        "timeoutMs": {
+          "title": "Batas waktu permintaan (ms)"
+        },
+        "enabledMessageTypes": {
+          "title": "Jenis pesan untuk ditranskripsikan"
+        },
+        "maxSizeBytes": {
+          "title": "Ukuran maksimum audio (byte)"
+        },
+        "maxPerHour": {
+          "title": "Maks. transkripsi per jam per sesi"
+        },
+        "deliveryWebhookUrl": {
+          "title": "URL webhook pengiriman"
+        },
+        "deliverySecret": {
+          "title": "Rahasia pengiriman"
+        },
+        "deliveryTimeoutMs": {
+          "title": "Batas waktu pengiriman (ms)"
+        },
+        "chatDelivery": {
+          "title": "Pengiriman ke chat"
         }
       }
     }

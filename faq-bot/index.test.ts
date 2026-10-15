@@ -136,9 +136,7 @@ test('an unmatched message claims when the fallback answered it', async () => {
   assert.equal(result.continue, false, 'the fallback answered — no other bot should answer too');
 });
 
-// A send that throws delivers nothing. Claiming it anyway would silence the chat entirely — every later
-// plugin sees a message that was "handled" when in fact no reply ever reached the contact.
-test('a reply that throws does not claim the message', async () => {
+test('a failed reply keeps its claim so another responder cannot also send', async () => {
   let handler: ((hook: unknown) => Promise<{ continue: boolean }>) | undefined;
   const ctx = makeCtx({
     config: { rules },
@@ -151,7 +149,7 @@ test('a reply that throws does not claim the message', async () => {
     source: 'Engine', sessionId: 's1', timestamp: new Date(),
     data: { id: 'm1', chatId: 'c@x', body: 'hi there', fromMe: false, isGroup: false },
   });
-  assert.equal(result.continue, true, 'the send failed — a later plugin may still have an answer');
+  assert.equal(result.continue, false, 'an attempted reply retains ownership of this message');
 });
 
 test('parseConfig requires rules', () => {

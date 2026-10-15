@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `voice-transcription` |
-| **Version** | 1.3.1 |
-| **Released** | 2026-09-24 |
+| **Version** | 1.3.2 |
+| **Released** | 2026-10-15 |
 | **Status** | beta |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.0 (tested 0.23.6) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.25.0) |
 | **Keywords** | transcription, speech-to-text, stt, whisper, voice, audio, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/voice-transcription](https://github.com/rmyndharis/OpenWA-plugins/tree/main/voice-transcription) |
 <!-- END DETAILS -->
@@ -138,6 +138,8 @@ curl -X POST http://localhost:2785/api/plugins/voice-transcription/enable \
 | `chatDelivery` | no | `off` | Also post the transcript into WhatsApp: `off` (webhook only) · `self` (note to your own number) · `reply` (quote-reply to the sender, visible to them). **In a group, `reply` posts to the whole group**, so every member reads the contents of the voice note. `reply` is skipped for a note that reached the gateway more than 5 minutes after it was sent; with no webhook such a note is not transcribed at all. |
 
 ## Compatibility
+
+Checked against the OpenWA v0.25.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
 
 - Requires OpenWA **≥ 0.8.0**, the release that introduced `net.allowConfigHosts`. Both `sttBaseUrl` and
   `deliveryWebhookUrl` are resolved through it, so on a 0.7.x host every call to a configured host is
