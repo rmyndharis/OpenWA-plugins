@@ -1,7 +1,7 @@
 {
   "id": "http-action",
   "name": "HTTP Action Bot",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Triggers safe REST API requests from WhatsApp commands and renders JSON responses back to chat.",
@@ -18,7 +18,7 @@
     "openwa"
   ],
   "status": "stable",
-  "testedOpenWAVersion": "0.23.6",
+  "testedOpenWAVersion": "0.25.0",
   "minOpenWAVersion": "0.8.0",
   "sdkVersion": "1",
   "provides": [
@@ -363,6 +363,156 @@
         },
         "actions": {
           "title": "एक्शन्स (JSON ऐरे)"
+        }
+      }
+    },
+    "de": {
+      "name": "HTTP-Aktionsbot",
+      "description": "Führt sichere REST-Anfragen aus WhatsApp-Befehlen aus und sendet die JSON-Ergebnisse zurück.",
+      "config": {
+        "baseUrl": {
+          "title": "Basis-URL"
+        },
+        "authType": {
+          "title": "Authentifizierungstyp"
+        },
+        "authToken": {
+          "title": "Token / API-Schlüssel"
+        },
+        "apiKeyHeader": {
+          "title": "API-Schlüssel-Header"
+        },
+        "respondInGroups": {
+          "title": "Auch in Gruppenchats antworten"
+        },
+        "timeoutMs": {
+          "title": "Anfragezeitlimit (ms)"
+        },
+        "cooldownSeconds": {
+          "title": "Wartezeit (Sekunden)"
+        },
+        "actions": {
+          "title": "Aktionen (JSON-Array)"
+        }
+      }
+    },
+    "tr": {
+      "name": "HTTP Eylem Botu",
+      "description": "WhatsApp komutlarından güvenli REST istekleri çalıştırır ve JSON sonuçlarını sohbete gönderir.",
+      "config": {
+        "baseUrl": {
+          "title": "Temel URL adresi"
+        },
+        "authType": {
+          "title": "Kimlik doğrulama türü"
+        },
+        "authToken": {
+          "title": "Belirteç / API anahtarı"
+        },
+        "apiKeyHeader": {
+          "title": "API anahtarı başlığı"
+        },
+        "respondInGroups": {
+          "title": "Grup sohbetlerinde de yanıtla"
+        },
+        "timeoutMs": {
+          "title": "İstek zaman aşımı (ms)"
+        },
+        "cooldownSeconds": {
+          "title": "Bekleme süresi (saniye)"
+        },
+        "actions": {
+          "title": "Eylemler (JSON dizisi)"
+        }
+      }
+    },
+    "pt-BR": {
+      "name": "Bot de ações HTTP",
+      "description": "Executa requisições REST seguras a partir de comandos do WhatsApp e envia os resultados JSON à conversa.",
+      "config": {
+        "baseUrl": {
+          "title": "URL base"
+        },
+        "authType": {
+          "title": "Tipo de autenticação"
+        },
+        "authToken": {
+          "title": "Token / chave da API"
+        },
+        "apiKeyHeader": {
+          "title": "Cabeçalho da chave da API"
+        },
+        "respondInGroups": {
+          "title": "Responder também em grupos"
+        },
+        "timeoutMs": {
+          "title": "Tempo limite da requisição (ms)"
+        },
+        "cooldownSeconds": {
+          "title": "Intervalo (segundos)"
+        },
+        "actions": {
+          "title": "Ações (array JSON)"
+        }
+      }
+    },
+    "ko": {
+      "name": "HTTP 작업 봇",
+      "description": "WhatsApp 명령으로 안전한 REST 요청을 실행하고 JSON 결과를 채팅으로 보냅니다.",
+      "config": {
+        "baseUrl": {
+          "title": "기본 URL"
+        },
+        "authType": {
+          "title": "인증 유형"
+        },
+        "authToken": {
+          "title": "토큰 / API 키"
+        },
+        "apiKeyHeader": {
+          "title": "API 키 헤더"
+        },
+        "respondInGroups": {
+          "title": "그룹 채팅에도 응답"
+        },
+        "timeoutMs": {
+          "title": "요청 제한 시간 (ms)"
+        },
+        "cooldownSeconds": {
+          "title": "대기 시간 (초)"
+        },
+        "actions": {
+          "title": "작업 (JSON 배열)"
+        }
+      }
+    },
+    "id": {
+      "name": "Bot Aksi HTTP",
+      "description": "Menjalankan permintaan REST yang aman dari perintah WhatsApp dan mengirim hasil JSON kembali ke chat.",
+      "config": {
+        "baseUrl": {
+          "title": "URL dasar"
+        },
+        "authType": {
+          "title": "Jenis autentikasi"
+        },
+        "authToken": {
+          "title": "Token / kunci API"
+        },
+        "apiKeyHeader": {
+          "title": "Header kunci API"
+        },
+        "respondInGroups": {
+          "title": "Balas juga di chat grup"
+        },
+        "timeoutMs": {
+          "title": "Batas waktu permintaan (ms)"
+        },
+        "cooldownSeconds": {
+          "title": "Jeda (detik)"
+        },
+        "actions": {
+          "title": "Aksi (array JSON)"
         }
       }
     }

@@ -63,6 +63,7 @@ export default class FaqBot implements IPlugin {
   private readonly fallbackAt = new Map<string, number>();
   /** `${sessionId}:${chatId}:${pattern}` -> last answer for that rule, for MATCHED_REPLY_COOLDOWN_MS. */
   private readonly matchedAt = new Map<string, number>();
+  private readonly replyAttempts = new Map<string, object>();
 
   async onEnable(ctx: PluginContext): Promise<void> {
     this.warnSkipped(ctx); // fail-fast + surface any invalid regex rules at enable
@@ -88,8 +89,7 @@ export default class FaqBot implements IPlugin {
     }
   }
 
-  // Returns true when this plugin answered, so the hook can claim the message and stop another bot from
-  // answering the same thing. Every early exit means "not mine".
+  // Claim before sending, so a slow reply cannot outlive the host's hook budget.
   private async onMessage(ctx: PluginContext, hook: HookContext): Promise<boolean> {
     if (hook.source !== 'Engine' || !hook.sessionId) return false;
     const m = (hook.data ?? {}) as Partial<IncomingMessage>;
@@ -143,28 +143,34 @@ export default class FaqBot implements IPlugin {
         if (late) return true;
         const key = `${sessionId}:${m.chatId}:${m.body.trim().toLowerCase().slice(0, 200)}`;
         if (!allowCooldown(this.matchedAt, key, Date.now(), MATCHED_REPLY_COOLDOWN_MS)) return true;
-        try {
-          await ctx.messages.reply(sessionId, m.chatId, m.id, rule.reply);
-        } catch (e) {
+        const attemptKey = `matched:${key}`;
+        const attempt = {};
+        this.replyAttempts.set(attemptKey, attempt);
+        void ctx.messages.reply(sessionId, m.chatId, m.id, rule.reply).catch(e => {
           // Release the window: a reply that never arrived must not silence the next identical question.
-          this.matchedAt.delete(key);
-          throw e;
-        }
+          if (this.replyAttempts.get(attemptKey) === attempt) this.matchedAt.delete(key);
+          ctx.logger.error('faq-bot: reply failed', e);
+        }).finally(() => {
+          if (this.replyAttempts.get(attemptKey) === attempt) this.replyAttempts.delete(attemptKey);
+        });
         return true;
       }
       if (cfg.config.fallbackReply && !late) {
         const key = `${sessionId}:${m.chatId}`;
         const cooldownMs = Math.max(0, cfg.config.fallbackCooldownSec) * 1000;
         if (allowCooldown(this.fallbackAt, key, Date.now(), cooldownMs)) {
-          try {
-            await ctx.messages.reply(sessionId, m.chatId, m.id, cfg.config.fallbackReply);
-          } catch (err) {
+          const attemptKey = `fallback:${key}`;
+          const attempt = {};
+          this.replyAttempts.set(attemptKey, attempt);
+          void ctx.messages.reply(sessionId, m.chatId, m.id, cfg.config.fallbackReply).catch(err => {
             // The slot is claimed before the send, so a failed send would otherwise silence the chat for
             // a whole cooldown window over a reply that never arrived. Release it: a message that matched
             // a rule is retried on the next message too, and this costs at most one send attempt each.
-            this.fallbackAt.delete(key);
-            throw err;
-          }
+            if (this.replyAttempts.get(attemptKey) === attempt) this.fallbackAt.delete(key);
+            ctx.logger.error('faq-bot: reply failed', err);
+          }).finally(() => {
+            if (this.replyAttempts.get(attemptKey) === attempt) this.replyAttempts.delete(attemptKey);
+          });
           return true;
         }
       }

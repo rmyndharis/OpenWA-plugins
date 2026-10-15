@@ -13,13 +13,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `after-hours` |
-| **Version** | 0.2.9 |
-| **Released** | 2026-09-24 |
+| **Version** | 0.2.10 |
+| **Released** | 2026-10-15 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.23.6) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.25.0) |
 | **Keywords** | after-hours, business-hours, away, auto-reply, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/after-hours](https://github.com/rmyndharis/OpenWA-plugins/tree/main/after-hours) |
 <!-- END DETAILS -->
@@ -90,6 +90,8 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 | `respondInGroups` | no | `false` | Whether to reply in group chats |
 
 ## Compatibility
+
+Checked against the OpenWA v0.25.0 worker runtime with isolated services. The hook claims an attempted reply before delivery completes, so a slow send cannot let another responder answer the same message. A failed send is logged and retains its claim; the existing failure backoff controls later attempts. Pending sends are best-effort and may be interrupted when the worker stops.
 
 Targets OpenWA **≥ 0.7.0**, which is what the manifest declares and what the catalog publishes. The
 runtime features it relies on — sandboxed `Intl` timezone data and `onConfigChange` forwarding, so

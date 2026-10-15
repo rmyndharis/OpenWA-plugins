@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `http-action` |
-| **Version** | 0.2.11 |
-| **Released** | 2026-09-24 |
+| **Version** | 0.2.12 |
+| **Released** | 2026-10-15 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.0 (tested 0.23.6) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.25.0) |
 | **Keywords** | api, rest, automation, connector, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/http-action](https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action) |
 <!-- END DETAILS -->
@@ -105,6 +105,8 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 | `actions` | yes | — | JSON array of actions (see **Actions**). |
 
 ## Compatibility
+
+Checked against the OpenWA v0.25.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
 
 Targets OpenWA **≥ 0.8.0**, the release that introduced both capabilities it relies on
 (`net.allowConfigHosts` and `conversation:send`). Live config edits apply on the next inbound message

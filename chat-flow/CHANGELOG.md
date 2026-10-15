@@ -8,6 +8,16 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.1.12] - 2026-10-15
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.25.0 and complete dashboard translations for all supported locales.
+
+### Fixed
+
+- Queue replies in chat order without holding the message hook during delivery.
+
 ## [1.1.11] - 2026-09-24
 
 ### Added

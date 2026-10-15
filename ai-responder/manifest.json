@@ -1,7 +1,7 @@
 {
   "id": "ai-responder",
   "name": "AI Responder",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Auto-replies to inbound WhatsApp messages with an OpenAI-compatible Chat Completions API. Single-turn, rate-limited per chat and per session, and last in the responder chain.",
@@ -12,6 +12,7 @@
   "keywords": ["ai", "openai", "llm", "auto-reply", "chatbot", "whatsapp", "openwa"],
   "status": "beta",
   "minOpenWAVersion": "0.8.0",
+  "testedOpenWAVersion": "0.25.0",
   "provides": ["ai-auto-reply"],
   "permissions": [
     "net:fetch",
@@ -144,6 +145,438 @@
         "maxInputChars": { "title": "最大输入字符数" },
         "maxOutputTokens": { "title": "最大输出 Token 数" },
         "timeoutMs": { "title": "请求超时（毫秒）" }
+      }
+    },
+    "de": {
+      "name": "KI-Antwortassistent",
+      "description": "Antwortet über eine OpenAI-kompatible Chat-API mit Limits pro Chat und Sitzung, nach allen anderen Antwort-Plugins.",
+      "config": {
+        "apiBaseUrl": {
+          "title": "API-Basis-URL"
+        },
+        "apiKey": {
+          "title": "API-Schlüssel"
+        },
+        "model": {
+          "title": "Modell"
+        },
+        "systemPrompt": {
+          "title": "Systemanweisung"
+        },
+        "respondInGroups": {
+          "title": "Auch in Gruppenchats antworten"
+        },
+        "maxRepliesPerChatPerHour": {
+          "title": "Max. Antworten pro Chat und Stunde"
+        },
+        "maxRepliesPerSessionPerHour": {
+          "title": "Max. Antworten pro Sitzung und Stunde"
+        },
+        "maxInputChars": {
+          "title": "Max. Eingabezeichen"
+        },
+        "maxOutputTokens": {
+          "title": "Max. Ausgabetokens"
+        },
+        "timeoutMs": {
+          "title": "Anfragezeitlimit (ms)"
+        }
+      }
+    },
+    "tr": {
+      "name": "Yapay Zeka Yanıtlayıcı",
+      "description": "Diğer yanıt eklentilerinden sonra, sohbet ve oturum sınırlarıyla OpenAI uyumlu bir API üzerinden yanıt verir.",
+      "config": {
+        "apiBaseUrl": {
+          "title": "API temel URL adresi"
+        },
+        "apiKey": {
+          "title": "API anahtarı"
+        },
+        "model": {
+          "title": "Model"
+        },
+        "systemPrompt": {
+          "title": "Sistem istemi"
+        },
+        "respondInGroups": {
+          "title": "Grup sohbetlerinde de yanıtla"
+        },
+        "maxRepliesPerChatPerHour": {
+          "title": "Sohbet başına saatlik yanıt sınırı"
+        },
+        "maxRepliesPerSessionPerHour": {
+          "title": "Oturum başına saatlik yanıt sınırı"
+        },
+        "maxInputChars": {
+          "title": "En fazla girdi karakteri"
+        },
+        "maxOutputTokens": {
+          "title": "En fazla çıktı belirteci"
+        },
+        "timeoutMs": {
+          "title": "İstek zaman aşımı (ms)"
+        }
+      }
+    },
+    "pt-BR": {
+      "name": "Assistente de respostas com IA",
+      "description": "Responde por uma API compatível com OpenAI, com limites por conversa e sessão, após os demais plugins de resposta.",
+      "config": {
+        "apiBaseUrl": {
+          "title": "URL base da API"
+        },
+        "apiKey": {
+          "title": "Chave da API"
+        },
+        "model": {
+          "title": "Modelo"
+        },
+        "systemPrompt": {
+          "title": "Instrução do sistema"
+        },
+        "respondInGroups": {
+          "title": "Responder também em grupos"
+        },
+        "maxRepliesPerChatPerHour": {
+          "title": "Máx. de respostas por conversa por hora"
+        },
+        "maxRepliesPerSessionPerHour": {
+          "title": "Máx. de respostas por sessão por hora"
+        },
+        "maxInputChars": {
+          "title": "Máx. de caracteres de entrada"
+        },
+        "maxOutputTokens": {
+          "title": "Máx. de tokens de saída"
+        },
+        "timeoutMs": {
+          "title": "Tempo limite da requisição (ms)"
+        }
+      }
+    },
+    "ko": {
+      "name": "AI 자동 응답",
+      "description": "다른 응답 플러그인 다음에 OpenAI 호환 API로 응답하며 채팅 및 세션별 한도를 적용합니다.",
+      "config": {
+        "apiBaseUrl": {
+          "title": "API 기본 URL"
+        },
+        "apiKey": {
+          "title": "API 키"
+        },
+        "model": {
+          "title": "모델"
+        },
+        "systemPrompt": {
+          "title": "시스템 프롬프트"
+        },
+        "respondInGroups": {
+          "title": "그룹 채팅에도 응답"
+        },
+        "maxRepliesPerChatPerHour": {
+          "title": "채팅별 시간당 최대 응답 수"
+        },
+        "maxRepliesPerSessionPerHour": {
+          "title": "세션별 시간당 최대 응답 수"
+        },
+        "maxInputChars": {
+          "title": "최대 입력 문자 수"
+        },
+        "maxOutputTokens": {
+          "title": "최대 출력 토큰 수"
+        },
+        "timeoutMs": {
+          "title": "요청 제한 시간 (ms)"
+        }
+      }
+    },
+    "id": {
+      "name": "Penjawab AI",
+      "description": "Membalas melalui API yang kompatibel dengan OpenAI, dengan batas per chat dan sesi, setelah plugin penjawab lainnya.",
+      "config": {
+        "apiBaseUrl": {
+          "title": "URL dasar API"
+        },
+        "apiKey": {
+          "title": "Kunci API"
+        },
+        "model": {
+          "title": "Model"
+        },
+        "systemPrompt": {
+          "title": "Instruksi sistem"
+        },
+        "respondInGroups": {
+          "title": "Balas juga di chat grup"
+        },
+        "maxRepliesPerChatPerHour": {
+          "title": "Maks. balasan per chat per jam"
+        },
+        "maxRepliesPerSessionPerHour": {
+          "title": "Maks. balasan per sesi per jam"
+        },
+        "maxInputChars": {
+          "title": "Maks. karakter masukan"
+        },
+        "maxOutputTokens": {
+          "title": "Maks. token keluaran"
+        },
+        "timeoutMs": {
+          "title": "Batas waktu permintaan (ms)"
+        }
+      }
+    },
+    "he": {
+      "name": "משיב AI",
+      "description": "משיב דרך API תואם OpenAI, עם מגבלות לכל שיחה והפעלה, אחרי תוספי המענה האחרים.",
+      "config": {
+        "apiBaseUrl": {
+          "title": "כתובת בסיס של API"
+        },
+        "apiKey": {
+          "title": "מפתח API"
+        },
+        "model": {
+          "title": "מודל"
+        },
+        "systemPrompt": {
+          "title": "הנחיית מערכת"
+        },
+        "respondInGroups": {
+          "title": "מענה גם בקבוצות"
+        },
+        "maxRepliesPerChatPerHour": {
+          "title": "מספר תשובות מרבי לשיחה בשעה"
+        },
+        "maxRepliesPerSessionPerHour": {
+          "title": "מספר תשובות מרבי להפעלה בשעה"
+        },
+        "maxInputChars": {
+          "title": "מספר תווי קלט מרבי"
+        },
+        "maxOutputTokens": {
+          "title": "מספר טוקנים מרבי בפלט"
+        },
+        "timeoutMs": {
+          "title": "זמן קצוב לבקשה (ms)"
+        }
+      }
+    },
+    "zh-HK": {
+      "name": "AI 自動回覆",
+      "description": "透過相容 OpenAI 的 API 回覆，設有每個對話及工作階段的限制，並在其他回覆外掛之後執行。",
+      "config": {
+        "apiBaseUrl": {
+          "title": "API 基礎網址"
+        },
+        "apiKey": {
+          "title": "API 金鑰"
+        },
+        "model": {
+          "title": "模型"
+        },
+        "systemPrompt": {
+          "title": "系統提示"
+        },
+        "respondInGroups": {
+          "title": "同時回覆群組對話"
+        },
+        "maxRepliesPerChatPerHour": {
+          "title": "每個對話每小時最多回覆數"
+        },
+        "maxRepliesPerSessionPerHour": {
+          "title": "每個工作階段每小時最多回覆數"
+        },
+        "maxInputChars": {
+          "title": "最多輸入字元數"
+        },
+        "maxOutputTokens": {
+          "title": "最多輸出 token 數"
+        },
+        "timeoutMs": {
+          "title": "請求逾時 (ms)"
+        }
+      }
+    },
+    "ar": {
+      "name": "مجيب الذكاء الاصطناعي",
+      "description": "يرد عبر واجهة متوافقة مع OpenAI، بحدود لكل محادثة وجلسة، بعد إضافات الرد الأخرى.",
+      "config": {
+        "apiBaseUrl": {
+          "title": "عنوان API الأساسي"
+        },
+        "apiKey": {
+          "title": "مفتاح API"
+        },
+        "model": {
+          "title": "النموذج"
+        },
+        "systemPrompt": {
+          "title": "تعليمات النظام"
+        },
+        "respondInGroups": {
+          "title": "الرد في محادثات المجموعات أيضاً"
+        },
+        "maxRepliesPerChatPerHour": {
+          "title": "الحد الأقصى للردود لكل محادثة في الساعة"
+        },
+        "maxRepliesPerSessionPerHour": {
+          "title": "الحد الأقصى للردود لكل جلسة في الساعة"
+        },
+        "maxInputChars": {
+          "title": "الحد الأقصى لأحرف الإدخال"
+        },
+        "maxOutputTokens": {
+          "title": "الحد الأقصى لرموز الإخراج"
+        },
+        "timeoutMs": {
+          "title": "مهلة الطلب (ms)"
+        }
+      }
+    },
+    "te": {
+      "name": "AI ప్రత్యుత్తర సహాయకుడు",
+      "description": "ఇతర ప్రత్యుత్తర ప్లగిన్‌ల తర్వాత, చాట్ మరియు సెషన్ పరిమితులతో OpenAI అనుకూల API ద్వారా బదులిస్తుంది.",
+      "config": {
+        "apiBaseUrl": {
+          "title": "API మూల URL"
+        },
+        "apiKey": {
+          "title": "API కీ"
+        },
+        "model": {
+          "title": "మోడల్"
+        },
+        "systemPrompt": {
+          "title": "సిస్టమ్ సూచన"
+        },
+        "respondInGroups": {
+          "title": "గ్రూప్ చాట్‌లలో కూడా బదులివ్వండి"
+        },
+        "maxRepliesPerChatPerHour": {
+          "title": "చాట్‌కు గంటకు గరిష్ఠ ప్రత్యుత్తరాలు"
+        },
+        "maxRepliesPerSessionPerHour": {
+          "title": "సెషన్‌కు గంటకు గరిష్ఠ ప్రత్యుత్తరాలు"
+        },
+        "maxInputChars": {
+          "title": "గరిష్ఠ ఇన్‌పుట్ అక్షరాలు"
+        },
+        "maxOutputTokens": {
+          "title": "గరిష్ఠ అవుట్‌పుట్ టోకెన్‌లు"
+        },
+        "timeoutMs": {
+          "title": "అభ్యర్థన గడువు (ms)"
+        }
+      }
+    },
+    "fr": {
+      "name": "Assistant de réponse IA",
+      "description": "Répond via une API compatible OpenAI, avec des limites par conversation et session, après les autres extensions de réponse.",
+      "config": {
+        "apiBaseUrl": {
+          "title": "URL de base de l’API"
+        },
+        "apiKey": {
+          "title": "Clé API"
+        },
+        "model": {
+          "title": "Modèle"
+        },
+        "systemPrompt": {
+          "title": "Instruction système"
+        },
+        "respondInGroups": {
+          "title": "Répondre aussi dans les groupes"
+        },
+        "maxRepliesPerChatPerHour": {
+          "title": "Réponses maximales par conversation et par heure"
+        },
+        "maxRepliesPerSessionPerHour": {
+          "title": "Réponses maximales par session et par heure"
+        },
+        "maxInputChars": {
+          "title": "Caractères d’entrée maximum"
+        },
+        "maxOutputTokens": {
+          "title": "Jetons de sortie maximum"
+        },
+        "timeoutMs": {
+          "title": "Délai de la requête (ms)"
+        }
+      }
+    },
+    "it": {
+      "name": "Assistente di risposta IA",
+      "description": "Risponde tramite una API compatibile con OpenAI, con limiti per chat e sessione, dopo gli altri plugin di risposta.",
+      "config": {
+        "apiBaseUrl": {
+          "title": "URL di base API"
+        },
+        "apiKey": {
+          "title": "Chiave API"
+        },
+        "model": {
+          "title": "Modello"
+        },
+        "systemPrompt": {
+          "title": "Istruzione di sistema"
+        },
+        "respondInGroups": {
+          "title": "Rispondi anche nelle chat di gruppo"
+        },
+        "maxRepliesPerChatPerHour": {
+          "title": "Risposte massime per chat ogni ora"
+        },
+        "maxRepliesPerSessionPerHour": {
+          "title": "Risposte massime per sessione ogni ora"
+        },
+        "maxInputChars": {
+          "title": "Caratteri massimi in ingresso"
+        },
+        "maxOutputTokens": {
+          "title": "Token massimi in uscita"
+        },
+        "timeoutMs": {
+          "title": "Timeout della richiesta (ms)"
+        }
+      }
+    },
+    "hi": {
+      "name": "AI उत्तर सहायक",
+      "description": "अन्य उत्तर प्लगइन के बाद, प्रति चैट और सत्र की सीमाओं के साथ OpenAI-संगत API से उत्तर देता है।",
+      "config": {
+        "apiBaseUrl": {
+          "title": "API आधार URL"
+        },
+        "apiKey": {
+          "title": "API कुंजी"
+        },
+        "model": {
+          "title": "मॉडल"
+        },
+        "systemPrompt": {
+          "title": "सिस्टम निर्देश"
+        },
+        "respondInGroups": {
+          "title": "समूह चैट में भी उत्तर दें"
+        },
+        "maxRepliesPerChatPerHour": {
+          "title": "प्रति चैट प्रति घंटे अधिकतम उत्तर"
+        },
+        "maxRepliesPerSessionPerHour": {
+          "title": "प्रति सत्र प्रति घंटे अधिकतम उत्तर"
+        },
+        "maxInputChars": {
+          "title": "अधिकतम इनपुट अक्षर"
+        },
+        "maxOutputTokens": {
+          "title": "अधिकतम आउटपुट टोकन"
+        },
+        "timeoutMs": {
+          "title": "अनुरोध समय सीमा (ms)"
+        }
       }
     }
   }

@@ -8,6 +8,17 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.14] - 2026-10-15
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.25.0 and complete dashboard translations for all supported locales.
+
+### Fixed
+
+- Preserve the latest matched and fallback cooldowns when an older send fails later.
+- Claim rule and fallback replies before sending so slow delivery does not trigger another responder.
+
 ## [0.2.13] - 2026-09-24
 
 ### Added

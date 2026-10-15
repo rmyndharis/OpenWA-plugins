@@ -8,6 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SUPPORTED_LOCALES } from './locales.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CHECK = process.argv.includes('--check');
@@ -23,11 +24,6 @@ function discoverPlugins() {
     .filter((name) => existsSync(join(ROOT, name, 'manifest.json')))
     .sort();
 }
-
-// The host's dashboard locales (`supportedLanguages`, dashboard/src/i18n/index.ts). Duplicated in
-// package.mjs; move both together. This list drives the "i18n missing locale(s)" warning, so a stale
-// copy under-reports which translations a plugin still owes the dashboard.
-const SUPPORTED_LOCALES = ['en', 'de', 'es', 'he', 'tr', 'zh-CN', 'zh-HK', 'ar', 'te', 'fr', 'it', 'pt-BR', 'ko', 'hi'];
 
 // Every permission the host actually enforces (core `PluginCapabilityPermission`). Nothing else in the
 // toolchain looked at these names: the array was passed straight through to plugins.json, which is what
@@ -102,6 +98,10 @@ export function validateManifest(id, manifest) {
   }
   if (manifest.status === 'stable' && !manifest.testedOpenWAVersion) {
     throw new Error(`${id}: status "stable" requires testedOpenWAVersion (the newest host actually smoke-tested)`);
+  }
+  const min = manifest.minOpenWAVersion;
+  if (min !== undefined && min !== null && (typeof min !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(min))) {
+    throw new Error(`${id}: minOpenWAVersion must be a MAJOR.MINOR.PATCH version`);
   }
   for (const p of manifest.permissions ?? []) {
     if (!HOST_PERMISSIONS.has(p)) {

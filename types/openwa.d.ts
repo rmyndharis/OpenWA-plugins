@@ -1,7 +1,7 @@
 // Vendored OpenWA plugin contract. There is no published @openwa SDK package; keep this in sync
 // with the OpenWA version you target. All imports of this module must be `import type`.
 //
-// Last aligned against OpenWA core v0.23.6 (tag), verified field-by-field against
+// Last aligned against OpenWA core v0.25.0 (tag f045dde), verified field-by-field against
 // src/core/plugins/plugin.interfaces.ts, src/core/hooks/{hook.interfaces,hook-results}.ts, plugin-net.ts,
 // sandbox/{protocol,worker-bootstrap,worker-capability,worker-hooks,worker-webhooks}.ts and
 // src/engine/interfaces/whatsapp-engine.interface.ts, with behavior the interfaces do not show read from
@@ -9,6 +9,9 @@
 // src/modules/integration/ingress{.controller,.service,-ack,-preflight}.ts. Where this file narrows the
 // host on purpose it says so; where the host is stricter than this file, the comment names the runtime
 // consequence.
+// Since 0.23.6: minOpenWAVersion is enforced at install and load; config-derived network grants pin
+// the HTTPS origin including its port; IncomingMessage includes poll details and ChatSummary includes
+// lastMessageType. Hook names and capability signatures used by these plugins remain compatible.
 // Unlike the ranges below, 0.23.4 → 0.23.6 moves the plugin runtime itself. 0.23.5 changed only message
 // content and one ingress redaction; the rest is 0.23.6. Each item is recorded below where it belongs:
 //   1. Hook results: from 0.23.6 message:received / message:sent adopt only a plain object with string
@@ -80,7 +83,7 @@
 // select, array/items, object/properties, min/max/pattern — see PluginConfigField) is plain manifest
 // JSON — the plugin still reads `ctx.config` as `Record<string, unknown>` and validates defensively.
 //
-// Host bounds a plugin cannot see from the types (all host-side, re-checked at v0.23.6):
+// Host bounds a plugin cannot see from the types (all host-side, re-checked at v0.25.0):
 //   30 s per lifecycle phase (onLoad/onEnable/onDisable/onUnload) and per capability call, except
 //   the send verbs (ctx.messages.sendText / ctx.messages.reply / ctx.conversations.send) at 120 s;
 //   5 s per hook dispatch (overrun → the host fails OPEN with {continue:true} and drops your result);
@@ -194,6 +197,8 @@ export interface ChatSummary {
   unreadCount: number;
   timestamp: number;
   lastMessage?: string;
+  /** Engine-neutral last-message type, when available on host 0.25.0+. */
+  lastMessageType?: string;
   /**
    * Archived / pinned / muted state. Host 0.23.4+ only, and REQUIRED on the host's own ChatSummary.
    * Deliberately optional here: the catalogue advertises minOpenWAVersion floors down to 0.6.1, and on
@@ -301,6 +306,8 @@ export interface PluginManifest {
    *  host's ingress validation calls sdkVersion.split('.'), so a JSON number (1, not "1") throws at
    *  load and the whole plugin comes up ERROR. Only the major is enforced; absent = treated as '1'. */
   sdkVersion?: string;
+  /** Oldest supported host. On 0.25.0, install and load reject an older host or a malformed floor. */
+  minOpenWAVersion?: string | null;
   /** Inbound webhook routes this plugin claims (needs the "webhook:ingress" permission). Validated by
    *  the host at load, and any failure takes the WHOLE plugin down, not just the route (install: HTTP
    *  400; boot: the directory is skipped and the registry entry is forced to ERROR): SDK-major match,
@@ -310,13 +317,15 @@ export interface PluginManifest {
    *  these: each route must be ONE URL path segment (no '/', '\', '?', '#', '%' or control character,
    *  and not '.' or '..'), toleranceSec a finite number > 0 (a numeric string such as "300" still
    *  loads), dedupOn 'header' or 'body', ack status 200..599 (a 1xx is refused), ack body a string, and
-   *  every ack header value a string Node can write (tab, printable ASCII and 0x80-0xFF only). */
+   *  every ack header value a string Node can write (tab, printable ASCII and 0x80-0xFF only).
+   *  Host 0.25.0 also rejects unknown signature schemes and HMAC encodings other than hex/base64. */
   ingress?: PluginIngressRoute[];
   /** v0.7: per-session activation (default true). The platform owns which sessions a plugin runs for. */
   sessionScoped?: boolean;
   /** v0.7: outbound HTTP host allowlist for ctx.net.fetch — "host" or "host:port"; deny by default.
    *  The catalogue uses both forms: a bare host matches any port, which is what most entries rely on.
-   *  v1: `allowConfigHosts` additionally admits the host of each named config key (e.g. "baseUrl"). */
+   *  `allowConfigHosts` admits only the HTTPS origin, including its port, of each named config key.
+   *  Non-HTTPS URLs and URLs with embedded credentials do not add a grant. */
   net?: { allow?: string[]; allowConfigHosts?: string[] };
   /** v0.7: a sandboxed-iframe config editor served by the host. */
   configUi?: { entry: string; height?: number };
@@ -576,6 +585,12 @@ export interface IPlugin {
 /** User-facing chat kind, derived from `chatId` host-side. `@lid` folds into 'individual'. */
 export type ChatKind = 'individual' | 'group' | 'channel' | 'status' | 'broadcast' | 'unknown';
 
+export interface PollDetails {
+  name: string;
+  options: string[];
+  allowMultipleAnswers: boolean;
+}
+
 export interface IncomingMessage {
   id: string;
   from: string;
@@ -619,7 +634,7 @@ export interface IncomingMessage {
   isGroup: boolean;
   /** Required on the host payload; optional here because plugins only ever read it. */
   kind?: ChatKind;
-  /** In a GROUP, `from` is the group JID — `author` is the only real sender. */
+  /** Sender in a group, status or broadcast-list message when `from` names the shared chat. */
   author?: string;
   /** The sender is identified by a privacy id (`@lid`) rather than a phone number. */
   isLidSender?: boolean;
@@ -645,6 +660,8 @@ export interface IncomingMessage {
   senderPhone?: string | null;
   mentionedIds?: string[];
   contact?: MessageContact;
+  /** Choices and selection mode, without vote counts, on host 0.25.0+. */
+  poll?: PollDetails;
   // Inbound media, materialized by the adapter before the hook fires (both engines). `data` is base64
   // and ABSENT when `omitted` is true (`sizeBytes` is still set). For a voice note `type` is `'voice'`
   // and `mimetype` is typically `'audio/ogg; codecs=opus'`.

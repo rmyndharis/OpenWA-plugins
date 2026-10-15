@@ -71,6 +71,22 @@ test('relays an outgoing agent reply with an explicit chatId', async () => {
   assert.deepEqual(sent, [{ sessionId: 'sess', chatId: 'c@wa', type: 'text', text: 'hi' }]);
 });
 
+test('a scoped webhook cannot send or change handover through another session legacy mapping', async () => {
+  const store = new MappingStore(fakeStorage(), fakeMappings);
+  await store.link('sessA', 'alice@wa', 'instA', { conversationId: 55, contactId: 1, sourceId: 'a' });
+  const { deps: d, sent, handovers } = deps();
+  d.store = store;
+  await handleOutbound(d, reqScoped('sessB', {
+    event: 'message_created', message_type: 'outgoing', private: false,
+    id: 999, content: 'Private reply', inbox: { id: 7 }, conversation: { id: 55 },
+  }));
+  await handleOutbound(d, reqScoped('sessB', {
+    event: 'conversation_updated', conversation: { id: 55, status: 'resolved' },
+  }));
+  assert.deepEqual(sent, []);
+  assert.deepEqual(handovers, []);
+});
+
 test('an agent "Reply to" rides out as a WhatsApp quote (replyTo = quoted source_id)', async () => {
   const { deps: d, sent } = deps();
   await handleOutbound(

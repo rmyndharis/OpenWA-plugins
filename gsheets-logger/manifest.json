@@ -1,7 +1,7 @@
 {
   "id": "gsheets-logger",
   "name": "Google Sheets Logger",
-  "version": "0.3.12",
+  "version": "0.3.13",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Logs WhatsApp message events to a Google Sheet via a service account.",
@@ -12,7 +12,7 @@
   "keywords": ["google-sheets", "logging", "audit", "crm", "whatsapp", "openwa"],
   "status": "stable",
   "minOpenWAVersion": "0.7.0",
-  "testedOpenWAVersion": "0.23.6",
+  "testedOpenWAVersion": "0.25.0",
   "provides": ["message-logging"],
   "permissions": [
     "net:fetch",
@@ -52,6 +52,111 @@
     "zh-HK": { "name": "Google Sheets 日誌記錄器", "description": "透過服務帳號將 WhatsApp 訊息事件記錄到 Google Sheets。",
       "config": { "serviceAccountJson": { "title": "服務帳號 JSON" }, "spreadsheetId": { "title": "試算表 ID" }, "sheetTab": { "title": "工作表標籤名稱" }, "flushIntervalSec": { "title": "排清間隔（秒）" }, "flushBatchSize": { "title": "緩衝行數達到時排清" } } },
     "hi": { "name": "Google Sheets लॉगर", "description": "सर्विस अकाउंट के माध्यम से WhatsApp संदेश इवेंट्स को Google Sheets में लॉग करता है।",
-      "config": { "serviceAccountJson": { "title": "सर्विस अकाउंट JSON" }, "spreadsheetId": { "title": "स्प्रेडशीट ID" }, "sheetTab": { "title": "शीट टैब नाम" }, "flushIntervalSec": { "title": "फ्लश अंतराल (सेकंड)" }, "flushBatchSize": { "title": "बफ़र की गई पंक्तियाँ यहाँ तक पहुँचने पर फ्लश करें" } } }
+      "config": { "serviceAccountJson": { "title": "सर्विस अकाउंट JSON" }, "spreadsheetId": { "title": "स्प्रेडशीट ID" }, "sheetTab": { "title": "शीट टैब नाम" }, "flushIntervalSec": { "title": "फ्लश अंतराल (सेकंड)" }, "flushBatchSize": { "title": "बफ़र की गई पंक्तियाँ यहाँ तक पहुँचने पर फ्लश करें" } } },
+    "de": {
+      "name": "Google-Sheets-Protokollierung",
+      "description": "Protokolliert WhatsApp-Nachrichtenereignisse über ein Dienstkonto in Google Sheets.",
+      "config": {
+        "serviceAccountJson": {
+          "title": "Dienstkonto (JSON)"
+        },
+        "spreadsheetId": {
+          "title": "Tabellen-ID"
+        },
+        "sheetTab": {
+          "title": "Tabellenblattname"
+        },
+        "flushIntervalSec": {
+          "title": "Schreibintervall (Sekunden)"
+        },
+        "flushBatchSize": {
+          "title": "Ab dieser Zeilenanzahl schreiben"
+        }
+      }
+    },
+    "tr": {
+      "name": "Google E-Tablolar Kaydı",
+      "description": "WhatsApp mesaj olaylarını bir hizmet hesabıyla Google E-Tablolar dosyasına kaydeder.",
+      "config": {
+        "serviceAccountJson": {
+          "title": "Hizmet hesabı (JSON)"
+        },
+        "spreadsheetId": {
+          "title": "E-tablo kimliği"
+        },
+        "sheetTab": {
+          "title": "Sayfa sekmesi adı"
+        },
+        "flushIntervalSec": {
+          "title": "Yazma aralığı (saniye)"
+        },
+        "flushBatchSize": {
+          "title": "Tampondaki satır sayısı bu değere ulaşınca yaz"
+        }
+      }
+    },
+    "pt-BR": {
+      "name": "Registro no Google Sheets",
+      "description": "Registra eventos de mensagens do WhatsApp no Google Sheets usando uma conta de serviço.",
+      "config": {
+        "serviceAccountJson": {
+          "title": "Conta de serviço (JSON)"
+        },
+        "spreadsheetId": {
+          "title": "ID da planilha"
+        },
+        "sheetTab": {
+          "title": "Nome da aba"
+        },
+        "flushIntervalSec": {
+          "title": "Intervalo de gravação (segundos)"
+        },
+        "flushBatchSize": {
+          "title": "Gravar ao atingir esta quantidade de linhas"
+        }
+      }
+    },
+    "ko": {
+      "name": "Google Sheets 기록",
+      "description": "서비스 계정으로 WhatsApp 메시지 이벤트를 Google Sheets에 기록합니다.",
+      "config": {
+        "serviceAccountJson": {
+          "title": "서비스 계정 (JSON)"
+        },
+        "spreadsheetId": {
+          "title": "스프레드시트 ID"
+        },
+        "sheetTab": {
+          "title": "시트 탭 이름"
+        },
+        "flushIntervalSec": {
+          "title": "기록 간격 (초)"
+        },
+        "flushBatchSize": {
+          "title": "이 행 수에 도달하면 기록"
+        }
+      }
+    },
+    "id": {
+      "name": "Pencatat Google Sheets",
+      "description": "Mencatat peristiwa pesan WhatsApp ke Google Sheets menggunakan akun layanan.",
+      "config": {
+        "serviceAccountJson": {
+          "title": "Akun layanan (JSON)"
+        },
+        "spreadsheetId": {
+          "title": "ID spreadsheet"
+        },
+        "sheetTab": {
+          "title": "Nama tab sheet"
+        },
+        "flushIntervalSec": {
+          "title": "Interval penulisan (detik)"
+        },
+        "flushBatchSize": {
+          "title": "Tulis saat jumlah baris mencapai"
+        }
+      }
+    }
   }
 }

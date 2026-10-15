@@ -48,10 +48,11 @@ export class FlowEngine {
   private static readonly LATE_AFTER_MS = 5 * 60_000;
   /** Per (session,chat) promise chain serializing the state read→write. Self-evicts when drained. */
   private static readonly locks = new Map<string, Promise<unknown>>();
+  private static readonly replyTails = new Map<string, Promise<void>>();
 
   /**
    * Process an incoming message and send auto-replies according to `flow` (the resolved per-session
-   * config). Returns true if the message was consumed (a reply was sent, or it arrived late inside an
+   * config). Returns true if the message was consumed (a reply was queued, or it arrived late inside an
    * open flow), false otherwise. Serializes per (session, conversation) so concurrent messages for the
    * same conversation can't interleave the state read→write.
    *
@@ -110,6 +111,18 @@ export class FlowEngine {
     return removed;
   }
 
+  private static queueReply(context: PluginContext, sessionId: string, chatId: string, messageId: string, text: string): void {
+    const key = `${sessionId}__${chatId}`;
+    // Keep delivery order without holding the state lock or the host's five-second hook dispatch.
+    const run = (this.replyTails.get(key) ?? Promise.resolve())
+      .then(() => context.messages.reply(sessionId, chatId, messageId, text))
+      .then(() => {}, err => context.logger.error('chat-flow: reply failed', err));
+    this.replyTails.set(key, run);
+    void run.finally(() => {
+      if (this.replyTails.get(key) === run) this.replyTails.delete(key);
+    });
+  }
+
   private static async processLocked(
     context: PluginContext,
     flow: SessionFlow,
@@ -166,7 +179,7 @@ export class FlowEngine {
       // The other order is self-healing, because state whose greeting never arrived answers the next
       // message with the fallback at the bottom of this method, which repeats the greeting text.
       await context.storage.set(stateKey, { path: [], lastActive: Date.now() });
-      await context.messages.reply(sessionId, chatId, messageId, flow.greeting);
+      this.queueReply(context, sessionId, chatId, messageId, flow.greeting);
       return true;
     }
 
@@ -174,7 +187,7 @@ export class FlowEngine {
     if (isTriggerWord) {
       context.logger.debug('[FlowEngine] Trigger word received during active flow. Restarting flow.');
       await context.storage.set(stateKey, { path: [], lastActive: Date.now() });
-      await context.messages.reply(sessionId, chatId, messageId, flow.greeting);
+      this.queueReply(context, sessionId, chatId, messageId, flow.greeting);
       return true;
     }
 
@@ -224,7 +237,7 @@ export class FlowEngine {
         context.logger.debug('[FlowEngine] Leaf node reached. Clearing flow state.');
         await context.storage.delete(stateKey);
       }
-      await context.messages.reply(sessionId, chatId, messageId, nextNode.text);
+      this.queueReply(context, sessionId, chatId, messageId, nextNode.text);
       return true;
     } else if (!currentNode.options || Object.keys(currentNode.options).length === 0) {
       // The resolved node is a leaf with no way forward (config changed under the user). End the flow
@@ -248,7 +261,7 @@ export class FlowEngine {
       state.misses = misses;
       state.lastActive = Date.now();
       await context.storage.set(stateKey, state);
-      await context.messages.reply(sessionId, chatId, messageId, invalidMsg);
+      this.queueReply(context, sessionId, chatId, messageId, invalidMsg);
       return true;
     }
   }

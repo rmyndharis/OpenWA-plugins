@@ -8,6 +8,19 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.3.13] - 2026-10-15
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.25.0 and complete dashboard translations for all supported locales.
+
+### Fixed
+
+- Keep buffered rows and the previous destination when parking undelivered rows fails.
+- Persist destination fingerprints so retained rows cannot cross spreadsheets or service accounts after restart.
+- Checkpoint legacy buffer destinations before enabling hooks so an abrupt restart cannot retarget retained rows.
+- Serialize configuration updates so overlapping changes leave the latest destination active.
+
 ## [0.3.12] - 2026-09-24
 
 ### Added

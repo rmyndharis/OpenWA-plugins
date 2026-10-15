@@ -1,7 +1,7 @@
 {
   "id": "typebot-connector",
   "name": "Typebot Connector",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Runs a Typebot flow as the brain of a WhatsApp bot: inbound messages drive a Typebot chat session via the live Chat API, and the bot's replies — text, media, and numbered-choice inputs — are sent back to WhatsApp. Auto-starts every chat, handles file-upload steps, and resets when the flow ends or after an idle timeout. Runs sandboxed in the plugin worker; no public URL or webhook required.",
@@ -12,7 +12,7 @@
   "keywords": ["typebot", "chatbot", "flow", "bot", "no-code", "two-way", "whatsapp", "openwa"],
   "status": "stable",
   "minOpenWAVersion": "0.8.2",
-  "testedOpenWAVersion": "0.23.6",
+  "testedOpenWAVersion": "0.25.0",
   "sdkVersion": "1",
   "permissions": ["net:fetch", "conversation:send",
     "storage:use"],
@@ -86,6 +86,141 @@
     "zh-HK": { "name": "Typebot 連接器", "description": "將 Typebot 流程作為 WhatsApp 機器人的大腦運行：傳入訊息透過實時 Chat API 驅動 Typebot 聊天工作階段，機器人的回覆——文字、媒體及編號選項輸入——會傳回 WhatsApp。自動開始每個對話，處理檔案上傳步驟，並在流程結束或閒置逾時後重設。在插件工作器中以沙箱方式運行；無需公共 URL 或 webhook。",
       "config": { "apiHost": { "title": "Typebot 主機 URL" }, "publicId": { "title": "Typebot 公開 ID" }, "apiToken": { "title": "API 權杖" }, "respondInGroups": { "title": "在群組對話中回覆" }, "sessionTimeoutMinutes": { "title": "閒置重設（分鐘）" }, "passContactVariables": { "title": "傳遞聯絡人變數" }, "mediaHost": { "title": "媒體/上傳主機" } } },
     "hi": { "name": "Typebot कनेक्टर", "description": "WhatsApp बॉट के मस्तिष्क के रूप में Typebot फ्लो चलाता है: इनबाउंड संदेश लाइव चैट API के माध्यम से Typebot चैट सेशन को चलाते हैं, और बॉट के रिप्लाई — टेक्स्ट, मीडिया और क्रमांकित-विकल्प इनपुट — WhatsApp पर वापस भेजे जाते हैं। हर चैट को स्वतः शुरू करता है, फ़ाइल-अपलोड चरणों को संभालता है, और फ्लो समाप्त होने पर या निष्क्रिय (idle) टाइमआउट के बाद रीसेट होता है। प्लगइन वर्कर में सैंडबॉक्स्ड चलता है; किसी सार्वजनिक URL या वेबहुक की आवश्यकता नहीं है।",
-      "config": { "apiHost": { "title": "Typebot होस्ट URL" }, "publicId": { "title": "Typebot पब्लिक ID" }, "apiToken": { "title": "API टोकन" }, "respondInGroups": { "title": "ग्रुप चैट्स में रिप्लाई करें" }, "sessionTimeoutMinutes": { "title": "निष्क्रिय (Idle) रीसेट (मिनट)" }, "passContactVariables": { "title": "संपर्क चर (Contact variables) पास करें" }, "mediaHost": { "title": "मीडिया/अपलोड होस्ट" } } }
+      "config": { "apiHost": { "title": "Typebot होस्ट URL" }, "publicId": { "title": "Typebot पब्लिक ID" }, "apiToken": { "title": "API टोकन" }, "respondInGroups": { "title": "ग्रुप चैट्स में रिप्लाई करें" }, "sessionTimeoutMinutes": { "title": "निष्क्रिय (Idle) रीसेट (मिनट)" }, "passContactVariables": { "title": "संपर्क चर (Contact variables) पास करें" }, "mediaHost": { "title": "मीडिया/अपलोड होस्ट" } } },
+    "de": {
+      "name": "Typebot-Anbindung",
+      "description": "Steuert einen WhatsApp-Bot über die Typebot-Chat-API mit Medien, Auswahlmenüs und Datei-Uploads, ohne öffentlichen Webhook.",
+      "config": {
+        "apiHost": {
+          "title": "Typebot-Host-URL"
+        },
+        "publicId": {
+          "title": "Öffentliche Typebot-ID"
+        },
+        "apiToken": {
+          "title": "API-Zugriffstoken"
+        },
+        "respondInGroups": {
+          "title": "Auch in Gruppenchats antworten"
+        },
+        "sessionTimeoutMinutes": {
+          "title": "Zurücksetzen bei Inaktivität (Minuten)"
+        },
+        "passContactVariables": {
+          "title": "Kontaktvariablen übergeben"
+        },
+        "mediaHost": {
+          "title": "Medien-/Upload-Host"
+        }
+      }
+    },
+    "tr": {
+      "name": "Typebot Bağlayıcısı",
+      "description": "Typebot Chat API ile medya, seçenek menüleri ve dosya yükleme içeren bir WhatsApp botunu herkese açık webhook olmadan çalıştırır.",
+      "config": {
+        "apiHost": {
+          "title": "Typebot sunucu URL adresi"
+        },
+        "publicId": {
+          "title": "Typebot genel kimliği"
+        },
+        "apiToken": {
+          "title": "API erişim belirteci"
+        },
+        "respondInGroups": {
+          "title": "Grup sohbetlerinde de yanıtla"
+        },
+        "sessionTimeoutMinutes": {
+          "title": "Hareketsizlikte sıfırla (dakika)"
+        },
+        "passContactVariables": {
+          "title": "Kişi değişkenlerini aktar"
+        },
+        "mediaHost": {
+          "title": "Medya/yükleme sunucusu"
+        }
+      }
+    },
+    "pt-BR": {
+      "name": "Conector Typebot",
+      "description": "Executa um bot do WhatsApp pela API de chat do Typebot, com mídia, opções e envio de arquivos, sem webhook público.",
+      "config": {
+        "apiHost": {
+          "title": "URL do servidor Typebot"
+        },
+        "publicId": {
+          "title": "ID público do Typebot"
+        },
+        "apiToken": {
+          "title": "Token de acesso da API"
+        },
+        "respondInGroups": {
+          "title": "Responder também em grupos"
+        },
+        "sessionTimeoutMinutes": {
+          "title": "Reiniciar por inatividade (minutos)"
+        },
+        "passContactVariables": {
+          "title": "Enviar variáveis do contato"
+        },
+        "mediaHost": {
+          "title": "Servidor de mídia/envio"
+        }
+      }
+    },
+    "ko": {
+      "name": "Typebot 커넥터",
+      "description": "공개 웹훅 없이 Typebot 채팅 API로 미디어, 선택 메뉴 및 파일 업로드를 지원하는 WhatsApp 봇을 실행합니다.",
+      "config": {
+        "apiHost": {
+          "title": "Typebot 호스트 URL"
+        },
+        "publicId": {
+          "title": "Typebot 공개 ID"
+        },
+        "apiToken": {
+          "title": "API 액세스 토큰"
+        },
+        "respondInGroups": {
+          "title": "그룹 채팅에도 응답"
+        },
+        "sessionTimeoutMinutes": {
+          "title": "비활성 시 초기화 (분)"
+        },
+        "passContactVariables": {
+          "title": "연락처 변수 전달"
+        },
+        "mediaHost": {
+          "title": "미디어/업로드 호스트"
+        }
+      }
+    },
+    "id": {
+      "name": "Konektor Typebot",
+      "description": "Menjalankan bot WhatsApp melalui API Chat Typebot dengan media, pilihan menu, dan unggahan berkas, tanpa webhook publik.",
+      "config": {
+        "apiHost": {
+          "title": "URL host Typebot"
+        },
+        "publicId": {
+          "title": "ID publik Typebot"
+        },
+        "apiToken": {
+          "title": "Token akses API"
+        },
+        "respondInGroups": {
+          "title": "Balas juga di chat grup"
+        },
+        "sessionTimeoutMinutes": {
+          "title": "Reset saat tidak aktif (menit)"
+        },
+        "passContactVariables": {
+          "title": "Kirim variabel kontak"
+        },
+        "mediaHost": {
+          "title": "Host media/unggahan"
+        }
+      }
+    }
   }
 }

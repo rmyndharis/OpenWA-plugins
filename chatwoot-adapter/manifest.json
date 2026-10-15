@@ -1,7 +1,7 @@
 {
   "id": "chatwoot-adapter",
   "name": "Chatwoot Adapter",
-  "version": "0.9.10",
+  "version": "0.9.11",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Two-way sync between a WhatsApp session and a Chatwoot inbox: relays WhatsApp messages (1:1 and groups, with media) into Chatwoot as an API-channel inbox, sends agent replies back to WhatsApp, and hands a chat over to a human agent — silencing other OpenWA bots — when an agent takes it in Chatwoot. First consumer of the OpenWA Integration SDK v1; runs sandboxed in the plugin worker.",
@@ -12,7 +12,7 @@
   "keywords": ["chatwoot", "helpdesk", "inbox", "handover", "two-way", "agent", "whatsapp", "openwa"],
   "status": "stable",
   "minOpenWAVersion": "0.8.7",
-  "testedOpenWAVersion": "0.23.6",
+  "testedOpenWAVersion": "0.25.0",
   "sdkVersion": "1",
   "permissions": ["net:fetch", "conversation:send", "webhook:ingress", "engine:read",
     "storage:use"],
@@ -119,6 +119,171 @@
     "zh-HK": { "name": "Chatwoot 適配器", "description": "在 WhatsApp 工作階段與 Chatwoot 收件箱之間雙向同步：將 WhatsApp 訊息（一對一及群組，含媒體）以 API 渠道收件箱形式轉發到 Chatwoot，把客服回覆傳回 WhatsApp，並在客服於 Chatwoot 接管對話時轉交給人工客服——同時令其他 OpenWA 機器人靜音。OpenWA Integration SDK v1 的首個使用者；在插件工作器中以沙箱方式運行。",
       "config": { "baseUrl": { "title": "Chatwoot 基礎 URL" }, "apiToken": { "title": "API 存取權杖" }, "accountId": { "title": "帳戶 ID" }, "inboxId": { "title": "API 渠道收件箱 ID" }, "relayGroups": { "title": "轉發群組對話" }, "relayMedia": { "title": "將接收的媒體轉發到 Chatwoot" }, "relayOwnMessages": { "title": "轉發你自己發送的訊息" }, "backfillLimit": { "title": "歷史回填（每個對話的訊息數）" }, "backfillAllOnce": { "title": "設定時一次性批量匯入所有對話" } } },
     "hi": { "name": "Chatwoot एडॉप्टर", "description": "WhatsApp सेशन और Chatwoot इनबॉक्स के बीच टू-वे (two-way) सिंक: WhatsApp संदेशों (1:1 और ग्रुप, मीडिया सहित) को Chatwoot में API-चैनल इनबॉक्स के रूप में रिले करता है, एजेंट के रिप्लाई WhatsApp पर वापस भेजता है, और जब कोई एजेंट Chatwoot में चैट लेता है तो मानव एजेंट को सौंप देता है — अन्य OpenWA बॉट्स को म्यूट करते हुए। OpenWA इंटीग्रेशन SDK v1 का पहला उपभोक्ता; प्लगइन वर्कर में सैंडबॉक्स्ड चलता है।",
-      "config": { "baseUrl": { "title": "Chatwoot बेस URL" }, "apiToken": { "title": "API एक्सेस टोकन" }, "accountId": { "title": "अकाउंट ID" }, "inboxId": { "title": "API-चैनल इनबॉक्स ID" }, "relayGroups": { "title": "ग्रुप चैट्स को रिले करें" }, "relayMedia": { "title": "इनबाउंड मीडिया को Chatwoot पर रिले करें" }, "relayOwnMessages": { "title": "अपने खुद के भेजे गए संदेशों को रिले करें" }, "backfillLimit": { "title": "हिस्ट्री बैकफ़िल (संदेश प्रति चैट)" }, "backfillAllOnce": { "title": "सेटअप पर एक बार में सभी चैट्स को बल्क-इंपोर्ट करें" } } }
+      "config": { "baseUrl": { "title": "Chatwoot बेस URL" }, "apiToken": { "title": "API एक्सेस टोकन" }, "accountId": { "title": "अकाउंट ID" }, "inboxId": { "title": "API-चैनल इनबॉक्स ID" }, "relayGroups": { "title": "ग्रुप चैट्स को रिले करें" }, "relayMedia": { "title": "इनबाउंड मीडिया को Chatwoot पर रिले करें" }, "relayOwnMessages": { "title": "अपने खुद के भेजे गए संदेशों को रिले करें" }, "backfillLimit": { "title": "हिस्ट्री बैकफ़िल (संदेश प्रति चैट)" }, "backfillAllOnce": { "title": "सेटअप पर एक बार में सभी चैट्स को बल्क-इंपोर्ट करें" } } },
+    "de": {
+      "name": "Chatwoot-Anbindung",
+      "description": "Synchronisiert WhatsApp-Nachrichten und Medien mit Chatwoot und pausiert Bots bei menschlicher Übernahme.",
+      "config": {
+        "baseUrl": {
+          "title": "Basis-URL"
+        },
+        "apiToken": {
+          "title": "API-Zugriffstoken"
+        },
+        "accountId": {
+          "title": "Konto-ID"
+        },
+        "inboxId": {
+          "title": "API-Posteingangs-ID"
+        },
+        "relayGroups": {
+          "title": "Gruppenchats weiterleiten"
+        },
+        "relayMedia": {
+          "title": "Eingehende Medien an Chatwoot weiterleiten"
+        },
+        "relayOwnMessages": {
+          "title": "Eigene ausgehende Nachrichten weiterleiten"
+        },
+        "backfillLimit": {
+          "title": "Verlauf importieren (Nachrichten pro Chat)"
+        },
+        "backfillAllOnce": {
+          "title": "Alle Chats bei der Einrichtung einmal importieren"
+        }
+      }
+    },
+    "tr": {
+      "name": "Chatwoot Bağdaştırıcısı",
+      "description": "WhatsApp mesajlarını ve medyayı Chatwoot ile eşitler; bir temsilci devraldığında botları duraklatır.",
+      "config": {
+        "baseUrl": {
+          "title": "Temel URL adresi"
+        },
+        "apiToken": {
+          "title": "API erişim belirteci"
+        },
+        "accountId": {
+          "title": "Hesap kimliği"
+        },
+        "inboxId": {
+          "title": "API gelen kutusu kimliği"
+        },
+        "relayGroups": {
+          "title": "Grup sohbetlerini ilet"
+        },
+        "relayMedia": {
+          "title": "Gelen medyayı Chatwoot uygulamasına ilet"
+        },
+        "relayOwnMessages": {
+          "title": "Kendi giden mesajlarını ilet"
+        },
+        "backfillLimit": {
+          "title": "Geçmişi aktar (sohbet başına mesaj)"
+        },
+        "backfillAllOnce": {
+          "title": "Kurulumda tüm sohbetleri bir kez içe aktar"
+        }
+      }
+    },
+    "pt-BR": {
+      "name": "Adaptador Chatwoot",
+      "description": "Sincroniza mensagens e mídia do WhatsApp com o Chatwoot e pausa os bots durante o atendimento humano.",
+      "config": {
+        "baseUrl": {
+          "title": "URL base"
+        },
+        "apiToken": {
+          "title": "Token de acesso da API"
+        },
+        "accountId": {
+          "title": "ID da conta"
+        },
+        "inboxId": {
+          "title": "ID da caixa de entrada da API"
+        },
+        "relayGroups": {
+          "title": "Encaminhar conversas de grupos"
+        },
+        "relayMedia": {
+          "title": "Encaminhar mídia recebida ao Chatwoot"
+        },
+        "relayOwnMessages": {
+          "title": "Encaminhar suas mensagens enviadas"
+        },
+        "backfillLimit": {
+          "title": "Importar histórico (mensagens por conversa)"
+        },
+        "backfillAllOnce": {
+          "title": "Importar todas as conversas uma vez na configuração"
+        }
+      }
+    },
+    "ko": {
+      "name": "Chatwoot 어댑터",
+      "description": "WhatsApp 메시지와 미디어를 Chatwoot과 동기화하고 상담원이 인계받으면 봇 응답을 중지합니다.",
+      "config": {
+        "baseUrl": {
+          "title": "기본 URL"
+        },
+        "apiToken": {
+          "title": "API 액세스 토큰"
+        },
+        "accountId": {
+          "title": "계정 ID"
+        },
+        "inboxId": {
+          "title": "API 수신함 ID"
+        },
+        "relayGroups": {
+          "title": "그룹 채팅 전달"
+        },
+        "relayMedia": {
+          "title": "수신 미디어를 Chatwoot으로 전달"
+        },
+        "relayOwnMessages": {
+          "title": "직접 보낸 메시지 전달"
+        },
+        "backfillLimit": {
+          "title": "기록 가져오기 (채팅별 메시지 수)"
+        },
+        "backfillAllOnce": {
+          "title": "설정 시 모든 채팅을 한 번 가져오기"
+        }
+      }
+    },
+    "id": {
+      "name": "Adaptor Chatwoot",
+      "description": "Menyinkronkan pesan dan media WhatsApp dengan Chatwoot serta menghentikan balasan bot saat agen mengambil alih.",
+      "config": {
+        "baseUrl": {
+          "title": "URL dasar"
+        },
+        "apiToken": {
+          "title": "Token akses API"
+        },
+        "accountId": {
+          "title": "ID akun"
+        },
+        "inboxId": {
+          "title": "ID kotak masuk API"
+        },
+        "relayGroups": {
+          "title": "Teruskan chat grup"
+        },
+        "relayMedia": {
+          "title": "Teruskan media masuk ke Chatwoot"
+        },
+        "relayOwnMessages": {
+          "title": "Teruskan pesan keluar sendiri"
+        },
+        "backfillLimit": {
+          "title": "Impor riwayat (pesan per chat)"
+        },
+        "backfillAllOnce": {
+          "title": "Impor semua chat sekali saat penyiapan"
+        }
+      }
+    }
   }
 }

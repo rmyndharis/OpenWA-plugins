@@ -61,6 +61,7 @@ export default class AfterHours implements IPlugin {
   // Held for healthCheck(), which the host calls with no context of its own.
   private ctx: PluginContext | null = null;
   private readonly repliedAt = new Map<string, number>();
+  private readonly replyAttempts = new Map<string, object>();
   // Absolute "do not retry before" deadline per chat, set when a reply FAILS. Kept separately instead of
   // rewinding the cooldown timestamp: a rewind is only meaningful against the cooldown value it was
   // computed from, and config is re-read per message — so an operator lowering cooldownSec in the
@@ -99,8 +100,7 @@ export default class AfterHours implements IPlugin {
     }
   }
 
-  // Returns true when this plugin sent the away message, so the hook can claim it and stop another bot
-  // from answering the same thing. Every early exit — including a suppressed reply — means "not mine".
+  // Claim an attempted reply before sending, so a slow send cannot outlive the host's hook budget.
   private async onMessage(ctx: PluginContext, hook: HookContext): Promise<boolean> {
     if (hook.source !== 'Engine' || !hook.sessionId) return false;
     const m = (hook.data ?? {}) as Partial<IncomingMessage>;
@@ -142,34 +142,30 @@ export default class AfterHours implements IPlugin {
     if (notBefore !== undefined && Date.now() < notBefore) return false; // still inside a failure backoff
     if (!allowCooldown(this.repliedAt, key, Date.now(), cooldownMs)) return false;
 
-    try {
-      await ctx.messages.reply(sessionId, m.chatId, m.id, cfg.config.awayMessage);
+    const attempt = {};
+    this.replyAttempts.set(key, attempt);
+    void ctx.messages.reply(sessionId, m.chatId, m.id, cfg.config.awayMessage).then(() => {
+      if (this.replyAttempts.get(key) !== attempt) return;
+      this.replyAttempts.delete(key);
       this.retryNotBefore.delete(key); // delivered — the backoff no longer applies
-      return true;
-    } catch (err) {
-      // The cooldown slot is burned BEFORE the send (allowCooldown records on the allow path), so a
-      // failed reply would otherwise silence this chat for the whole window with nothing delivered —
-      // reachable more often now that another plugin vetoing `message:sending` surfaces here as a
-      // thrown error, indistinguishable from a transport failure.
-      //
-      // Free the cooldown slot (nothing was delivered, so it should not silence the chat for the whole
-      // window) but install an absolute backoff deadline instead. Clearing the slot ALONE removes the only
-      // throttle: against a permanently-failing send — a compliance plugin vetoing this chat — every
-      // inbound message would retry immediately, 60 messages meaning 60 send attempts and 60 full
-      // `message:sending` fan-outs across every installed plugin.
-      this.repliedAt.delete(key);
-      this.retryNotBefore.set(key, Date.now() + RETRY_BACKOFF_MS);
-      // Drop the entries whose backoff has already elapsed; if that is not enough, drop oldest-first.
-      if (this.retryNotBefore.size > MAX_RETRY_ENTRIES) {
-        const now = Date.now();
-        for (const [k, until] of this.retryNotBefore) if (until <= now) this.retryNotBefore.delete(k);
-        for (const k of this.retryNotBefore.keys()) {
-          if (this.retryNotBefore.size <= MAX_RETRY_ENTRIES) break;
-          this.retryNotBefore.delete(k);
+    }, err => {
+      if (this.replyAttempts.get(key) === attempt) {
+        this.replyAttempts.delete(key);
+        // Release this attempt's cooldown, then back off to avoid a send failure loop.
+        this.repliedAt.delete(key);
+        this.retryNotBefore.set(key, Date.now() + RETRY_BACKOFF_MS);
+        // Drop elapsed entries first, then the oldest if the cap is still exceeded.
+        if (this.retryNotBefore.size > MAX_RETRY_ENTRIES) {
+          const now = Date.now();
+          for (const [k, until] of this.retryNotBefore) if (until <= now) this.retryNotBefore.delete(k);
+          for (const k of this.retryNotBefore.keys()) {
+            if (this.retryNotBefore.size <= MAX_RETRY_ENTRIES) break;
+            this.retryNotBefore.delete(k);
+          }
         }
       }
       ctx.logger.error('after-hours: reply failed', err);
-      return false; // nothing was delivered, so nothing is claimed
-    }
+    });
+    return true;
   }
 }
