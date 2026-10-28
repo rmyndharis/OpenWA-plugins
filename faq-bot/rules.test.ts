@@ -212,9 +212,13 @@ test('the cap holds the shapes the structural screen lets through', () => {
   for (const pattern of ['((a|b)*(a|b)*)(a|b)*$', '(a|b)*(a|b)*(a|b)*$', '[ab]*[bc]*[cd]*$']) {
     assert.equal(isSafeRegexPattern(pattern), true, `guard rail: the screen accepts ${pattern}`);
     const { rules } = parseRules(JSON.stringify([{ mode: 'regex', pattern, reply: 'r' }]));
-    const started = Date.now();
+    // CPU time, not wall time: at this cap a pattern costs 0.8 to 1 s of CPU, and on a busy machine or
+    // beside the other test files the same work took over 2 s of wall time with nothing wrong. Raising
+    // the cap still fails here, because the cost grows with it (250 characters take about 2.8 s).
+    const started = process.cpuUsage();
     matchRule(rules, adversarial + 'x'.repeat(5000));
-    assert.ok(Date.now() - started < 2000, `${pattern} must stay bounded by the cap`);
+    const { user, system } = process.cpuUsage(started);
+    assert.ok((user + system) / 1000 < 2000, `${pattern} must stay bounded by the cap`);
   }
 });
 
