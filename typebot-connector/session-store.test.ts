@@ -25,7 +25,7 @@ test('set then get round-trips; clear removes', async () => {
 });
 
 // A completed flow clears its own row; an abandoned one would otherwise sit there for the life of the
-// install, and the host stats every stored key on every write — so it taxes every later turn.
+// install, and the host (before 0.26.0) stats every stored key on every write — so it taxes every later turn.
 test('pruneIdle drops abandoned rows and keeps live ones', async () => {
   const storage = fakeStorage();
   const store = new SessionStore(storage);
@@ -66,7 +66,7 @@ test('pruneIdle never touches another session rows', async () => {
 });
 
 // pruneIdle is scoped to the triggering session, which leaves a session that goes silent entirely — a
-// disabled or deleted tenant — with rows nothing ever lists again. Every stored key is stat-ed on every
+// disabled or deleted tenant — with rows nothing ever lists again. Before host 0.26.0 every stored key is stat-ed on every
 // write, so those rows tax every OTHER session's turns forever. The orphan pass uses a threshold no
 // per-session sessionTimeoutMinutes can plausibly exceed, so it can only remove genuinely dead rows.
 test('pruneOrphans reclaims rows from sessions that stopped sending', async () => {

@@ -1,7 +1,7 @@
 // Vendored OpenWA plugin contract. There is no published @openwa SDK package; keep this in sync
 // with the OpenWA version you target. All imports of this module must be `import type`.
 //
-// Last aligned against OpenWA core v0.25.0 (tag f045dde), verified field-by-field against
+// Last aligned against OpenWA core v0.26.0 (tag 386464e), verified field-by-field against
 // src/core/plugins/plugin.interfaces.ts, src/core/hooks/{hook.interfaces,hook-results}.ts, plugin-net.ts,
 // sandbox/{protocol,worker-bootstrap,worker-capability,worker-hooks,worker-webhooks}.ts and
 // src/engine/interfaces/whatsapp-engine.interface.ts, with behavior the interfaces do not show read from
@@ -9,9 +9,10 @@
 // src/modules/integration/ingress{.controller,.service,-ack,-preflight}.ts. Where this file narrows the
 // host on purpose it says so; where the host is stricter than this file, the comment names the runtime
 // consequence.
-// Since 0.23.6: minOpenWAVersion is enforced at install and load; config-derived network grants pin
-// the HTTPS origin including its port; IncomingMessage includes poll details and ChatSummary includes
-// lastMessageType. Hook names and capability signatures used by these plugins remain compatible.
+// Since 0.24.0: minOpenWAVersion is enforced at install and load, and config-derived network grants pin
+// the HTTPS origin including its port. Since 0.25.0: IncomingMessage includes poll details and
+// ChatSummary includes lastMessageType. Hook names and capability signatures used by these plugins
+// remain compatible.
 // Unlike the ranges below, 0.23.4 → 0.23.6 moves the plugin runtime itself. 0.23.5 changed only message
 // content and one ingress redaction; the rest is 0.23.6. Each item is recorded below where it belongs:
 //   1. Hook results: from 0.23.6 message:received / message:sent adopt only a plain object with string
@@ -35,7 +36,19 @@
 // The sandbox protocol gained an `inFlight` event list that the worker runtime fills itself. What a
 // plugin sees is narrower re-entrancy: from 0.23.6 only a capability call made from inside a hook
 // dispatch is guarded, so a send from an ingress handler or a timer runs every plugin's hooks even while
-// one of this plugin's dispatches is pending.
+// one of this plugin's dispatches is pending. From 0.26.0 the guard also ends with the dispatch, so a send
+// a handler schedules from a timer or a detached promise after it returned runs every plugin's hooks;
+// only a dispatch that overran the 5 s budget stays guarded until the worker answers it or exits (the 32
+// newest such claims per worker).
+// 0.25.0 → 0.26.0 did not move the plugin contract: plugin.interfaces.ts changed one comment (a secret is
+// removed by `null`), worker-hooks.ts gained an internal `error` field, and hook.interfaces.ts,
+// hook-results.ts, sandbox/protocol.ts and the other worker files are unchanged. What the engine interface
+// gained is left out ON PURPOSE because no hook or capability carries it: PollVoteEvent / onPollVote and
+// MessageReceiptEvent / onMessageReceipt feed the `poll.vote` and `message.receipt` webhook and socket events
+// (a `webhook:before` handler now sees those two event names), `IncomingMessage.originalBody` is removed
+// before the hooks run, and the `authors` argument of `sendSeen` and `contactPhoneLookupPersistence` are
+// engine internals. What changed in CONTENT: a message delivered already deleted reaches
+// `message:received` and `message:sent` as an empty `revoked` placeholder (see IncomingMessage).
 // The 0.23.3 → 0.23.4 diff over src/core/plugins/ and src/core/hooks/ is EMPTY, file for file, so the
 // contract itself did not move; the whole delta lives in the engine interface and reaches a plugin as
 // payload CONTENT. Two items, both recorded below where they belong rather than only here:
@@ -83,7 +96,7 @@
 // select, array/items, object/properties, min/max/pattern — see PluginConfigField) is plain manifest
 // JSON — the plugin still reads `ctx.config` as `Record<string, unknown>` and validates defensively.
 //
-// Host bounds a plugin cannot see from the types (all host-side, re-checked at v0.25.0):
+// Host bounds a plugin cannot see from the types (all host-side, re-checked at v0.26.0):
 //   30 s per lifecycle phase (onLoad/onEnable/onDisable/onUnload) and per capability call, except
 //   the send verbs (ctx.messages.sendText / ctx.messages.reply / ctx.conversations.send) at 120 s;
 //   5 s per hook dispatch (overrun → the host fails OPEN with {continue:true} and drops your result);
@@ -162,10 +175,11 @@ export interface PluginLogger {
  * One JSON file per key under `<dataDir>/plugins/<pluginId>/`, so key COUNT is a real cost, not just
  * key size:
  *
- * - `set` REJECTS once the plugin's directory would exceed 50 MiB ("storage quota exceeded"), and the
- *   quota is measured by a synchronous readdir + stat of every key on EVERY write. A plugin that
- *   writes one key per message therefore pays O(keys) syscalls per message, on the host's event loop.
- *   Prefer bucketed keys (one key per session per hour holding a map) over one key per message, and
+ * - `set` REJECTS once the plugin's directory would exceed 50 MiB ("storage quota exceeded"). Up to
+ *   0.25.x the quota was measured by a synchronous readdir + stat of every key on EVERY write, so a
+ *   plugin that wrote one key per message paid O(keys) syscalls per message, on the host's event loop;
+ *   0.26.0 keeps a running total (one scan to seed it, one stat per write). Hosts below 0.26.0 stay
+ *   supported, so prefer bucketed keys (one key per session per hour holding a map) over one key per message, and
  *   always handle a rejected `set` — dropping it silently turns a full quota into lost data.
  * - `list()` with no prefix returns every key in the directory, which in a layout where package files
  *   and state share a directory can include `manifest`/`package`; pass a prefix (the host filters for
@@ -350,7 +364,10 @@ export interface PluginConfigField {
   default?: unknown;
   enum?: unknown[];
   required?: boolean;
-  /** Sensitive value (API key, token): masked on read, preserved on an unchanged write — at any depth. */
+  /** Sensitive value (API key, token): masked on read, preserved on an unchanged write, at any depth. An
+   *  explicit `null` in a write removes it (host 0.26.0); the mask and an empty string keep it. A per-session
+   *  override or instance that points a `net.allowConfigHosts` key at another origin than the layer beneath
+   *  does not inherit that layer's secrets (host 0.26.0) and must bring its own. */
   secret?: boolean;
   /** Validation hints surfaced as HTML input attributes (advisory; not hard-enforced by the host). */
   min?: number; // number: value bound; string/textarea: minLength; array: min rows
@@ -501,7 +518,8 @@ export interface WebhookRequest {
   method: string;
   /** Provider headers, names lowercased, a repeated header comma-joined. Credentials arrive as
    *  '[redacted]': authorization, proxy-authorization, cookie, x-hub-signature, x-hub-signature-256,
-   *  x-signature, x-signature-ed25519 and x-webhook-signature since host 0.20.0, and a shared-secret
+   *  x-signature, x-signature-ed25519 and x-webhook-signature since host 0.20.0, webhook-signature since host
+   *  0.26.0, and a shared-secret
    *  route's own declared `signature.header` since 0.23.5. The host verified the request before it was
    *  stored, so a handler has nothing to re-verify from them. */
   headers: Record<string, string>;
@@ -618,7 +636,8 @@ export interface IncomingMessage {
   body: string;
   /** Host `MessageType`: text|image|video|audio|voice|document|sticker|location|contact|poll|call|
    *  revoked|order|product|masked|unknown ('order' and 'product' from host 0.23.5). Kept as `string`
-   *  here so a new host type never breaks a typecheck. */
+   *  here so a new host type never breaks a typecheck. A message delivered already deleted arrives as
+   *  `revoked` with an empty `body` and no media, quote or card fields (host 0.26.0). */
   type: string;
   /**
    * Unix SECONDS, the original send time. From host 0.23.6 a Baileys session delivers after reconnect

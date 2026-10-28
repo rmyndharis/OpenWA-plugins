@@ -5,6 +5,13 @@ and the top entry's version must match `manifest.json`.
 
 ## [Unreleased]
 
+## [0.2.13] - 2026-10-28
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.26.0.
+- Document that a per-session override that points `baseUrl` at another origin must also set `authToken`, which OpenWA 0.26.0 no longer inherits.
+
 ## [0.2.12] - 2026-10-15
 
 ### Changed

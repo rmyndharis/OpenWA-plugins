@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `gsheets-logger` |
-| **Version** | 0.3.13 |
-| **Released** | 2026-10-15 |
+| **Version** | 0.3.14 |
+| **Released** | 2026-10-28 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.25.0) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.26.0) |
 | **Keywords** | google-sheets, logging, audit, crm, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/gsheets-logger](https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger) |
 <!-- END DETAILS -->
@@ -211,7 +211,7 @@ The target tab must exist, **with a header row of your choosing** — the plugin
 
 ## Compatibility
 
-Checked against the OpenWA v0.25.0 worker runtime with isolated services. On a spreadsheet or credential change, undelivered rows are parked before switching clients. If parking fails, the plugin logs the error, retains the rows and keeps the previous client so a later retry can deliver to the original destination.
+Checked against the OpenWA v0.26.0 worker runtime with isolated services. On a spreadsheet or credential change, undelivered rows are parked before switching clients. If parking fails, the plugin logs the error, retains the rows and keeps the previous client so a later retry can deliver to the original destination.
 
 External plugins run **sandboxed in a worker thread** (since OpenWA **v0.6.0**). Requires OpenWA
 **≥ 0.7.0** — all outbound HTTP (OAuth token + Sheets append) goes through the host-proxied,
@@ -252,9 +252,10 @@ A per-session config override that points at a different `spreadsheetId` / `serv
 honored — the buffer cannot attribute a row to a session at flush time, so routing per session is a
 design-level change, not a config one.
 
-If you need to log different sessions to different sheets, run **one plugin instance per session** (bind
-each to a single WhatsApp session via the dashboard's session scope), or run multiple OpenWA instances.
-Per-session multi-sink logging is a roadmap item if a concrete need emerges.
+If you need to log different sessions to different sheets, run one OpenWA gateway per sheet: OpenWA
+installs a plugin once per gateway (a second install of the same id is refused with `409`) and gives
+separate instances only to plugins with ingress routes, so there is no per-session instance of this
+plugin. Per-session multi-sink logging is a roadmap item if a concrete need emerges.
 
 ## Security
 

@@ -220,7 +220,7 @@ test('a webhook delivery failure does not suppress the in-chat transcript delive
 });
 
 // ── Storage growth (1.1.0) ──────────────────────────────────────────────────────────────────────────
-// The host re-stats every one of a plugin's storage keys on EVERY write. Pre-1.1.0 this plugin wrote one
+// Before host 0.26.0 the host re-stats every one of a plugin's storage keys on EVERY write. Pre-1.1.0 this plugin wrote one
 // never-deleted key per transcribed voice note plus one per session per hour, so each write cost more
 // than the last, forever.
 

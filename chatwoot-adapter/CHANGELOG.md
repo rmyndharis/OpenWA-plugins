@@ -6,6 +6,13 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.12] - 2026-10-28
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.26.0.
+- Document that an override or instance that points `baseUrl` at another origin must also set `apiToken`, which OpenWA 0.26.0 no longer inherits.
+
 ## [0.9.11] - 2026-10-15
 
 ### Changed

@@ -7,7 +7,7 @@
 // bridge preserving a bare number type. Cooldown is in-memory and FAIL-OPEN (it never throws, so it can
 // never wrongly block). Pure modulo the injected storage.
 //
-// Markers live in a FIXED number of sharded buckets, not one storage key per answered message. The host
+// Markers live in a FIXED number of sharded buckets, not one storage key per answered message. Before host 0.26.0 the host
 // re-measures its 50 MiB per-plugin quota on EVERY `set` by readdir-ing the plugin's data directory and
 // stat-ing every key, synchronously, on the gateway's own event loop. One key per message meant a busy
 // install (20 commands a minute holds ~86,000 markers inside the 3-day window) made every storage write

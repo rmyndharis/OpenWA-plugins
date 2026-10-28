@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `typebot-connector` |
-| **Version** | 0.3.3 |
-| **Released** | 2026-10-15 |
+| **Version** | 0.3.4 |
+| **Released** | 2026-10-28 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.2 (tested 0.25.0) |
+| **Requires OpenWA** | ≥ 0.8.2 (tested 0.26.0) |
 | **Keywords** | typebot, chatbot, flow, bot, no-code, two-way, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/typebot-connector](https://github.com/rmyndharis/OpenWA-plugins/tree/main/typebot-connector) |
 <!-- END DETAILS -->
@@ -106,7 +106,7 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 
 ## Compatibility
 
-Checked against the OpenWA v0.25.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
+Checked against the OpenWA v0.26.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
 
 - Targets OpenWA **≥ 0.8.2** — uses the live Typebot Chat API over `ctx.net.fetch`
   (`allowConfigHosts` resolves `apiHost`/`mediaHost` from config) and `ctx.conversations.send` for
@@ -129,6 +129,9 @@ Checked against the OpenWA v0.25.0 worker runtime with isolated services. This c
   than 5 minutes late, is ignored: the contact had not seen that step. A reply to a step shown before
   the outage still answers it, and the idle reset counts from when it was written. A backlog under 5
   minutes old cannot be told apart from fast typing and is handled as live.
+- **Deleted messages are skipped.** From OpenWA 0.26.0 a message the host delivers already deleted
+  reaches the hook as an empty `revoked` placeholder. It does not start a flow or advance a step, and it
+  is not claimed.
 - `payment` steps and non-renderable embeds can't be shown on WhatsApp and get a short fallback
   message. Streaming AI blocks are resolved server-side into normal text bubbles.
 - **Link bubbles look plainer from OpenWA 0.14.0 on the Baileys engine.** A link bubble and a redirect
@@ -147,6 +150,11 @@ via the dashboard; an override takes effect on the next inbound message (config 
 For example, two sessions can connect to different Typebot bots. The per-session `apiHost`/`mediaHost`
 is auto-added to the outbound allowlist via `allowConfigHosts`. Flow state is keyed per `(session, chat)`
 in storage, so flows across sessions never interfere.
+
+**Host overrides and the API token.** From OpenWA 0.26.0 a per-session override that points
+`apiHost` or `mediaHost` at another origin than the base config does not inherit the stored
+`apiToken`; set it in that override too. Without it requests reach the new host with no token, which
+only a public published bot accepts.
 
 ## Security
 

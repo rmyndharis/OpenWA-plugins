@@ -14,6 +14,14 @@ test('inScope: only Engine, not fromMe, chatId present', () => {
   assert.equal(inScope(base({ chatId: '' }), 'Engine', true), false);
 });
 
+test('inScope: a message delivered already deleted is out of scope, an empty image is not', () => {
+  // Host 0.26.0 hands the hook an empty 'revoked' placeholder for it. Answering that would start a flow or
+  // advance a step with an empty answer; a photo sent without a caption is empty too and is a real answer
+  // at a file step, so the gate keys on the type and not on the empty body.
+  assert.equal(inScope(base({ type: 'revoked', body: '' }), 'Engine', true), false);
+  assert.equal(inScope(base({ type: 'image', body: '' }), 'Engine', true), true);
+});
+
 test('inScope: group toggle', () => {
   const g = base({ isGroup: true, chatId: 'g@g.us', author: '62811@c.us' });
   assert.equal(inScope(g, 'Engine', true), true);

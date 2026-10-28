@@ -8,6 +8,13 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.3.14] - 2026-10-28
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.26.0.
+- Correct the multi-sheet advice: OpenWA installs a plugin once per gateway, so there is no instance per session.
+
 ## [0.3.13] - 2026-10-15
 
 ### Changed

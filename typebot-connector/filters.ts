@@ -6,6 +6,10 @@ import { isBroadcastJid } from './jid.ts';
 export function inScope(msg: IncomingMessage, source: string, respondInGroups: boolean): boolean {
   if (source !== 'Engine') return false;
   if (msg.fromMe) return false;
+  // From host 0.26.0 a message delivered already deleted reaches the hook as an empty 'revoked'
+  // placeholder. It carries no answer, yet would start a flow or advance a step with an empty one, and
+  // the claim in index.ts would hold the event away from the other responders.
+  if (msg.type === 'revoked') return false;
   if (!msg.chatId) return false;
   if (msg.isGroup && !respondInGroups) return false;
   // `isGroup` is a boolean over a five-way discriminator, so it cannot see a WhatsApp Channel: a

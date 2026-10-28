@@ -22,7 +22,7 @@ export class SessionStore {
    * Sweep rows for sessions that no longer send anything at all — disabled, deleted, or simply quiet for
    * a season. `pruneIdle` is deliberately scoped to the session whose message triggered it, because its
    * threshold comes from that session's config; the cost of that scoping is that a silent session's rows
-   * are never revisited, and the host stats every stored key on every write, so they tax every OTHER
+   * are never revisited, and the host (before 0.26.0) stats every stored key on every write, so they tax every OTHER
    * session's turns forever. This pass is unscoped but uses a threshold no per-session
    * `sessionTimeoutMinutes` can plausibly exceed, so it can only ever remove genuinely dead rows.
    */
@@ -47,7 +47,7 @@ export class SessionStore {
   /**
    * Drop rows for conversations abandoned mid-flow in THIS session. A completed flow clears its own row
    * (turn.ts), so only an abandoned one lingers — and it lingers forever, because nothing else revisits
-   * that key. That matters beyond disk: the host re-measures its per-plugin storage quota on EVERY write
+   * that key. That matters beyond disk: the host (before 0.26.0) re-measures its per-plugin storage quota on EVERY write
    * by stat-ing every key the plugin owns, so abandoned rows make each later turn slower, permanently.
    * Best-effort: a failure here must never affect a turn.
    */

@@ -10,7 +10,7 @@ export interface KvStore {
   list(prefix?: string): Promise<string[]>;
 }
 
-// How many recent message ids the per-session dedup list keeps. The host re-stats every one of a
+// How many recent message ids the per-session dedup list keeps. Before host 0.26.0 the host re-stats every one of a
 // plugin's storage keys on EVERY write, so the pre-1.1.0 scheme — one key per transcribed voice note,
 // never deleted — made each write more expensive than the last, forever. One bounded list per session
 // costs the same single read + write it always did, and the key count is now O(sessions).
@@ -224,8 +224,8 @@ export class TranscriptionCoordinator {
 
   /**
    * Delete a few pre-1.1.0 `seen:<sessionId>:<messageId>` keys per transcription. Without this an
-   * upgraded install keeps paying the old cost forever: those keys are never read again, but the host
-   * still stats every one of them on every write. Awaited rather than floated — the whole coordinator
+   * upgraded install keeps paying the old cost forever: those keys are never read again, but a host before
+   * 0.26.0 still stats every one of them on every write. Awaited rather than floated — the whole coordinator
    * already runs off the message-delivery path, and floating it made the cleanup non-deterministic —
    * but fully best-effort: a failure here must never affect a transcription.
    */

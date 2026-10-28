@@ -13,13 +13,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `after-hours` |
-| **Version** | 0.2.10 |
-| **Released** | 2026-10-15 |
+| **Version** | 0.2.11 |
+| **Released** | 2026-10-28 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.25.0) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.26.0) |
 | **Keywords** | after-hours, business-hours, away, auto-reply, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/after-hours](https://github.com/rmyndharis/OpenWA-plugins/tree/main/after-hours) |
 <!-- END DETAILS -->
@@ -91,7 +91,7 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 
 ## Compatibility
 
-Checked against the OpenWA v0.25.0 worker runtime with isolated services. The hook claims an attempted reply before delivery completes, so a slow send cannot let another responder answer the same message. A failed send is logged and retains its claim; the existing failure backoff controls later attempts. Pending sends are best-effort and may be interrupted when the worker stops.
+Checked against the OpenWA v0.26.0 worker runtime with isolated services. The hook claims an attempted reply before delivery completes, so a slow send cannot let another responder answer the same message. A failed send is logged and retains its claim; the existing failure backoff controls later attempts. Pending sends are best-effort and may be interrupted when the worker stops.
 
 Targets OpenWA **≥ 0.7.0**, which is what the manifest declares and what the catalog publishes. The
 runtime features it relies on — sandboxed `Intl` timezone data and `onConfigChange` forwarding, so
@@ -103,6 +103,9 @@ moment it is processed. This matters from OpenWA 0.23.6, where a Baileys session
 WhatsApp queued during a disconnect once it reconnects: one written during opening hours is not
 answered just because the session came back after closing, and one written overnight but delivered
 after opening is not told the shop is closed.
+
+A message the host delivers already deleted (an empty `revoked` placeholder, from OpenWA 0.26.0) is not
+answered. A photo or sticker sent without a caption is empty too, and still draws the away message.
 
 ### Per-session config
 

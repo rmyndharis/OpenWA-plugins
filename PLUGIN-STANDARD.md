@@ -5,7 +5,7 @@ management/automation stays easy. Verified against OpenWA's plugin runtime (sand
 the same baseline as [`types/openwa.d.ts`](./types/openwa.d.ts) — re-check both together, since this
 document describes host behaviour that has moved repeatedly (per-session config in 0.7, boot re-enable
 in 0.10.5, the storage quota and `message:deleted` in 0.11.0, the `storage:use` gate in 0.17.0, hook
-result checks and sandboxed hook ordering in 0.23.6). The current baseline is OpenWA v0.25.0, including host-version floor enforcement and HTTPS origin grants for configured outbound endpoints.
+result checks and sandboxed hook ordering in 0.23.6). The current baseline is OpenWA v0.26.0, including host-version floor enforcement and HTTPS origin grants for configured outbound endpoints (both 0.24.0), and the secret rule for host overrides, `null` secret removal and the capped boot restore (0.26.0).
 
 ## Principles
 
@@ -68,8 +68,8 @@ OpenWA-plugins/
   "repository": "https://github.com/rmyndharis/OpenWA-plugins",
   "keywords": ["…"],
   "status": "stable",           // "stable" | "beta" | "development"
-  "minOpenWAVersion": "0.7.0",  // enforced at install and boot load by OpenWA v0.25.0
-  "testedOpenWAVersion": "0.25.0" // newest host checked; describe the verification scope in the README
+  "minOpenWAVersion": "0.7.0",  // enforced at install and boot load since OpenWA v0.24.0
+  "testedOpenWAVersion": "0.26.0" // newest host checked; describe the verification scope in the README
 }
 ```
 
@@ -84,7 +84,7 @@ plugin:
 `catalog.mjs` only *warns* about i18n — a missing block, or a missing locale — but the test suite does
 not: `npm test` fails when a `stable` plugin is missing any supported locale, and when any plugin ships
 a locale that translates its name and description without translating every `configSchema` field. Treat
-i18n as gated; the warning is where you notice a gap, not where it is stopped. The shared locale list in `scripts/locales.mjs` matches OpenWA v0.25.0, including `id`; stable plugins must cover every non-English locale.
+i18n as gated; the warning is where you notice a gap, not where it is stopped. The shared locale list in `scripts/locales.mjs` matches OpenWA v0.26.0, including `id`; stable plugins must cover every non-English locale.
 
 ### `configSchema` field vocabulary (v0.7)
 
@@ -98,7 +98,7 @@ field is:
 | `title` / `description` | all | label + helper text |
 | `default` | all | seeded into the form; also the blank value for a new array row |
 | `required` | all | marks the label (advisory — not hard-enforced by the host) |
-| `secret` | scalar | masked on read (shown as `***`); an unchanged `***` write keeps the stored value. Works at **any depth** (nested object / array row). |
+| `secret` | scalar | masked on read (shown as `***`); an unchanged `***` write, or an empty string, keeps the stored value, and from 0.26.0 an explicit `null` removes it. Works at **any depth** (nested object / array row). |
 | `enum` | scalar | renders as a `<select>` of the listed values |
 | `min` / `max` | number / string·textarea / array | value bound · min/maxLength · row count (HTML attribute, advisory) |
 | `pattern` | string / textarea | HTML validation regex |
@@ -268,7 +268,8 @@ correct plugins and were each learned the hard way. Re-verify against OpenWA cor
    resolve to the manifest's, silently. (Top-level only — defaults nested under `properties`/`items`
    are not seeded. A required field with no declared default deliberately stays absent, because that
    needs real operator input; the host never enforces `required` itself.)
-   On v0.25.0 each configured URL grants only its HTTPS origin, including its port. Plain HTTP and embedded credentials do not grant access; a static `net.allow` entry and the host SSRF settings are still needed for a permitted local HTTP service.
+   From v0.24.0 each configured URL grants only its HTTPS origin, including its port. Plain HTTP and embedded credentials do not grant access; a static `net.allow` entry and the host SSRF settings are still needed for a permitted local HTTP service.
+   From v0.26.0 a per-session override or an instance row that points one of these host keys at another origin than the layer beneath does not inherit that layer's `secret` fields (a list that holds one is dropped whole) and must bring its own, so a credential saved for one host never reaches another. Every secret is dropped, not only the one the moved key belongs to. Treat a secret as possibly absent after an override: fail closed when the credential is required and report why (ai-responder, chatwoot-adapter and http-action do), and send an unauthenticated request only to a backend that accepts one. A host reached through a key outside `net.allowConfigHosts` is not covered; keep that secret on the instance that uses it. In a config write an explicit `null` removes a stored secret, where the mask and an empty string keep it.
 4. **Host boot re-enables every plugin the operator had enabled** (OpenWA ≥ 0.10.5; earlier hosts
    really did require a manual re-enable). The runtime `status` is still reset on load, but the operator's
    standing decision is persisted separately and replayed at boot. `ctx.config` and `ctx.storage`
@@ -277,7 +278,11 @@ correct plugins and were each learned the hard way. Re-verify against OpenWA cor
      operator click.
    - **`onEnable` must not touch `ctx.engine.*` / `ctx.messages.*` or await network I/O.** Boot restore
      runs before sessions connect and before the HTTP listener opens; a slow or engine-dependent
-     `onEnable` blocks startup and burns the 30 s lifecycle budget for nothing.
+     `onEnable` blocks startup and burns the 30 s lifecycle budget for nothing. From 0.26.0 the listener
+     opens after at most 60 s of restore and the plugins not yet restored come up in the background.
+     Until a plugin is up its hooks do not run; enabling, disabling, updating or uninstalling it answers
+     `409`; and an ingress route that declares `response` is refused with `503` and `Retry-After: 5`
+     (any other route is accepted and held until the plugin runs).
    - **In-memory state does NOT survive** (each enable spawns a fresh worker). A cooldown or throttle
      kept only in a `Map` silently re-arms on every restart — persist it or document the reset.
    - **An ERROR status does NOT exclude a plugin from restore** — the boot filter keys on the operator's
@@ -287,10 +292,12 @@ correct plugins and were each learned the hard way. Re-verify against OpenWA cor
    - `onDisable` now runs on graceful shutdown (SIGTERM), and `onUnload` on uninstall/in-place update.
 5. **Cross-host redirects cannot be blocked plugin-side** (`PluginNetRequestInit` exposes no redirect
    option) — redirect-based SSRF defense is the host's job; do not treat it as a plugin release gate.
-6. **`ctx.storage` charges per KEY, not just per byte.** Each key is one JSON file, and the host
-   re-measures the plugin's 50 MiB quota on **every** `set` with a synchronous readdir + stat of every
-   existing key — on the host's event loop. One key per message is therefore a gateway-wide stall
-   waiting to happen: bucket instead (one key per session per hour holding a map, pruned by deleting
+6. **`ctx.storage` charges per KEY, not just per byte.** Each key is one JSON file. Up to 0.25.x the
+   host re-measured the plugin's 50 MiB quota on **every** `set` with a synchronous readdir + stat of
+   every existing key, on the host's event loop; from 0.26.0 it keeps a running total (one scan to seed
+   it per host start, one `stat` per write), though `list()` is still a directory scan. The floors here
+   still include the older hosts, where one key per message is a gateway-wide stall waiting to happen:
+   bucket instead (one key per session per hour holding a map, pruned by deleting
    whole buckets). Always handle a rejected `set` — a swallowed quota error is silent data loss, and a
    `healthCheck` that ignores it reports green while dropping messages.
 7. **`{ continue: false }` is a veto on exactly two events.** On `message:sending` it blocks the send
@@ -330,7 +337,11 @@ correct plugins and were each learned the hard way. Re-verify against OpenWA cor
      type (`image`, `video`, `document`), and reaching a matcher is intended behavior.
 
    `!body.trim()` is still the right guard for what carries no text at all: a sticker, a voice note, an
-   image sent without a caption.
+   image sent without a caption. A message delivered already deleted arrives as `type: 'revoked'` with an
+   empty `body` (from 0.26.0 whatever text the engine handed over is dropped), which the same guard
+   covers; a handler that acts on every inbound message without reading `body` or `type` acts on it too
+   (after-hours replies, typebot-connector starts or advances a flow, chatwoot-adapter relays a
+   placeholder message).
 12. **A hook's `data` must keep the event's shape.** From 0.23.6 the host adopts a `message:received`
    or `message:sent` result only when it is a plain object with string `id` and `chatId`, and a
    `webhook:before` result only when its `payload` is a plain object. Anything else, `null` included,
@@ -371,7 +382,8 @@ segment, a `toleranceSec` that is not a finite number above 0, a `dedupOn` other
 `body`, a 1xx ack status, a non-string ack body, and an ack header value Node cannot write. See
 `PluginManifest.ingress` in [`types/openwa.d.ts`](./types/openwa.d.ts) for the full list.
 
-`minOpenWAVersion` is advisory (never enforced by the host). Still bump it when a plugin *requires* a
+`minOpenWAVersion` is enforced from OpenWA 0.24.0 (an older host ignores it, so there it only documents
+the floor). Bump it when a plugin *requires* a
 newer capability: `canonicalChatId` → 0.8.7, Integration SDK v1 (`sdkVersion: "1"` — a STRING; the
 host's ingress validation runs `sdkVersion.split('.')`, so a JSON number throws at load) → 0.8.x,
 `getChatHistory` → 0.8.6 (0.8.5 exposed it in-process, but the sandbox bridge every marketplace

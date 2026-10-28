@@ -54,7 +54,7 @@ export const SEEN_PRUNE_INTERVAL_MS = 60 * 60 * 1000; // hourly
 
 // Dedup markers live in a FIXED number of sharded buckets, not one storage key per message.
 //
-// The host re-measures its 50 MiB per-plugin storage quota on EVERY `set` by readdir-ing the plugin's
+// Before host 0.26.0 the host re-measures its 50 MiB per-plugin storage quota on EVERY `set` by readdir-ing the plugin's
 // data directory and stat-ing every key — synchronously, on the gateway's own event loop. A key per
 // message therefore made each inbound message cost O(total markers) syscalls: a session at 10 msg/min
 // holds ~43k markers within the 3-day TTL, so every message stalled the whole gateway (HTTP, websocket,
@@ -133,7 +133,7 @@ export class MappingStore {
     return `seenb:s${shard}`;
   }
 
-  // Chat mappings are sharded for the same reason the dedup markers are: the host re-measures its 50 MiB
+  // Chat mappings are sharded for the same reason the dedup markers are: the host (before 0.26.0) re-measures its 50 MiB
   // quota on EVERY `set` by readdir-ing the plugin's data directory and stat-ing every key, synchronously,
   // on the gateway's own event loop. This store writes THREE keys per chat (forward, session-scoped
   // reverse, unscoped reverse) and prunes none of them, because a mapping IS the link between a WhatsApp

@@ -7,6 +7,13 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.12] - 2026-10-28
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.26.0.
+- Document the `503` with `Retry-After: 5` that OpenWA 0.26.0 answers `send-sms` with while it restores plugins after startup.
+
 ## [0.3.11] - 2026-10-15
 
 ### Changed

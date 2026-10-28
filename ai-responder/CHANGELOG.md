@@ -8,6 +8,13 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-28
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.26.0.
+- Document that a per-session override that points `apiBaseUrl` at another origin must also set `apiKey`, which OpenWA 0.26.0 no longer inherits.
+
 ## [0.1.1] - 2026-10-15
 
 ### Changed

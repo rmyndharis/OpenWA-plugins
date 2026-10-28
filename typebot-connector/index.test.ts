@@ -59,6 +59,34 @@ test('message:received hook resolves synchronously (claiming an in-scope chat) w
   assert.deepEqual(await registered!.handler(populated), { continue: false });
 });
 
+test('a message delivered already deleted starts no Typebot turn and is not claimed', async () => {
+  let registered: { event: string; handler: HookHandler; priority?: number } | undefined;
+  const calls: string[] = [];
+  const ctx = {
+    config: { publicId: 'bot', apiHost: 'https://typebot.io' },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    storage: { get: async () => null, set: async () => {}, delete: async () => {}, list: async () => [] },
+    net: { fetch: async (url: string) => { calls.push(url); return { ok: true, status: 200, headers: {}, body: '{}' }; } },
+    conversations: { send: async () => {} },
+    registerHook: (event: string, handler: HookHandler, priority?: number) => void (registered = { event, handler, priority }),
+  } as unknown as PluginContext;
+  await new Plugin().onEnable(ctx);
+  const fire = (type: string, body: string) => registered!.handler({
+    event: 'message:received', sessionId: 'sess', source: 'Engine', timestamp: new Date(),
+    data: { id: `m-${type}`, from: 'x', to: 'y', chatId: 'c@c.us', body, type, timestamp: 0, fromMe: false, isGroup: false },
+  } as unknown as HookContext);
+
+  // Host 0.26.0 hands the hook an empty 'revoked' placeholder for it.
+  assert.deepEqual(await fire('revoked', ''), { continue: true });
+  await new Promise(r => setImmediate(r));
+  assert.deepEqual(calls, [], 'no call reaches Typebot for a deleted message');
+
+  // Guard rail: a real message from the same chat still claims and reaches Typebot.
+  assert.deepEqual(await fire('chat', 'hi'), { continue: false });
+  await new Promise(r => setImmediate(r));
+  assert.ok(calls.length > 0, 'the guard is on the type, not a broken fixture');
+});
+
 // ── Co-installation: claim + priority (PLUGIN-STANDARD.md) ─────────────────────────────────────────
 
 // Minimal ctx builder for the tests below — the two tests above build their own inline ctx per case (a

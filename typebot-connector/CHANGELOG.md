@@ -6,6 +6,17 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-10-28
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.26.0.
+- Document that a per-session override that points `apiHost` or `mediaHost` at another origin must also set `apiToken`, which OpenWA 0.26.0 no longer inherits.
+
+### Fixed
+
+- Skip a message the host delivers already deleted instead of starting or advancing a flow with an empty answer.
+
 ## [0.3.3] - 2026-10-15
 
 ### Changed

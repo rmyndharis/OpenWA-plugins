@@ -344,6 +344,35 @@ test('a channel or broadcast post never draws an away reply', async (t) => {
   assert.deepEqual(replies, ['628123456789@c.us']);
 });
 
+test('a message delivered already deleted draws no away reply, an empty image still does', async (t) => {
+  // Host 0.26.0 hands the hook an empty 'revoked' placeholder for a message that arrives deleted. There is
+  // nothing to answer, so the plugin neither replies nor claims it. A caption-less image has an empty body
+  // too and must still draw the away message, so the gate is on the type.
+  t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  const replies: string[] = [];
+  let handler: ((hook: unknown) => Promise<{ continue: boolean }>) | undefined;
+  const ctx = makeCtx({
+    config: closedNowConfig,
+    registerHook: (_e, h) => { handler = h as (hook: unknown) => Promise<{ continue: boolean }>; },
+    reply: async (_s: string, chatId: string) => { replies.push(chatId); return { messageId: 'x', timestamp: 0 }; },
+  });
+  const { default: AfterHours } = await import('./index.ts');
+  await new AfterHours().onEnable(ctx as never);
+
+  const fire = (chatId: string, type: string, body: string) =>
+    handler!({
+      source: 'Engine', sessionId: 's1', timestamp: new Date(),
+      data: { id: `m-${chatId}`, chatId, body, type, fromMe: false, isGroup: false },
+    });
+
+  assert.deepEqual(await fire('628111111111@c.us', 'revoked', ''), { continue: true }, 'a tombstone is not claimed');
+  assert.deepEqual(replies, [], 'nothing is sent for a deleted message');
+  // The cooldown slot was not spent either: the same chat is answered when it writes for real.
+  assert.deepEqual(await fire('628111111111@c.us', 'text', 'halo'), { continue: false });
+  assert.deepEqual(await fire('628222222222@c.us', 'image', ''), { continue: false }, 'a caption-less image is answered');
+  assert.deepEqual(replies, ['628111111111@c.us', '628222222222@c.us']);
+});
+
 // From OpenWA 0.23.6 a Baileys session delivers the messages WhatsApp queued during a disconnect once
 // it reconnects, each carrying its original send time in `timestamp` (unix seconds). Fires one message
 // on a fresh plugin with the clock pinned to `nowMs` and returns how many away replies went out. Epoch

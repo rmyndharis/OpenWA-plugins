@@ -105,6 +105,10 @@ export default class AfterHours implements IPlugin {
     if (hook.source !== 'Engine' || !hook.sessionId) return false;
     const m = (hook.data ?? {}) as Partial<IncomingMessage>;
     if (m.fromMe || typeof m.body !== 'string' || !m.chatId || !m.id) return false;
+    // From host 0.26.0 a message delivered already deleted reaches the hook as an empty 'revoked'
+    // placeholder: there is nothing left to answer. A caption-less image or sticker is empty too and does
+    // still draw the away message, so this is keyed on the type, not on an empty body.
+    if (m.type === 'revoked') return false;
 
     // Re-parse per event so a per-session config override (resolved by the host for this hook fire) is
     // honored — a snapshot cached at enable would ignore overrides set via the dashboard after enable.
