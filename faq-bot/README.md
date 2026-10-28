@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `faq-bot` |
-| **Version** | 0.2.14 |
-| **Released** | 2026-10-15 |
+| **Version** | 0.2.15 |
+| **Released** | 2026-10-28 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.6.1 (tested 0.25.0) |
+| **Requires OpenWA** | ≥ 0.6.1 (tested 0.26.0) |
 | **Keywords** | faq, auto-reply, chatbot, support, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/faq-bot](https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot) |
 <!-- END DETAILS -->
@@ -85,7 +85,7 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 
 ## Compatibility
 
-Checked against the OpenWA v0.25.0 worker runtime with isolated services. Rule and fallback replies claim their message before delivery completes, so a slow send cannot activate another responder. A failed send is logged, releases its cooldown slot and retains the claim on that message. Pending sends are best-effort and may be interrupted when the worker stops.
+Checked against the OpenWA v0.26.0 worker runtime with isolated services. Rule and fallback replies claim their message before delivery completes, so a slow send cannot activate another responder. A failed send is logged, releases its cooldown slot and retains the claim on that message. Pending sends are best-effort and may be interrupted when the worker stops.
 
 Targets OpenWA **≥ 0.6.1** (sandboxed plugin runtime). Live config edits (`PUT …/config`) apply
 immediately on builds that forward `onConfigChange` to sandboxed plugins (the #430 follow-ups);

@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `ai-responder` |
-| **Version** | 0.1.1 |
-| **Released** | 2026-10-15 |
+| **Version** | 0.1.2 |
+| **Released** | 2026-10-28 |
 | **Status** | beta |
 | **Author** | Abhinav Raj |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.0 (tested 0.25.0) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.26.0) |
 | **Keywords** | ai, openai, llm, auto-reply, chatbot, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/ai-responder](https://github.com/rmyndharis/OpenWA-plugins/tree/main/ai-responder) |
 <!-- END DETAILS -->
@@ -130,7 +130,7 @@ calls are already open.
 
 ## Compatibility
 
-Checked against the OpenWA v0.25.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
+Checked against the OpenWA v0.26.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
 
 Targets OpenWA **≥ 0.8.0**, which admits the configured `apiBaseUrl` host through
 `net.allowConfigHosts`. Status is beta: it has not yet been smoke-tested on a live gateway.
@@ -175,6 +175,10 @@ takes effect on the next inbound message (config is re-read per event). For exam
 use different providers, models and system prompts. A per-session https `apiBaseUrl` host is admitted
 through `net.allowConfigHosts` like the base one. Rate-limit counters are kept per session and per
 chat, and each session's limits come from its own resolved config.
+
+**Host overrides and the API key.** From OpenWA 0.26.0 a per-session override that points
+`apiBaseUrl` at another origin than the base config does not inherit the stored `apiKey`; set `apiKey`
+in that override too. Without it the plugin skips the message and logs that the key is required.
 
 ## Security
 

@@ -8,6 +8,14 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.3.12] - 2026-10-28
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.26.0.
+- Document that a per-session override that points `libretranslateUrl` at another origin must also set `libretranslateApiKey`, which OpenWA 0.26.0 no longer inherits.
+- Correct the multi-backend advice: OpenWA installs a plugin once per gateway, so there is no instance per session.
+
 ## [1.3.11] - 2026-10-15
 
 ### Changed

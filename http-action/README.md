@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `http-action` |
-| **Version** | 0.2.12 |
-| **Released** | 2026-10-15 |
+| **Version** | 0.2.13 |
+| **Released** | 2026-10-28 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.0 (tested 0.25.0) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.26.0) |
 | **Keywords** | api, rest, automation, connector, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/http-action](https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action) |
 <!-- END DETAILS -->
@@ -106,7 +106,7 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 
 ## Compatibility
 
-Checked against the OpenWA v0.25.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
+Checked against the OpenWA v0.26.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
 
 Targets OpenWA **≥ 0.8.0**, the release that introduced both capabilities it relies on
 (`net.allowConfigHosts` and `conversation:send`). Live config edits apply on the next inbound message
@@ -135,6 +135,11 @@ every `POST`.
 the next inbound message (config is re-read per event). For example, two sessions can target different
 API endpoints with different action sets. The per-session `baseUrl` is auto-added to the outbound
 allowlist via `allowConfigHosts`.
+
+**Host overrides and the auth token.** From OpenWA 0.26.0 a per-session override that points
+`baseUrl` at another origin than the base config does not inherit the stored `authToken`; set it in
+that override too. With an `authType` that needs a token, the plugin otherwise skips the message and
+logs the invalid config.
 
 ## Security
 

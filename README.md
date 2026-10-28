@@ -35,17 +35,17 @@ This repository provides:
 <!-- BEGIN PLUGIN CATALOG -->
 | Plugin | Description | Version | Status |
 | ------ | ----------- | ------- | ------ |
-| [`after-hours`](./after-hours) | Auto-replies with a configurable away/closing message to messages received outside business hours. | 0.2.10 | stable |
-| [`ai-responder`](./ai-responder) | Auto-replies to inbound WhatsApp messages with an OpenAI-compatible Chat Completions API. Single-turn, rate-limited per chat and per session, and last in the responder chain. | 0.1.1 | beta |
-| [`chat-flow`](./chat-flow) | Interactive, stateful auto-reply: a trigger word starts a greeting + numbered menu, replies traverse a configurable menu tree, and per-chat state expires after 15 minutes. | 1.1.12 | stable |
-| [`chatwoot-adapter`](./chatwoot-adapter) | Two-way sync between a WhatsApp session and a Chatwoot inbox: relays WhatsApp messages (1:1 and groups, with media) into Chatwoot as an API-channel inbox, sends agent replies back to WhatsApp, and hands a chat over to a human agent — silencing other OpenWA bots — when an agent takes it in Chatwoot. First consumer of the OpenWA Integration SDK v1; runs sandboxed in the plugin worker. | 0.9.11 | stable |
-| [`faq-bot`](./faq-bot) | Auto-replies to inbound WhatsApp messages from configurable FAQ keyword/regex rules. | 0.2.14 | stable |
-| [`group-translate`](./group-translate) | Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled. | 1.3.11 | stable |
-| [`gsheets-logger`](./gsheets-logger) | Logs WhatsApp message events to a Google Sheet via a service account. | 0.3.13 | stable |
-| [`http-action`](./http-action) | Triggers safe REST API requests from WhatsApp commands and renders JSON responses back to chat. | 0.2.12 | stable |
-| [`supabase-otp-hook`](./supabase-otp-hook) | Deliver Supabase Auth phone OTPs over WhatsApp. | 0.3.11 | beta |
-| [`typebot-connector`](./typebot-connector) | Runs a Typebot flow as the brain of a WhatsApp bot: inbound messages drive a Typebot chat session via the live Chat API, and the bot's replies — text, media, and numbered-choice inputs — are sent back to WhatsApp. Auto-starts every chat, handles file-upload steps, and resets when the flow ends or after an idle timeout. Runs sandboxed in the plugin worker; no public URL or webhook required. | 0.3.3 | stable |
-| [`voice-transcription`](./voice-transcription) | Transcribes inbound WhatsApp voice notes to text via an OpenAI-compatible speech-to-text backend (self-hosted Speaches/faster-whisper or hosted Groq/OpenAI) and delivers a `message.transcription` event to your webhook — so bots and AI can read and reply to audio. Off the message-delivery path; disabled until enabled. | 1.3.2 | beta |
+| [`after-hours`](./after-hours) | Auto-replies with a configurable away/closing message to messages received outside business hours. | 0.2.11 | stable |
+| [`ai-responder`](./ai-responder) | Auto-replies to inbound WhatsApp messages with an OpenAI-compatible Chat Completions API. Single-turn, rate-limited per chat and per session, and last in the responder chain. | 0.1.2 | beta |
+| [`chat-flow`](./chat-flow) | Interactive, stateful auto-reply: a trigger word starts a greeting + numbered menu, replies traverse a configurable menu tree, and per-chat state expires after 15 minutes. | 1.1.13 | stable |
+| [`chatwoot-adapter`](./chatwoot-adapter) | Two-way sync between a WhatsApp session and a Chatwoot inbox: relays WhatsApp messages (1:1 and groups, with media) into Chatwoot as an API-channel inbox, sends agent replies back to WhatsApp, and hands a chat over to a human agent — silencing other OpenWA bots — when an agent takes it in Chatwoot. First consumer of the OpenWA Integration SDK v1; runs sandboxed in the plugin worker. | 0.9.12 | stable |
+| [`faq-bot`](./faq-bot) | Auto-replies to inbound WhatsApp messages from configurable FAQ keyword/regex rules. | 0.2.15 | stable |
+| [`group-translate`](./group-translate) | Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled. | 1.3.12 | stable |
+| [`gsheets-logger`](./gsheets-logger) | Logs WhatsApp message events to a Google Sheet via a service account. | 0.3.14 | stable |
+| [`http-action`](./http-action) | Triggers safe REST API requests from WhatsApp commands and renders JSON responses back to chat. | 0.2.13 | stable |
+| [`supabase-otp-hook`](./supabase-otp-hook) | Deliver Supabase Auth phone OTPs over WhatsApp. | 0.3.12 | beta |
+| [`typebot-connector`](./typebot-connector) | Runs a Typebot flow as the brain of a WhatsApp bot: inbound messages drive a Typebot chat session via the live Chat API, and the bot's replies — text, media, and numbered-choice inputs — are sent back to WhatsApp. Auto-starts every chat, handles file-upload steps, and resets when the flow ends or after an idle timeout. Runs sandboxed in the plugin worker; no public URL or webhook required. | 0.3.4 | stable |
+| [`voice-transcription`](./voice-transcription) | Transcribes inbound WhatsApp voice notes to text via an OpenAI-compatible speech-to-text backend (self-hosted Speaches/faster-whisper or hosted Groq/OpenAI) and delivers a `message.transcription` event to your webhook — so bots and AI can read and reply to audio. Off the message-delivery path; disabled until enabled. | 1.3.3 | beta |
 <!-- END PLUGIN CATALOG -->
 
 The table above is generated from each plugin's `manifest.json` + `CHANGELOG.md` by `npm run catalog`
@@ -93,7 +93,7 @@ curl -X POST "https://your-openwa-host/api/plugins/install" \
 
 Installing from a URL instead of an upload works the same way (`POST /api/plugins/install-url` with `{"url": ...}`). On a production host (OpenWA ≥ 0.20.0, where `NODE_ENV=production`), a URL install additionally requires a `#sha256=<64 hex>` integrity pin on the URL: catalog entries already carry it, and for a hand-pasted release URL the digest is the SHA-256 printed in that plugin's GitHub Release notes (`PLUGIN_INSTALL_REQUIRE_PIN=false` opts out).
 
-**2. Configure it** (secrets are masked on read and preserved on write):
+**2. Configure it** (secrets are masked on read and preserved on write; from OpenWA 0.26.0 sending `null` for one removes it):
 
 ```bash
 curl -X PUT "https://your-openwa-host/api/plugins/gsheets-logger/config" \
@@ -253,7 +253,7 @@ Also available: `ctx.config`, `ctx.pluginId`, `ctx.registerHook`.
 - **Package limits:** `.zip` ≤ 5 MB compressed, ≤ 200 files, ≤ 20 MB uncompressed. Bundle your dependencies — there is no `npm install` at install time.
 - **No published SDK package.** Vendor the OpenWA types (see [`types/openwa.d.ts`](./types/openwa.d.ts)); they are the de-facto contract.
 - **Sandboxed worker.** Since OpenWA v0.6.0 each plugin runs in its own worker thread; capabilities and outbound HTTP are host-gated (`ctx.net.fetch` is SSRF-guarded; every capability is checked against the declared `permissions`). The worker still has Node APIs within its thread, so install only plugins you trust.
-- **Version floors are enforced on OpenWA v0.25.0.** The host rejects a malformed `minOpenWAVersion` or one newer than itself at install and boot load. Record the host version and test scope in the plugin's README.
+- **Version floors are enforced since OpenWA v0.24.0.** The host rejects a malformed `minOpenWAVersion` or one newer than itself at install and boot load. Record the host version and test scope in the plugin's README.
 
 ## Authoring a plugin
 
@@ -290,9 +290,9 @@ OpenWA-plugins/
 
 ## Compatibility
 
-All 11 plugins are checked against OpenWA **v0.25.0** using its package parser, manifest validators and worker runtime with isolated service doubles. Verification covers lifecycle calls, declared hooks, representative capability calls and per-session configuration where supported. Live WhatsApp sessions, provider credentials and dashboard rendering are outside that check.
+All 11 plugins are checked against OpenWA **v0.26.0** using its package parser, manifest validators and worker runtime with isolated service doubles. Verification covers lifecycle calls, declared hooks, representative capability calls and per-session configuration where supported. Live WhatsApp sessions, provider credentials and dashboard rendering are outside that check.
 
-Each plugin declares its `minOpenWAVersion`, which remains its supported lower bound. OpenWA v0.25.0 enforces this floor at install and boot load; `testedOpenWAVersion` records the worker verification baseline and does not promise compatibility with every host configuration.
+Each plugin declares its `minOpenWAVersion`, which remains its supported lower bound. OpenWA enforces this floor at install and boot load since v0.24.0; `testedOpenWAVersion` records the worker verification baseline and does not promise compatibility with every host configuration.
 
 ## Contributing
 

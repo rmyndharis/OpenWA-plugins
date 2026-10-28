@@ -127,7 +127,7 @@ test('markSeen round-trips through hasSeen, and scope+kind isolate markers', asy
   assert.equal(await store.hasSeen('wa', 'm2', 'sess'), false);
 });
 
-// The property the sharding exists for. The host re-stats every storage key on EVERY write, so a key per
+// The property the sharding exists for. Before host 0.26.0 the host re-stats every storage key on EVERY write, so a key per
 // message made each inbound message cost O(total markers) syscalls on the gateway's event loop.
 test('marker storage stays bounded at SEEN_SHARDS keys no matter how many messages are seen', async () => {
   const storage = fakeStorage();

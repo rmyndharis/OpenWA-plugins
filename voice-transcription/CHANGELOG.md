@@ -6,6 +6,14 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-10-28
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.26.0.
+- Document that a per-session override that points `sttBaseUrl` or `deliveryWebhookUrl` at another origin must also set `sttApiKey` and `deliverySecret`, which OpenWA 0.26.0 no longer inherits.
+- Correct the multi-backend advice: OpenWA installs a plugin once per gateway, so there is no instance per session.
+
 ## [1.3.2] - 2026-10-15
 
 ### Changed

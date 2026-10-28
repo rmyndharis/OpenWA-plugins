@@ -67,7 +67,7 @@ export default class TypebotConnector implements IPlugin {
         const client = new TypebotClient(ctx.net.fetch.bind(ctx.net), cfg);
         // Sweep rows left by contacts who walked away mid-flow. A finished flow clears its own row, so
         // these are the only ones that would otherwise accumulate for the life of the install — and the
-        // host stats every stored key on every write, so they tax each later turn. Floated: cleanup must
+        // host (before 0.26.0) stats every stored key on every write, so they tax each later turn. Floated: cleanup must
         // never delay a reply, and it is deliberately driven by traffic rather than a timer so a disabled
         // plugin leaves nothing running.
         const now = Date.now();
@@ -82,7 +82,7 @@ export default class TypebotConnector implements IPlugin {
             .then(n => n && ctx.logger.log(`typebot-connector: pruned ${n} abandoned session(s)`))
             .catch(e => ctx.logger.error('typebot-connector: session prune failed', e));
           // Also reclaim rows belonging to sessions that have gone silent entirely — they are never
-          // listed by the scoped pass above, and every stored key is stat-ed on every write.
+          // listed by the scoped pass above, and, before host 0.26.0, every stored key is stat-ed on every write.
           void store
             .pruneOrphans(now, ORPHAN_IDLE_MS)
             .then(n => n && ctx.logger.log(`typebot-connector: pruned ${n} orphaned session row(s)`))

@@ -8,6 +8,16 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.11] - 2026-10-28
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.26.0.
+
+### Fixed
+
+- Skip a message the host delivers already deleted instead of answering it with the away message.
+
 ## [0.2.10] - 2026-10-15
 
 ### Changed
