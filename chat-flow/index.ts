@@ -116,6 +116,7 @@ export default class ChatFlow implements IPlugin {
     }
 
     if (m.isGroup && !liveCfg.respondInGroups) return { continue: true };
+    if (m.isGroup && !m.author) return { continue: true };
     // `isGroup` is a boolean over a five-way discriminator, so it cannot see a WhatsApp Channel: a
     // `@newsletter` post arrives flagged as a non-group chat and reads exactly like a 1:1 message.
     // Nothing filters it upstream (the host diverts only status broadcasts), so a channel this account

@@ -28,6 +28,33 @@ test('registers at the chat-flow responder priority', async () => {
   assert.equal(priority, 75);
 });
 
+test('a group message without an author cannot use a shared menu position', async () => {
+  let handler!: (hook: unknown) => Promise<{ continue: boolean }>;
+  const ctx = makeCtx({
+    config: { greeting: 'menu', respondInGroups: true, options: [{ key: '1', text: 'A' }] },
+    registerHook: (_event, hook) => { handler = hook as typeof handler; },
+  });
+  let reads = 0, replies = 0;
+  ctx.storage.get = async () => { reads++; return null; };
+  ctx.messages.reply = async () => { replies++; return { messageId: 'reply', timestamp: 0 }; };
+  const ChatFlow = (await import('./index.ts')).default;
+  const plugin = new ChatFlow();
+  await plugin.onEnable(ctx as never);
+  const hook = { source: 'Engine', sessionId: 's', data: {
+    id: 'menu', chatId: 'group@g.us', body: 'hello', type: 'text', fromMe: false, isGroup: true,
+  } };
+  try {
+    assert.equal((await handler(hook)).continue, true);
+    assert.equal(reads, 0);
+    assert.equal(replies, 0);
+    assert.equal((await handler({ ...hook, data: { ...hook.data, author: '123@c.us' } })).continue, false);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(replies, 1);
+  } finally {
+    await plugin.onDisable();
+  }
+});
+
 test('parseConfig requires greeting and at least one option', () => {
   assert.throws(() => parseConfig({ options: [{ key: '1', text: 'a' }] }), /greeting is required/);
   assert.throws(() => parseConfig({ greeting: 'hi' }), /at least one menu option/);

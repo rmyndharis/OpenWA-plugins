@@ -64,12 +64,15 @@ test('empty trigger: any message starts the flow', async () => {
 });
 
 test('selecting a leaf option replies and ends the flow', async () => {
-  const { ctx, storage, replies } = makeCtx();
+  const { ctx, replies } = makeCtx();
   await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'hi', 'm1');
   const r = await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', '1', 'm2');
   assert.equal(r, true);
   assert.equal(replies.at(-1)!.text, 'hosting https://abc.com');
-  assert.equal(storage.has(key), false); // leaf → state cleared
+  assert.equal(await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', '2', 'm3'), false);
+  assert.equal(replies.length, 2, 'another choice does not continue the completed menu');
+  await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'hi', 'm4');
+  assert.equal(replies.at(-1)!.text, abc.greeting);
 });
 
 test('selecting a non-leaf saves path, then its child leaf ends the flow', async () => {
@@ -81,7 +84,8 @@ test('selecting a non-leaf saves path, then its child leaf ends the flow', async
   const r = await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', '1', 'm3');
   assert.equal(r, true);
   assert.equal(replies.at(-1)!.text, 'support ticket created');
-  assert.equal(storage.has('state__xyz__user1'), false);
+  await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'new message', 'm4');
+  assert.equal(replies.at(-1)!.text, xyz.greeting, 'the empty trigger opens a fresh menu');
 });
 
 test('invalid option replies with fallback and retains state', async () => {
@@ -97,7 +101,7 @@ test('an unmatched input is answered a bounded number of times, then the flow en
   // Every miss draws an "Invalid option" reply, so without a bound the bot answers a contact who has
   // stopped following the menu on every message, forever, and two auto-repliers facing each other
   // never stop. The bound is a miss budget, not a frozen clock.
-  const { ctx, storage, replies } = makeCtx();
+  const { ctx, replies } = makeCtx();
   await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'hi', 'm1');
   const afterGreeting = replies.length;
 
@@ -107,7 +111,9 @@ test('an unmatched input is answered a bounded number of times, then the flow en
   }
   assert.equal(replies.length - afterGreeting, 2, 'answers a couple of misses, then stops');
   assert.equal(handled, false, 'the final miss is not claimed, so a sibling plugin may answer');
-  assert.equal(storage.has(key), false, 'the flow is dropped, so the next trigger starts clean');
+  assert.equal(await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', '1', 'after'), false);
+  await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'hi', 'restart');
+  assert.equal(replies.at(-1)!.text, abc.greeting, 'the next trigger starts clean');
 });
 
 test('a valid answer to the bot\'s own re-prompt is still honoured', async () => {
@@ -196,8 +202,9 @@ test('a stored path landing on a now-leaf node ends the flow instead of looping 
   storage.set('state__xyz__user1', { path: ['1'], lastActive: Date.now() });
   const r = await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'anything', 'm1');
   assert.equal(r, false);
-  assert.equal(storage.has('state__xyz__user1'), false);
   assert.equal(replies.length, 0);
+  assert.equal(await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'new', 'm2'), true);
+  assert.equal(replies.at(-1)!.text, xyz.greeting);
 });
 
 test('a prototype-property name as input is an invalid option, never a false match', async () => {
@@ -342,4 +349,105 @@ test('fast typing within the skew tolerance is still live', async t => {
   const r = await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', '1', 'm1', undefined, sentAt);
   assert.equal(r, true);
   assert.deepEqual(replies.map(x => x.text), ['hosting https://abc.com']);
+});
+
+test('a duplicate choice cannot advance into the next menu, including concurrent copies', async () => {
+  const { ctx, replies } = makeCtx();
+  await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'start', 'start');
+  await Promise.all([
+    FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', '2', 'choice'),
+    FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', '2', 'choice'),
+  ]);
+  assert.deepEqual(replies.map(r => r.text), [xyz.greeting, 'support https://xyz.com/support']);
+});
+
+test('a duplicate trigger cannot restart a menu after a later choice', async () => {
+  const { ctx, replies, storage } = makeCtx();
+  const flow = { ...xyz, trigger: 'hi' };
+  await FlowEngine.processMessage(ctx, flow, 'xyz', 'user1', 'hi', 'start');
+  await FlowEngine.processMessage(ctx, flow, 'xyz', 'user1', '2', 'choice');
+  assert.equal(await FlowEngine.processMessage(ctx, flow, 'xyz', 'user1', 'hi', 'start'), true);
+  assert.deepEqual((storage.get('state__xyz__user1') as { path: string[] }).path, ['2']);
+  assert.equal(replies.length, 2);
+});
+
+test('a terminal choice stays consumed through flow completion and a later restart', async () => {
+  const { ctx, replies, storage } = makeCtx();
+  await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'start', 'start');
+  await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', '1', 'leaf');
+  await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', '1', 'leaf');
+  assert.equal(replies.length, 2, 'a duplicate terminal input must not open an empty-trigger flow');
+  await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'new', 'restart');
+  await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', '1', 'leaf');
+  assert.equal(replies.length, 3);
+  assert.deepEqual((storage.get('state__xyz__user1') as { path: string[] }).path, []);
+});
+
+test('legacy states acquire consumed IDs without changing actor or session isolation', async () => {
+  const { ctx, storage, replies } = makeCtx();
+  const stateKey = 'state__s__grp@g.us|alice';
+  storage.set(stateKey, { path: [], lastActive: Date.now() });
+  await FlowEngine.processMessage(ctx, xyz, 's', 'grp@g.us', '2', 'same', 'alice');
+  await FlowEngine.processMessage(ctx, xyz, 's', 'grp@g.us', '2', 'same', 'alice');
+  await FlowEngine.processMessage(ctx, xyz, 's', 'grp@g.us', '2', 'same', 'bob');
+  await FlowEngine.processMessage(ctx, xyz, 's2', 'grp@g.us', '2', 'same', 'alice');
+  assert.equal(replies.length, 3);
+  assert.deepEqual((storage.get(stateKey) as { path: string[] }).path, ['2']);
+});
+
+test('duplicate misses do not spend the budget and a final miss stays unclaimed after restart', async () => {
+  const { ctx, replies } = makeCtx();
+  await FlowEngine.processMessage(ctx, abc, 's', 'user1', 'hi', 'start');
+  for (let i = 0; i < 5; i++) await FlowEngine.processMessage(ctx, abc, 's', 'user1', 'bad', 'miss');
+  assert.equal(replies.length, 2);
+  await FlowEngine.processMessage(ctx, abc, 's', 'user1', 'bad', 'miss2');
+  assert.equal(await FlowEngine.processMessage(ctx, abc, 's', 'user1', 'bad', 'miss3'), false);
+  await FlowEngine.processMessage(ctx, abc, 's', 'user1', 'hi', 'restart');
+  assert.equal(await FlowEngine.processMessage(ctx, abc, 's', 'user1', 'bad', 'miss3'), false);
+  assert.equal(replies.length, 4);
+});
+
+test('a failed terminal write preserves the previous path and cannot send the leaf', async () => {
+  const { ctx, replies, storage } = makeCtx();
+  await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'hi', 'start');
+  const before = structuredClone(storage.get(key));
+  ctx.storage.set = async () => { throw new Error('quota'); };
+  await assert.rejects(FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', '1', 'leaf'), /quota/);
+  assert.deepEqual(storage.get(key), before);
+  assert.equal(replies.length, 1);
+});
+
+test('expired flow positions and sweeping keep consumed IDs until their own TTL', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1_800_000_000_000 });
+  const { ctx, replies, storage } = makeCtx();
+  await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'start', 'start');
+  t.mock.timers.tick(20 * 60_000);
+  await FlowEngine.sweepExpired(ctx);
+  await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'start', 'start');
+  assert.equal(replies.length, 1);
+  t.mock.timers.tick(3 * 24 * 60 * 60_000);
+  await FlowEngine.sweepExpired(ctx);
+  assert.equal(storage.has('state__xyz__user1'), false);
+  await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'start', 'start');
+  assert.equal(replies.length, 2);
+});
+
+test('sweeping a stale state cannot delete a transition queued behind its delete', async () => {
+  const { ctx, storage, replies } = makeCtx();
+  storage.set(key, { path: [], lastActive: Date.now() - 20 * 60_000 });
+  let deleting!: () => void;
+  let release!: () => void;
+  const waiting = new Promise<void>(resolve => { deleting = resolve; });
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const remove = ctx.storage.delete;
+  ctx.storage.delete = async stateKey => { deleting(); await gate; return remove(stateKey); };
+  const sweep = FlowEngine.sweepExpired(ctx);
+  await waiting;
+  const message = FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'hi', 'fresh');
+  release();
+  await Promise.all([sweep, message]);
+  await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'hi', 'fresh');
+  assert.deepEqual(replies.map(r => r.text), [abc.greeting]);
+  assert.equal(await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', '1', 'choice'), true);
+  assert.equal(replies.at(-1)!.text, 'hosting https://abc.com');
 });

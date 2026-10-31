@@ -14,6 +14,8 @@ export interface SessionFlow {
 export interface UserState {
   path: string[];
   lastActive: number;
+  completed?: boolean;
+  consumed?: Record<string, { t: number; handled: boolean }>;
   /**
    * CONSECUTIVE unmatched inputs at the current node, reset by any valid choice. Absent on a state
    * written before this field existed, which reads as 0.
@@ -27,7 +29,7 @@ export interface UserState {
 
 export class FlowEngine {
   private static readonly TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes state expiration
-  private static readonly MAX_REPROCESS = 1; // bound the invalid-path reset (no unbounded recursion)
+  private static readonly DEDUP_TTL_MS = 3 * 24 * 60 * 60 * 1000;
   /**
    * Consecutive misses before the flow is dropped, silently, and the contact has to re-trigger.
    *
@@ -73,14 +75,15 @@ export class FlowEngine {
     sentAt?: number,
   ): Promise<boolean> {
     const conversation = actor ? `${chatId}|${actor}` : chatId;
-    // The bounded re-process inside the body calls processLocked directly (bypassing this lock) so a
-    // conversation never waits on its own still-pending chain entry (self-deadlock). Store a settled
-    // tail so a rejection can't wedge the chain, and evict the key once the chain drains.
-    const lockKey = `${sessionId}__${conversation}`;
-    const prev = this.locks.get(lockKey) ?? Promise.resolve();
-    const run = prev.then(() =>
-      this.processLocked(context, flow, sessionId, chatId, conversation, messageBody, messageId, sentAt, 0),
+    const stateKey = `state__${sessionId}__${conversation}`.replace(/:/g, '_');
+    return this.withLock(stateKey, () =>
+      this.processLocked(context, flow, sessionId, chatId, stateKey, messageBody, messageId, sentAt),
     );
+  }
+
+  private static async withLock<T>(lockKey: string, work: () => Promise<T>): Promise<T> {
+    const prev = this.locks.get(lockKey) ?? Promise.resolve();
+    const run = prev.then(work);
     const tail = run.catch(() => {});
     this.locks.set(lockKey, tail);
     try {
@@ -90,23 +93,30 @@ export class FlowEngine {
     }
   }
 
-  /** Delete persisted flow states whose last activity is older than the TTL. Lazy per-key expiry only
-   *  runs when a conversation messages again, so an abandoned flow would otherwise linger forever; the
-   *  plugin calls this periodically. Returns the number of entries removed. */
+  private static consumed(state: UserState | null, now: number): NonNullable<UserState['consumed']> {
+    return Object.fromEntries(Object.entries(state?.consumed ?? {})
+      .filter(([, entry]) => entry && Number.isFinite(entry.t) && typeof entry.handled === 'boolean'
+        && now - entry.t < this.DEDUP_TTL_MS));
+  }
+
+  /** Expire abandoned positions without discarding unexpired consumed message IDs. */
   public static async sweepExpired(context: PluginContext): Promise<number> {
     const keys = (await context.storage.list('state__')).filter(k => k.startsWith('state__'));
     const expired = (s: UserState | null): boolean => !!s && Date.now() - s.lastActive > this.TIMEOUT_MS;
     let removed = 0;
     for (const k of keys) {
       if (!expired(await context.storage.get<UserState>(k))) continue;
-      // Re-read immediately before deleting: a message may have re-created fresh state for this key since
-      // the scan. Only delete if it is STILL expired, so a live flow isn't wiped.
-      // This narrows the check→delete race to a tiny window; a per-key lock would close it fully
-      // but isn't worth it for a 30-min GC of already-stale state that self-heals on the next message.
-      if (expired(await context.storage.get<UserState>(k))) {
-        await context.storage.delete(k);
-        removed++;
-      }
+      await this.withLock(k, async () => {
+        const state = await context.storage.get<UserState>(k);
+        if (!expired(state)) return;
+        const consumed = this.consumed(state, Date.now());
+        if (Object.keys(consumed).length) {
+          await context.storage.set(k, { path: [], lastActive: state!.lastActive, completed: true, consumed });
+        } else {
+          await context.storage.delete(k);
+          removed++;
+        }
+      });
     }
     return removed;
   }
@@ -128,29 +138,31 @@ export class FlowEngine {
     flow: SessionFlow,
     sessionId: string,
     chatId: string,
-    conversation: string,
+    stateKey: string,
     messageBody: string,
     messageId: string,
     sentAt: number | undefined,
-    depth = 0,
   ): Promise<boolean> {
     // Not the message body: this line runs for every inbound message, and the dashboard renders plugin
     // logs. The length is what a diagnostic actually uses — "did the engine see anything at all".
     context.logger.debug('[FlowEngine] Processing message', { sessionId, chatId, bodyLength: messageBody.length });
 
     const input = messageBody.trim();
-    const stateKey = `state__${sessionId}__${conversation}`.replace(/:/g, '_');
-    let state = await context.storage.get<UserState>(stateKey);
+    const stored = await context.storage.get<UserState>(stateKey);
+    const now = Date.now();
+    const consumed = this.consumed(stored, now);
+    if (Object.hasOwn(consumed, messageId)) return consumed[messageId].handled;
+    let state = stored && !stored.completed && now - stored.lastActive <= this.TIMEOUT_MS
+      ? { ...stored, path: [...stored.path] } : null;
+    const save = async (next: UserState | null, handled: boolean): Promise<void> => {
+      await context.storage.set(stateKey, {
+        ...(next ?? { path: [], lastActive: now, completed: true }),
+        consumed: { ...consumed, [messageId]: { t: now, handled } },
+      });
+    };
     // Never the state itself: `path` is the trail of options this contact picked, which is message
     // content by another name. A stored row can be malformed, so read its depth defensively.
     context.logger.debug('[FlowEngine] Loaded state', { stateKey, hasState: !!state, pathDepth: state?.path?.length ?? 0 });
-
-    // Check expiration
-    if (state && Date.now() - state.lastActive > this.TIMEOUT_MS) {
-      context.logger.debug('[FlowEngine] Flow state expired', { stateKey });
-      await context.storage.delete(stateKey);
-      state = null;
-    }
 
     // A message written more than LATE_AFTER_MS before the menu on screen, and delivered that late, was
     // never typed at that menu: a backlog from a disconnect. Matched here it would walk into sub-menus
@@ -159,6 +171,7 @@ export class FlowEngine {
     const at = sent.getTime() > 0 ? sent.getTime() : Date.now();
     if (state && Date.now() - at > this.LATE_AFTER_MS && state.lastActive - at > this.LATE_AFTER_MS) {
       context.logger.debug('[FlowEngine] Message sent before the current menu. Ignoring.', { stateKey });
+      await save(state, true);
       return true;
     }
 
@@ -166,10 +179,26 @@ export class FlowEngine {
     const isTriggerWord = trigger !== '' && input.toLowerCase() === trigger.toLowerCase();
     context.logger.debug('[FlowEngine] Trigger check', { trigger, isTriggerWord });
 
+    let currentNode: FlowNode = { text: flow.greeting, options: flow.options };
+    if (state && !isTriggerWord) {
+      for (const key of state.path) {
+        if (!currentNode.options || !Object.hasOwn(currentNode.options, key)) {
+          state = null;
+          break;
+        }
+        currentNode = currentNode.options[key];
+      }
+    }
+
     // If no active flow state, check if we should start one
     if (!state) {
       if (trigger !== '' && !isTriggerWord) {
         context.logger.debug('[FlowEngine] No active state and input does not match trigger. Ignoring.');
+        if (stored) {
+          if (Object.keys(consumed).length) {
+            await context.storage.set(stateKey, { path: [], lastActive: stored.lastActive, completed: true, consumed });
+          } else await context.storage.delete(stateKey);
+        }
         return false;
       }
       context.logger.debug('[FlowEngine] Starting new flow', { greeting: flow.greeting });
@@ -178,7 +207,7 @@ export class FlowEngine {
       // another first message and greets again: one outbound message per inbound message, uncapped.
       // The other order is self-healing, because state whose greeting never arrived answers the next
       // message with the fallback at the bottom of this method, which repeats the greeting text.
-      await context.storage.set(stateKey, { path: [], lastActive: Date.now() });
+      await save({ path: [], lastActive: now }, true);
       this.queueReply(context, sessionId, chatId, messageId, flow.greeting);
       return true;
     }
@@ -186,30 +215,9 @@ export class FlowEngine {
     // If trigger word is received while in flow, restart the flow
     if (isTriggerWord) {
       context.logger.debug('[FlowEngine] Trigger word received during active flow. Restarting flow.');
-      await context.storage.set(stateKey, { path: [], lastActive: Date.now() });
+      await save({ path: [], lastActive: now }, true);
       this.queueReply(context, sessionId, chatId, messageId, flow.greeting);
       return true;
-    }
-
-    // Traverse the configuration options according to the user's path
-    let currentNode: FlowNode | undefined = { text: flow.greeting, options: flow.options };
-
-    context.logger.debug('[FlowEngine] Traversing path', { pathDepth: state.path.length });
-    for (const key of state.path) {
-      if (currentNode && currentNode.options && Object.hasOwn(currentNode.options, key)) {
-        currentNode = currentNode.options[key];
-      } else {
-        // State is invalid (e.g. config changed under the user). Reset, then re-process — bounded.
-        context.logger.debug('[FlowEngine] State path invalid (config mismatch). Resetting state.');
-        await context.storage.delete(stateKey);
-        if (depth >= this.MAX_REPROCESS) {
-          context.logger.debug('[FlowEngine] Max reprocess depth reached; not recursing.', { depth });
-          return false;
-        }
-        // Recurse on the locked body, NOT processMessage — re-entering the lock would deadlock on this
-        // conversation's own still-pending chain entry.
-        return this.processLocked(context, flow, sessionId, chatId, conversation, messageBody, messageId, sentAt, depth + 1);
-      }
     }
 
     // Check if user input matches any option of the current node
@@ -232,10 +240,10 @@ export class FlowEngine {
       // menu they were shown a level up, where the same key usually names a different option.
       if (nextNode.options && Object.keys(nextNode.options).length > 0) {
         context.logger.debug('[FlowEngine] Next node has sub-options. Saving updated path.');
-        await context.storage.set(stateKey, state);
+        await save(state, true);
       } else {
         context.logger.debug('[FlowEngine] Leaf node reached. Clearing flow state.');
-        await context.storage.delete(stateKey);
+        await save(null, true);
       }
       this.queueReply(context, sessionId, chatId, messageId, nextNode.text);
       return true;
@@ -243,7 +251,7 @@ export class FlowEngine {
       // The resolved node is a leaf with no way forward (config changed under the user). End the flow
       // instead of looping "Invalid option" forever; the next trigger starts cleanly.
       context.logger.debug('[FlowEngine] Resolved node is a dead leaf (config changed). Ending flow.');
-      await context.storage.delete(stateKey);
+      await save(null, false);
       return false;
     } else {
       const misses = (state.misses ?? 0) + 1;
@@ -251,7 +259,7 @@ export class FlowEngine {
         // Budget spent: end the flow WITHOUT another reply. This is the bound on the runaway, so it
         // must not itself send, or two bots would still trade one message per flow forever.
         context.logger.debug('[FlowEngine] Miss budget spent. Ending flow silently.');
-        await context.storage.delete(stateKey);
+        await save(null, false);
         return false;
       }
       context.logger.debug('[FlowEngine] Input did not match any options. Replying with fallback.');
@@ -260,7 +268,7 @@ export class FlowEngine {
       // the store never counted is a miss that never expires the budget.
       state.misses = misses;
       state.lastActive = Date.now();
-      await context.storage.set(stateKey, state);
+      await save(state, true);
       this.queueReply(context, sessionId, chatId, messageId, invalidMsg);
       return true;
     }

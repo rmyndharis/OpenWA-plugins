@@ -8,6 +8,13 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.1.15] - 2026-10-31
+
+### Fixed
+
+- Deduplicate menu transitions across redelivery, completed flows and restarts.
+- Ignore group messages without a sender identity to preserve participant isolation.
+
 ## [1.1.14] - 2026-10-31
 
 ### Changed

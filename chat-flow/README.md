@@ -14,7 +14,7 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chat-flow` |
-| **Version** | 1.1.14 |
+| **Version** | 1.1.15 |
 | **Released** | 2026-10-31 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
@@ -33,13 +33,15 @@
   minutes of inactivity, and re-sending the trigger word restarts an active flow. An unmatched reply is
   answered with the menu again, up to three times in a row; after that the flow ends quietly rather than
   answering every message from someone who has stopped following it. Any valid choice resets that budget.
+- **Redelivery protection:** consumed message IDs persist for three days, including after a leaf ends
+  the flow or a trigger restarts it. A repeated message does not advance the menu or send another reply.
 - **Visual flow editor** — design the whole tree (add / remove / nest options) in a built-in editor
   (`configUi`), no JSON by hand required.
 - **Per-session config** — the flow is the resolved per-session `ctx.config`; the platform owns which
   numbers it runs for. Edits apply live via `onConfigChange`.
 - **Safe under config drift** — if the saved config changes while a user is mid-flow, the stale path is
   reset with bounded re-processing (never an unbounded loop).
-- **Least privilege** — declares `messages:send` and `storage:use` (flow position only); direct chats
+- **Least privilege:** declares `messages:send` and `storage:use` (flow position and consumed IDs); direct chats
   only unless `respondInGroups` is on. No network access at all.
 
 ## Flow configuration
@@ -146,11 +148,12 @@ interfere.
 
 ## Security
 
-Flow state lives in `ctx.storage`, keyed per `(session, chat)` and expiring after 15 minutes — no
-cross-chat leakage. The plugin makes no outbound network calls and declares only `messages:send` and
-`storage:use` — the latter covering that flow state, which holds a menu path and a timestamp, never
-message content. A stale stored path (after a config edit) is reset with bounded re-processing, so a
-hostile or looping config can never cause unbounded recursion.
+Flow state lives in `ctx.storage`, keyed per `(session, chat)`, or per participant in group mode. Menu
+positions expire after 15 minutes; consumed message IDs remain for three days and are stored atomically
+with each transition, including completion. The plugin makes no outbound network calls and declares
+only `messages:send` and `storage:use`. Storage contains menu paths, message IDs and timestamps, never
+message bodies. A stale stored path after a config edit resets without recursion. State is recorded
+before queuing a reply, so a failed delivery does not reverse the transition or retry its reply.
 
 ## Changelog
 
