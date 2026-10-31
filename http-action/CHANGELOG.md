@@ -5,6 +5,13 @@ and the top entry's version must match `manifest.json`.
 
 ## [Unreleased]
 
+## [0.2.15] - 2026-10-31
+
+### Fixed
+
+- Retry saved POST replies without repeating completed backend writes, and serialize duplicate deliveries.
+- Hold uncertain POST outcomes for operator confirmation and isolate saved replies from changed backend configuration.
+
 ## [0.2.14] - 2026-10-31
 
 ### Changed

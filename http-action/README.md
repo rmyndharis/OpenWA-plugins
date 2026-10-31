@@ -14,7 +14,7 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `http-action` |
-| **Version** | 0.2.14 |
+| **Version** | 0.2.15 |
 | **Released** | 2026-10-31 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
@@ -37,8 +37,8 @@
 - **Templated replies** — map the JSON response into a reply with `{{response.field}}`, plus separate
   `notFoundTemplate` and `errorTemplate`. Prototype keys are rejected and POST bodies are JSON-escaped.
 - **Direct-chat by default** — group chats are ignored unless `respondInGroups` is enabled.
-- **Reliable** — one request per message; idempotent across WhatsApp redelivery (storage-backed dedup),
-  per-chat cooldown, and an off-dispatch handler so a slow upstream never stalls the inbound hook.
+- **Reliable:** storage-backed redelivery protection, saved POST replies, per-chat cooldown, and an
+  off-dispatch handler so a slow upstream never stalls the inbound hook.
 
 ## Actions
 
@@ -152,12 +152,22 @@ logs the invalid config.
   `prototype`) are rejected in template paths; POST bodies are JSON-escaped and re-parsed before send;
   dangerous headers (hop-by-hop, `x-forwarded-*`) are blocked and CR/LF is rejected in rendered header
   values. Response bodies are capped at 256 KiB.
-- **Reliability.** Storage-backed idempotency (fail-closed check plus a marker written only after a
-  successful reply) so a redelivered message id never double-fires and a transient send failure retries;
-  in-memory per-chat cooldown (fail-open). The handler returns synchronously and floats the
+- **Reliability.** Same-message processing is serialized within the worker. A POST requires a stored
+  intent before dispatch; its rendered reply is saved separately from WhatsApp delivery. A failed send
+  retries that saved reply without another POST or cooldown delay. An unknown backend outcome, or a
+  changed backend, credential, action or chat, produces an operator-confirmation notice instead of
+  repeating the write or exposing a saved response. Pending records expire after three days; completed
+  markers age out on subsequent bucket writes. GET send retries perform a fresh lookup after cooldown.
+  The in-memory per-chat cooldown fails open. The handler returns synchronously and floats the
   fetch/render/send, so a slow upstream never stalls the inbound hook. It returns `{ continue: false }`
   for a message that matched an action, claiming it so a keyword bot or a flow does not answer the same
   command, and `{ continue: true }` for everything else.
+- **Backend idempotency.** Local storage cannot prove whether a timed-out request committed remotely,
+  and does not provide an exactly-once guarantee across storage loss, multiple workers or expired
+  records. When the backend supports idempotency keys, configure its documented header in
+  `request.headers`, for example `"Idempotency-Key": "{{session.id}}:{{message.id}}"`. The backend must
+  enforce that key. Pending records contain a rendered reply of at most 4,000 characters and a hashed
+  configuration identity, so protect plugin storage as application data.
 - **Secrets.** `authToken` is marked `secret` in `configSchema`, so the dashboard masks it and preserves
   the stored value on save. Per-action `request.headers` values are **not** masked: the host redacts
   config per schema field, and every action lives inside the single `actions` textarea, so marking that

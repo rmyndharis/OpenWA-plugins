@@ -1,11 +1,7 @@
 // Reliability gates for HTTP Action Bot: idempotency (dedup) + per-chat cooldown + storage pruning.
 //
-// Dedup is split into a read-only presence CHECK (hasSeen, fail-closed) and a MARK written only AFTER a
-// successful reply (markSeen) — mirroring chatwoot's hasSeen/markSeen split, so a transient send failure
-// leaves the message un-marked and a WhatsApp redelivery retries instead of being silently dropped. The
-// marker is an object {t} and the dup decision is presence-based, so it does not hinge on the storage
-// bridge preserving a bare number type. Cooldown is in-memory and FAIL-OPEN (it never throws, so it can
-// never wrongly block). Pure modulo the injected storage.
+// Delivered markers are separate from POST intents and completed replies. A failed WhatsApp send can
+// retry the saved reply without repeating a backend write. Cooldown remains in-memory and fail-open.
 //
 // Markers live in a FIXED number of sharded buckets, not one storage key per answered message. Before host 0.26.0 the host
 // re-measures its 50 MiB per-plugin quota on EVERY `set` by readdir-ing the plugin's data directory and
@@ -56,8 +52,21 @@ export function shardOf(id: string): number {
   return (h >>> 0) % DEDUP_SHARDS;
 }
 
-/** One bucket: logical marker id -> the wall-clock ms it was marked at. */
-type DedupBucket = Record<string, number>;
+export interface PostCompletion {
+  t: number;
+  fingerprint: string;
+  chatId: string;
+  reply?: string; // absent while the backend outcome is unknown
+}
+
+type DedupBucket = Record<string, number | PostCompletion>;
+
+function isPostCompletion(value: unknown): value is PostCompletion {
+  if (!value || typeof value !== 'object') return false;
+  const p = value as PostCompletion;
+  return Number.isFinite(p.t) && typeof p.fingerprint === 'string' && typeof p.chatId === 'string'
+    && (p.reply === undefined || typeof p.reply === 'string');
+}
 
 // Serializes the read-modify-write in markSeen, per bucket. A bucket holds many markers and every await
 // inside it is an IPC round-trip to the host, so two commands that hash together would interleave their
@@ -80,7 +89,7 @@ export async function hasSeen(
   try {
     const id = markerId(sessionId, msgId);
     const bucket = await storage.get<DedupBucket>(bucketKey(shardOf(id)));
-    if (bucket && bucket[id] !== undefined) return true;
+    if (bucket && bucket[id] !== undefined && !isPostCompletion(bucket[id])) return true;
     // Upgrade path: a marker written before bucketing lives in its own key, and missing it would fire a
     // second real request against the operator's backend on redelivery. There is deliberately no "no
     // legacy keys left, stop looking" flag: the only way to decide that is a storage listing, and the
@@ -96,24 +105,44 @@ export async function hasSeen(
 
 /** Record a marker AFTER a successful reply so a failed send retries on redelivery. Best-effort. */
 export async function markSeen(storage: StorageLike, sessionId: string, msgId: string, now: number): Promise<void> {
+  try {
+    await writeEntry(storage, sessionId, msgId, now, now);
+  } catch {
+    /* best-effort: an existing POST completion still prevents another backend write */
+  }
+}
+
+export async function getPostCompletion(
+  storage: StorageLike, sessionId: string, msgId: string, now: number,
+): Promise<PostCompletion | null> {
+  const id = markerId(sessionId, msgId);
+  const entry = (await storage.get<DedupBucket>(bucketKey(shardOf(id))))?.[id];
+  return isPostCompletion(entry) && now - entry.t < DEDUP_TTL_MS ? entry : null;
+}
+
+/** Must succeed before POST dispatch or before delivering its rendered reply. */
+export async function savePostCompletion(
+  storage: StorageLike, sessionId: string, msgId: string, entry: PostCompletion,
+): Promise<void> {
+  await writeEntry(storage, sessionId, msgId, entry.t, entry);
+}
+
+async function writeEntry(
+  storage: StorageLike, sessionId: string, msgId: string, now: number, entry: number | PostCompletion,
+): Promise<void> {
   const id = markerId(sessionId, msgId);
   const key = bucketKey(shardOf(id));
-  try {
-    await bucketLock.run(key, async () => {
-      const bucket = (await storage.get<DedupBucket>(key)) ?? {};
-      // Age the bucket out on write, so growth is bounded without any global scan. A bucket that stops
-      // receiving writes keeps its last window of ids: bounded, and harmless, since they can only ever
-      // match ids that will never recur.
-      const next: DedupBucket = {};
-      for (const [k, t] of Object.entries(bucket)) {
-        if (typeof t === 'number' && now - t < DEDUP_TTL_MS) next[k] = t;
-      }
-      next[id] = now;
-      await storage.set(key, next);
-    });
-  } catch {
-    /* best-effort: a redelivery may re-fire, which is the safer failure mode */
-  }
+  await bucketLock.run(key, async () => {
+    const bucket = (await storage.get<DedupBucket>(key)) ?? {};
+    // Age completed markers, POST intents and saved replies out together on the next bucket write.
+    const next: DedupBucket = {};
+    for (const [k, value] of Object.entries(bucket)) {
+      const t = typeof value === 'number' ? value : value?.t;
+      if (typeof t === 'number' && now - t < DEDUP_TTL_MS) next[k] = value;
+    }
+    next[id] = entry;
+    await storage.set(key, next);
+  });
 }
 
 /**

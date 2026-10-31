@@ -1,18 +1,22 @@
 import type {
   IPlugin, PluginContext, HookContext, HookResult, IncomingMessage, ConversationSendEnvelope,
 } from '../types/openwa';
+import { createHash } from 'node:crypto';
 import { readConfig, type HttpActionConfig } from './config.ts';
 import { phoneFromJid, isBroadcastJid } from './jid.ts';
 import { matchAction } from './matcher.ts';
 import { renderText, type TemplateContext } from './url-template.ts';
 import { HttpActionClient, type FetchLike } from './client.ts';
-import { hasSeen, markSeen, prune, allowCooldown, type StorageLike, DEDUP_TTL_MS, PRUNE_INTERVAL_MS } from './reliability.ts';
+import { hasSeen, markSeen, getPostCompletion, savePostCompletion, prune, allowCooldown, type StorageLike, DEDUP_TTL_MS, PRUNE_INTERVAL_MS } from './reliability.ts';
+import { KeyedAsyncLock } from './chat-lock.ts';
 
 const PLUGIN = 'http-action';
 const REPLY_MAX = 4000;
 const DEFAULT_NOT_FOUND = 'Not found.';
 const DEFAULT_ERROR = 'Service is temporarily unavailable. Please try again later.';
 const LATE_NOTICE = 'This command arrived late and was not run. Please send it again if you still need it.';
+const UNKNOWN_NOTICE = 'The result of this command could not be confirmed. Please contact the operator before trying again.';
+const messageLock = new KeyedAsyncLock();
 // From OpenWA 0.23.6 a Baileys session delivers, after it reconnects, what WhatsApp queued while it was
 // disconnected, each message with its original send time. Five minutes is far above clock skew between
 // WhatsApp and the gateway and matches the host's own auto-reply age limit.
@@ -75,13 +79,12 @@ function buildCtx(msg: IncomingMessage, sessionId: string, args: string[], respo
   };
 }
 
-/**
- * Per-message work: match → dedup CHECK (fail-closed) → late-POST refusal → cooldown (fail-open) →
- * fetch → map status → render → send → mark seen. The dedup MARK is written only after a successful
- * send, so a transient send failure retries on redelivery instead of being silently dropped (mirrors
- * chatwoot's hasSeen/markSeen).
- */
+/** Serialize redeliveries through the complete check, request and reply sequence. */
 export async function handleMessage(deps: HandleDeps, sessionId: string, msg: IncomingMessage): Promise<void> {
+  return messageLock.run(JSON.stringify([sessionId, msg.id]), () => handleLocked(deps, sessionId, msg));
+}
+
+async function handleLocked(deps: HandleDeps, sessionId: string, msg: IncomingMessage): Promise<void> {
   const hit = matchAction(deps.cfg.actions, msg.body);
   if (!hit) return; // no trigger matched → silent
 
@@ -90,6 +93,24 @@ export async function handleMessage(deps: HandleDeps, sessionId: string, msg: In
     deps.logger.warn(`${PLUGIN}: dedup read failed, dropping message ${msg.id} unanswered`,
       { error: e instanceof Error ? e.message : String(e) });
   if (await hasSeen(deps.storage, sessionId, msg.id, dedupFailed)) return;
+  const { action, args } = hit;
+  const fingerprint = createHash('sha256').update(JSON.stringify([
+    deps.cfg.baseUrl, deps.cfg.authType, deps.cfg.authToken, deps.cfg.apiKeyHeader, action,
+  ])).digest('hex');
+  let prior;
+  try {
+    prior = await getPostCompletion(deps.storage, sessionId, msg.id, deps.now());
+  } catch (e) {
+    dedupFailed(e);
+    return;
+  }
+  if (prior) {
+    const reply = prior.fingerprint === fingerprint && prior.chatId === msg.chatId ? prior.reply : undefined;
+    if (reply === undefined) deps.logger.warn(`${PLUGIN}: action '${action.id}' has an uncertain or changed request; not repeated`);
+    await deps.conversations.send({ sessionId, chatId: msg.chatId, type: 'text', text: reply ?? UNKNOWN_NOTICE, replyTo: msg.id });
+    await markSeen(deps.storage, sessionId, msg.id, deps.now());
+    return;
+  }
   // Best-effort prune of expired markers (throttled hourly); never blocks the reply.
   void prune(deps.storage, deps.now(), DEDUP_TTL_MS, PRUNE_INTERVAL_MS).catch((e) =>
     deps.logger.error(`${PLUGIN}: prune failed`, e),
@@ -114,11 +135,21 @@ export async function handleMessage(deps: HandleDeps, sessionId: string, msg: In
   const cooldownMs = Math.max(0, deps.cfg.cooldownSeconds) * 1000;
   if (!allowCooldown(deps.cooldown, `${sessionId}:${msg.chatId}`, deps.now(), cooldownMs)) return;
 
-  const { action, args } = hit;
   const client = new HttpActionClient(deps.fetch, deps.cfg);
   const ctxWith = (response?: unknown): TemplateContext => buildCtx(msg, sessionId, args, response);
+  const post = action.request.method === 'POST';
+  const intent = { t: deps.now(), fingerprint, chatId: msg.chatId };
+  if (post) {
+    try {
+      await savePostCompletion(deps.storage, sessionId, msg.id, intent);
+    } catch (e) {
+      deps.logger.error(`${PLUGIN}: POST intent could not be stored; request not sent`, e);
+      return;
+    }
+  }
 
   let text: string;
+  let uncertain = false;
   try {
     const out = await client.run(action, ctxWith());
     if (out.status === 404) {
@@ -129,11 +160,12 @@ export async function handleMessage(deps: HandleDeps, sessionId: string, msg: In
       text = renderText(action.errorTemplate ?? DEFAULT_ERROR, ctxWith(out.data));
     }
   } catch (e) {
-    deps.logger.error(`${PLUGIN}: request failed`, e);
+    deps.logger.error(`${PLUGIN}: ${post ? 'POST outcome is unknown; request will not be repeated' : 'request failed'}`, e);
+    uncertain = post;
     // Same hazard as the empty-reply fallback below: renderText can throw on a bad template, and an
     // unguarded throw here would replace an upstream failure the operator can see with silence.
     try {
-      text = renderText(action.errorTemplate ?? DEFAULT_ERROR, ctxWith());
+      text = post ? UNKNOWN_NOTICE : renderText(action.errorTemplate ?? DEFAULT_ERROR, ctxWith());
     } catch (tplErr) {
       deps.logger.warn(`${PLUGIN}: action '${action.id}' errorTemplate failed to render`,
         { error: tplErr instanceof Error ? tplErr.message : String(tplErr) });
@@ -159,9 +191,16 @@ export async function handleMessage(deps: HandleDeps, sessionId: string, msg: In
     }
   }
 
-  // replyTo is safe here — replies are always text (media is a non-goal). See §1.4.
-  // A send rejection propagates out of handleMessage (to the hook's .catch) BEFORE markSeen runs, so the
-  // message stays un-marked and a redelivery retries — no silently-dropped reply.
+  if (post && !uncertain) {
+    try {
+      await savePostCompletion(deps.storage, sessionId, msg.id, { ...intent, reply });
+    } catch (e) {
+      deps.logger.error(`${PLUGIN}: POST reply could not be stored; outcome needs operator confirmation`, e);
+      reply = UNKNOWN_NOTICE;
+    }
+  }
+
+  // A failed send retains the POST reply or uncertain intent for redelivery.
   await deps.conversations.send({
     sessionId, chatId: msg.chatId, type: 'text', text: reply, replyTo: msg.id,
   });
@@ -169,8 +208,7 @@ export async function handleMessage(deps: HandleDeps, sessionId: string, msg: In
 }
 
 /**
- * HTTP Action Bot — trigger a safe REST request from a WhatsApp command and render the JSON response
- * back to chat. One request per message, one reply. Roadmap §4.
+ * Trigger a configured REST request from a WhatsApp command and render its JSON response back to chat.
  */
 export default class HttpActionPlugin implements IPlugin {
   private ctx: PluginContext | null = null;

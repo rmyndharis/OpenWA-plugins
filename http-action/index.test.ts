@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import HttpAction, { handleMessage, type HandleDeps } from './index.ts';
 import { readConfig } from './config.ts';
-import { hasSeen, type StorageLike } from './reliability.ts';
+import { hasSeen, shardOf, DEDUP_SHARDS, DEDUP_TTL_MS, type StorageLike } from './reliability.ts';
 import type { IncomingMessage, HookHandler } from '../types/openwa';
 
 function cfgWith(over: Record<string, unknown> = {}) {
@@ -507,4 +507,191 @@ test('a late notice that fails to send stays un-marked, and its redelivery never
   assert.equal((sendCalls[0].env as { text: string }).text, LATE);
   assert.equal(await hasSeen(d.storage, 's1', 'm1'), true);
   assert.deepEqual(fetched, [], 'the request never fires on either attempt');
+});
+
+test('a failed POST reply retries its persisted text without repeating the write or waiting for cooldown', async () => {
+  const { d, fetched, sendCalls } = postDeps();
+  const send = d.conversations.send;
+  d.conversations.send = async () => { throw new Error('WA offline'); };
+  await assert.rejects(handleMessage(d, 's1', msg('buat X')), /WA offline/);
+  assert.equal(await hasSeen(d.storage, 's1', 'm1'), false);
+  await handleMessage({ ...d, cooldown: new Map(), conversations: { send } }, 's1', msg('buat X'));
+  assert.equal(fetched.length, 1);
+  assert.deepEqual(sendCalls.map(c => (c.env as { text: string }).text), ['Ticket T-1']);
+  assert.equal(await hasSeen(d.storage, 's1', 'm1'), true);
+});
+
+test('concurrent copies of a command run only one POST with cooldown disabled', async () => {
+  const { d, fetched, sendCalls } = postDeps();
+  d.cfg.cooldownSeconds = 0;
+  await Promise.all([handleMessage(d, 's1', msg('buat X')), handleMessage(d, 's1', msg('buat X'))]);
+  assert.equal(fetched.length, 1);
+  assert.equal(sendCalls.length, 1);
+});
+
+test('POST intent storage failure prevents the backend write', async () => {
+  const { d, fetched, sendCalls, errors } = postDeps();
+  d.storage.set = async () => { throw new Error('quota'); };
+  await handleMessage(d, 's1', msg('buat X'));
+  assert.deepEqual(fetched, []);
+  assert.deepEqual(sendCalls, []);
+  assert.ok(errors.length > 0);
+});
+
+test('an unrecorded POST response leaves an unknown intent that cannot repeat the backend write', async () => {
+  const { d, fetched, sendCalls, errors } = postDeps();
+  const set = d.storage.set;
+  let writes = 0;
+  d.storage.set = async (key, value) => {
+    if (key.startsWith('dedupb:') && ++writes > 1) throw new Error('quota');
+    return set(key, value);
+  };
+  await handleMessage(d, 's1', msg('buat X'));
+  await handleMessage({ ...d, cooldown: new Map() }, 's1', msg('buat X'));
+  assert.equal(fetched.length, 1);
+  assert.ok(sendCalls.length > 0);
+  assert.ok(sendCalls.every(c => /could not be confirmed/.test((c.env as { text: string }).text)));
+  assert.ok(errors.length > 0);
+});
+
+test('a POST timeout is reported as uncertain and never rerun on redelivery', async () => {
+  const { d, fetched, sendCalls } = postDeps({ reject: true });
+  d.cfg.cooldownSeconds = 0;
+  await handleMessage(d, 's1', msg('buat X'));
+  await handleMessage(d, 's1', msg('buat X'));
+  assert.equal(fetched.length, 1);
+  assert.match((sendCalls[0].env as { text: string }).text, /could not be confirmed/);
+});
+
+test('stored POST replies cannot cross backend, credential, action or chat changes', async () => {
+  for (const change of ['baseUrl', 'authToken', 'action', 'chatId']) {
+    const { d, fetched, sendCalls } = postDeps();
+    const send = d.conversations.send;
+    d.conversations.send = async () => { throw new Error('WA offline'); };
+    await assert.rejects(handleMessage(d, 's1', msg('buat X')), /WA offline/);
+    const cfg = structuredClone(d.cfg);
+    if (change === 'baseUrl') cfg.baseUrl = 'https://new.example.com';
+    if (change === 'authToken') { cfg.authType = 'bearer'; cfg.authToken = 'new-private-token'; }
+    if (change === 'action') cfg.actions[0].request.path = '/new-tickets';
+    const incoming = { ...msg('buat X'), chatId: change === 'chatId' ? 'other-chat' : 'c1' };
+    await handleMessage({ ...d, cfg, cooldown: new Map(), conversations: { send } }, 's1', incoming);
+    assert.equal(fetched.length, 1, change);
+    assert.match((sendCalls[0].env as { text: string }).text, /could not be confirmed/, change);
+    assert.ok(!JSON.stringify([...((d.storage as ReturnType<typeof fakeStore>).m).values()]).includes('new-private-token'));
+  }
+});
+
+test('a failed GET reply still refreshes the lookup on redelivery', async () => {
+  const { d, fetched, sendCalls } = postDeps();
+  d.cfg.cooldownSeconds = 0;
+  const send = d.conversations.send;
+  d.conversations.send = async () => { throw new Error('WA offline'); };
+  await assert.rejects(handleMessage(d, 's1', msg('cek X')), /WA offline/);
+  d.conversations.send = send;
+  await handleMessage(d, 's1', msg('cek X'));
+  assert.equal(fetched.length, 2);
+  assert.equal(sendCalls.length, 1);
+});
+
+test('a completed POST waiting for delivery survives another marker in the same bucket', async () => {
+  const { d, fetched, sendCalls } = postDeps();
+  d.cfg.cooldownSeconds = 0;
+  const send = d.conversations.send;
+  d.conversations.send = async () => { throw new Error('WA offline'); };
+  await assert.rejects(handleMessage(d, 's1', msg('buat X')), /WA offline/);
+  let partner = '';
+  for (let i = 0; !partner; i++) if (shardOf(`s1:p${i}`) === shardOf('s1:m1')) partner = `p${i}`;
+  d.conversations.send = send;
+  await handleMessage(d, 's1', msg('cek X', partner));
+  await handleMessage(d, 's1', msg('buat X'));
+  assert.equal(fetched.filter(f => f.startsWith('POST')).length, 1);
+  assert.equal(sendCalls.length, 2);
+});
+
+test('expired pending replies are not replayed and legacy POST markers are still honored', async () => {
+  const { d, fetched, sendCalls } = postDeps();
+  const send = d.conversations.send;
+  d.conversations.send = async () => { throw new Error('WA offline'); };
+  await assert.rejects(handleMessage(d, 's1', msg('buat X')), /WA offline/);
+  d.conversations.send = send;
+  d.now = () => NOW + DEDUP_TTL_MS + 1;
+  await handleMessage(d, 's1', at('buat X', NOW / 1000));
+  assert.equal(fetched.length, 1);
+  assert.equal((sendCalls[0].env as { text: string }).text, LATE);
+  await d.storage.set('dedup:s1:legacy', { t: NOW });
+  await handleMessage(d, 's1', msg('buat X', 'legacy'));
+  assert.equal(fetched.length, 1);
+  assert.equal(sendCalls.length, 1);
+});
+
+test('failure to mark a delivered POST retains its completed reply for redelivery', async () => {
+  const { d, fetched, sendCalls } = postDeps();
+  const set = d.storage.set;
+  let writes = 0;
+  d.storage.set = async (key, value) => {
+    if (key.startsWith('dedupb:') && ++writes === 3) throw new Error('quota');
+    return set(key, value);
+  };
+  await handleMessage(d, 's1', msg('buat X'));
+  assert.equal(await hasSeen(d.storage, 's1', 'm1'), false);
+  await handleMessage(d, 's1', msg('buat X'));
+  assert.equal(fetched.length, 1);
+  assert.deepEqual(sendCalls.map(c => (c.env as { text: string }).text), ['Ticket T-1', 'Ticket T-1']);
+});
+
+test('a completion read failure after the marker check still prevents POST dispatch', async () => {
+  const { d, fetched, sendCalls, warns } = postDeps();
+  const get = d.storage.get;
+  let reads = 0;
+  d.storage.get = async <T>(key: string): Promise<T | null> => {
+    if (++reads === 3) throw new Error('storage unavailable');
+    return get<T>(key);
+  };
+  await handleMessage(d, 's1', msg('buat X'));
+  assert.deepEqual(fetched, []);
+  assert.deepEqual(sendCalls, []);
+  assert.ok(warns.some(w => w.includes('dedup read failed')));
+});
+
+test('one stalled POST does not block the same message ID in another session', async () => {
+  const { d, sendCalls } = postDeps();
+  let started!: () => void;
+  let release!: () => void;
+  const waiting = new Promise<void>(resolve => { started = resolve; });
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const fetch = d.fetch;
+  let calls = 0;
+  d.fetch = async (url, init) => {
+    if (++calls === 1) { started(); await gate; }
+    return fetch(url, init);
+  };
+  const first = handleMessage(d, 's1', msg('buat X'));
+  await waiting;
+  try {
+    await handleMessage(d, 's2', msg('buat X'));
+    assert.equal(sendCalls.length, 1);
+    assert.equal((sendCalls[0].env as { sessionId: string }).sessionId, 's2');
+  } finally {
+    release();
+    await first;
+  }
+  assert.equal(calls, 2);
+});
+
+test('pending POST replies use bounded bucket files and expire together on bucket writes', async () => {
+  const { d } = postDeps();
+  d.cfg.cooldownSeconds = 0;
+  d.conversations.send = async () => { throw new Error('WA offline'); };
+  for (let i = 0; i < 300; i++) await assert.rejects(handleMessage(d, 's1', msg('buat X', `pending${i}`)), /WA offline/);
+  const keys = await d.storage.list();
+  assert.ok(keys.length <= DEDUP_SHARDS + 1);
+  assert.ok(keys.every(k => k.startsWith('dedupb:') || k === 'dedup:__prune__'));
+  d.now = () => NOW + DEDUP_TTL_MS + 1;
+  let partner = '';
+  for (let i = 0; !partner; i++) if (shardOf(`s1:p${i}`) === shardOf('s1:pending0')) partner = `p${i}`;
+  d.conversations.send = async () => {};
+  await handleMessage(d, 's1', msg('buat X', partner));
+  const bucket = await d.storage.get<Record<string, unknown>>(`dedupb:s${shardOf('s1:pending0')}`);
+  assert.ok(!Object.hasOwn(bucket!, 's1:pending0'));
+  assert.ok(Object.hasOwn(bucket!, `s1:${partner}`));
 });
