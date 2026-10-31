@@ -165,9 +165,9 @@ export interface HookResult<T = unknown> {
    */
   data?: T;
   /**
-   * In-process (built-in plugin) only — the sandbox wire result carries just `{continue, data}`, so a
-   * sandboxed marketplace plugin CANNOT surface a failure this way. Throw instead: the host catches
-   * it, keeps the chain running, and records it on the plugin's health surface.
+   * With continue:true, a returned Error is serialized and recorded on the plugin's health surface.
+   * The worker stops on continue:false before reading error.
+   * A thrown error is also recorded; the host keeps the remaining hook chain running.
    */
   error?: Error;
 }
