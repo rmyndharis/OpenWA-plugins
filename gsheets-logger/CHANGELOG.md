@@ -8,6 +8,13 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.3.15] - 2026-10-31
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.27.0.
+- Document OpenWA 0.27.0 `message:ack` (outbound-only, with foreign-chat receipts dropped on Baileys) and bulk voice-note `message:failed` (`type: "voice"`) behavior.
+
 ## [0.3.14] - 2026-10-28
 
 ### Changed

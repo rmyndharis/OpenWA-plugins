@@ -5,6 +5,12 @@ and the top entry's version must match `manifest.json`.
 
 ## [Unreleased]
 
+## [0.2.14] - 2026-10-31
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.27.0.
+
 ## [0.2.13] - 2026-10-28
 
 ### Changed

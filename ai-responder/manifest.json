@@ -1,7 +1,7 @@
 {
   "id": "ai-responder",
   "name": "AI Responder",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Auto-replies to inbound WhatsApp messages with an OpenAI-compatible Chat Completions API. Single-turn, rate-limited per chat and per session, and last in the responder chain.",
@@ -12,7 +12,7 @@
   "keywords": ["ai", "openai", "llm", "auto-reply", "chatbot", "whatsapp", "openwa"],
   "status": "beta",
   "minOpenWAVersion": "0.8.0",
-  "testedOpenWAVersion": "0.26.0",
+  "testedOpenWAVersion": "0.27.0",
   "provides": ["ai-auto-reply"],
   "permissions": [
     "net:fetch",

@@ -1,7 +1,7 @@
 // Vendored OpenWA plugin contract. There is no published @openwa SDK package; keep this in sync
 // with the OpenWA version you target. All imports of this module must be `import type`.
 //
-// Last aligned against OpenWA core v0.26.0 (tag 386464e), verified field-by-field against
+// Last aligned against OpenWA core v0.27.0 (tag d99fa20), verified field-by-field against
 // src/core/plugins/plugin.interfaces.ts, src/core/hooks/{hook.interfaces,hook-results}.ts, plugin-net.ts,
 // sandbox/{protocol,worker-bootstrap,worker-capability,worker-hooks,worker-webhooks}.ts and
 // src/engine/interfaces/whatsapp-engine.interface.ts, with behavior the interfaces do not show read from
@@ -40,6 +40,19 @@
 // a handler schedules from a timer or a detached promise after it returned runs every plugin's hooks;
 // only a dispatch that overran the 5 s budget stays guarded until the worker answers it or exits (the 32
 // newest such claims per worker).
+// 0.26.0 -> 0.27.0 did not add or remove any interface member: plugin.interfaces.ts updated the dedupOn
+// comment (empty-body deliveries with query parameters hash req.method and the sorted query), while
+// hook.interfaces.ts, hook-results.ts, sandbox/protocol.ts and the worker files are unchanged. Behavioral
+// and payload-content changes:
+//   1. message:ack fires only for outbound messages (fromMe) on both engines, and Baileys drops receipts
+//      whose chat does not match the stored message's chat.
+//   2. message:persisted fires again when an edit changes a stored message's text.
+//   3. message:sending and message:failed report bulk voice notes (audio with ptt: true) as type 'voice'
+//      instead of 'audio', matching single voice sends.
+//   4. IncomingMessage.quotedMessage.body on Baileys unwraps disappearing, view-once, edited and
+//      document-with-caption envelopes and extracts native-flow reply labels, matching live messages.
+//   5. Config saved while onLoad/onEnable is running is pushed to the worker via onConfigChange as soon
+//      as onEnable finishes, and non-object configSchema.properties/items entries are stripped at load.
 // 0.25.0 → 0.26.0 did not move the plugin contract: plugin.interfaces.ts changed one comment (a secret is
 // removed by `null`), worker-hooks.ts gained an internal `error` field, and hook.interfaces.ts,
 // hook-results.ts, sandbox/protocol.ts and the other worker files are unchanged. What the engine interface
@@ -96,7 +109,7 @@
 // select, array/items, object/properties, min/max/pattern — see PluginConfigField) is plain manifest
 // JSON — the plugin still reads `ctx.config` as `Record<string, unknown>` and validates defensively.
 //
-// Host bounds a plugin cannot see from the types (all host-side, re-checked at v0.26.0):
+// Host bounds a plugin cannot see from the types (all host-side, re-checked at v0.27.0):
 //   30 s per lifecycle phase (onLoad/onEnable/onDisable/onUnload) and per capability call, except
 //   the send verbs (ctx.messages.sendText / ctx.messages.reply / ctx.conversations.send) at 120 s;
 //   5 s per hook dispatch (overrun → the host fails OPEN with {continue:true} and drops your result);
@@ -109,6 +122,9 @@
 export type HookEvent =
   | 'session:created' | 'session:starting' | 'session:ready' | 'session:qr'
   | 'session:disconnected' | 'session:error' | 'session:deleted'
+  // From host 0.27.0, message:ack fires only for outbound messages (both engines) and drops foreign-chat
+  // receipts on Baileys; message:persisted also re-fires when an edit changes a stored message's text; and
+  // message:sending / message:failed report bulk voice notes (audio with ptt: true) as type 'voice'.
   | 'message:received' | 'message:sending' | 'message:sent' | 'message:failed' | 'message:ack' | 'message:persisted'
   // v0.11.0: emitted when the host deletes a redundant echo row during send reconciliation. The payload
   // is `{ sessionId, message }` where `message` is the host's persisted DB row — NOT an IncomingMessage.
@@ -466,7 +482,10 @@ export interface PluginIngressRoute {
    *  nothing for it. Any other value is refused at manifest load. IGNORED by hosts up to 0.23.5, which
    *  key on the header regardless; the floor is 0.23.6. From 0.23.6 a dedup header that is present but
    *  blank counts as absent (body hash); earlier hosts keyed all such deliveries on the empty string and
-   *  dropped every one after the first while still acking it. */
+   *  dropped every one after the first while still acking it. From 0.27.0, when rawBody is empty and no
+   *  dedup header is used, the fallback hash also covers req.method and the code-point-sorted req.query
+   *  entries when query is non-empty, so query-borne deliveries stay distinct; deliveries with neither
+   *  body nor query still share one id per route. */
   dedupOn?: 'header' | 'body';
   response?: IngressResponseContract;
 }
@@ -707,7 +726,9 @@ export interface IncomingMessage {
   // The message this one replies to (swipe-to-reply / quote), when present. `id` is the quoted WhatsApp
   // message id; `body` is its text. Carried on the inbound hook payload for reply-threading relays.
   // Since host 0.23.2 the quote runs through the SAME extractor as the live message, so a quoted poll
-  // or contact card carries its text here rather than an empty string. Same caveat as `body` above.
+  // or contact card carries its text here rather than an empty string; from host 0.27.0 on Baileys it
+  // also unwraps disappearing, view-once, edited and document-with-caption envelopes and extracts
+  // native-flow reply labels. Same caveat as `body` above.
   quotedMessage?: { id: string; body: string };
   // Shared location (`type: 'location'`), when present.
   location?: { latitude: number; longitude: number; description?: string; address?: string; url?: string };
@@ -744,7 +765,9 @@ export interface IncomingMessage {
 export interface MessageContact {
   /** Sender JID (`…@c.us` or a `…@lid` privacy id). */
   id?: string;
-  /** Phone digits, best-effort. For `@lid` senders `IncomingMessage.senderPhone` is authoritative. */
+  /** Phone digits, best-effort. For `@lid` senders on whatsapp-web.js this holds the lid's own digits
+   *  (not a phone number), and on Baileys the resolved phone digits or `''`; `IncomingMessage.senderPhone`
+   *  (or an `@c.us`/`@s.whatsapp.net` domain check on the JID) is authoritative. */
   number?: string;
   name?: string;
   pushName?: string;
