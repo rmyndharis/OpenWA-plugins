@@ -13,6 +13,7 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 - Handle root-shaped Chatwoot conversation events for human handover.
 - Isolate mappings and queued relays by Chatwoot destination, and restore history when a conversation is replaced.
 - Serialize reverse-mapping updates and retry queue capacity checks.
+- Retain unattributed legacy retries for operator reconciliation and rebind older mappings on the next inbound message.
 
 ## [0.9.13] - 2026-10-31
 
