@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { IncomingMessage, PluginConversationsCapability, ConversationSendEnvelope, PluginStorage } from '../types/openwa';
-import type { TypebotConfig, NormalizedResponse } from './typebot-types.ts';
+import type { TypebotConfig, NormalizedResponse, Awaiting, SessionState } from './typebot-types.ts';
 import { KeyedAsyncLock } from './chat-lock.ts';
 import { SessionStore } from './session-store.ts';
 import { handleTurn, type TurnDeps } from './turn.ts';
@@ -81,20 +81,66 @@ test('group: media parts omit replyTo (OpenWA rejects replyTo on media); text pa
   assert.equal(mediaPart?.replyTo, undefined); // media MUST NOT carry replyTo (0.8.2 throws)
 });
 
-test('upload failure → fallback text sent, continueChat not called, state intact', async () => {
+for (const awaiting of [
+  { kind: 'file', blockId: 'b' },
+  { kind: 'text', blockId: 'b', attachmentsEnabled: true },
+  { kind: 'text', blockId: 'b', attachmentsEnabled: false, audioClipsEnabled: true },
+] satisfies Awaiting[]) {
+test(`upload failure preserves pending input ${JSON.stringify(awaiting)}`, async () => {
   let continueChatCalls = 0;
   const { d, sent, store } = deps({
     uploadFile: () => { throw new Error('network fail'); },
     continueChat: () => { continueChatCalls++; return { bubbles: [], input: undefined }; },
   });
-  await store.set('sess:c@c.us', { sessionId: 'S1', awaiting: { kind: 'file', blockId: 'b' }, lastActivity: 1000 });
-  await handleTurn(d, 'sess', 'Engine', msg({ media: { mimetype: 'image/png', filename: 'p.png', data: 'AAA' } }));
+  await store.set('sess:c@c.us', { sessionId: 'S1', awaiting, lastActivity: 1000 });
+  await handleTurn(d, 'sess', 'Engine', msg({ type: 'voice', media: { mimetype: 'audio/ogg', filename: 'voice.ogg', data: 'AAA' } }));
   assert.ok(sent.some(s => typeof s.text === 'string' && s.text.includes('Sorry, that upload failed')));
   assert.equal(continueChatCalls, 0);
   const state = await store.get('sess:c@c.us');
   assert.ok(state);
   assert.equal(state?.sessionId, 'S1');
-  assert.equal(state?.awaiting.kind, 'file');
+  assert.deepEqual(state?.awaiting, awaiting);
+});
+}
+
+test('cards and omitted attachments leave the current text input pending', async () => {
+  const awaiting: Awaiting = { kind: 'text', blockId: 'b', attachmentsEnabled: true, audioClipsEnabled: true };
+  for (const incoming of [
+    ...['contact', 'poll', 'order', 'product'].map(type => ({ type, body: 'Shared content', media: { mimetype: 'image/png', data: 'AAA' } })),
+    { type: 'image', body: 'My caption', media: { mimetype: 'image/png', omitted: true } },
+    { type: 'voice', body: '', media: { mimetype: 'audio/ogg', omitted: true } },
+  ]) {
+    let continued = 0;
+    let uploaded = 0;
+    const { d, sent, store } = deps({
+      continueChat: () => { continued++; return { bubbles: [] }; },
+      uploadFile: () => { uploaded++; return 'https://cdn/file'; },
+    });
+    const state: SessionState = { sessionId: 'S1', awaiting, lastActivity: 1000 };
+    await store.set('sess:c@c.us', state);
+    await handleTurn(d, 'sess', 'Engine', msg(incoming));
+    assert.equal(continued, 0, incoming.type);
+    assert.equal(uploaded, 0, incoming.type);
+    assert.equal(sent.length, 1, incoming.type);
+    assert.equal(sent[0].type, 'text');
+    assert.deepEqual(await store.get('sess:c@c.us'), state, incoming.type);
+  }
+});
+
+test('an image without a caption leaves an audio-only text input pending', async () => {
+  let continued = 0;
+  let uploaded = 0;
+  const { d, sent, store } = deps({
+    continueChat: () => { continued++; return { bubbles: [] }; },
+    uploadFile: () => { uploaded++; return 'https://cdn/file'; },
+  });
+  const state = { sessionId: 'S1', awaiting: { kind: 'text', blockId: 'b', attachmentsEnabled: false, audioClipsEnabled: true } as const, lastActivity: 1000 };
+  await store.set('sess:c@c.us', state);
+  await handleTurn(d, 'sess', 'Engine', msg({ type: 'image', body: '', media: { mimetype: 'image/png', data: 'AAA' } }));
+  assert.equal(continued, 0);
+  assert.equal(uploaded, 0);
+  assert.deepEqual(sent.map(s => s.text), ['Please type your answer to continue.']);
+  assert.deepEqual(await store.get('sess:c@c.us'), state);
 });
 
 test('expired session (404) → clear + startChat restart, new state persisted', async () => {

@@ -3,7 +3,7 @@ import type { PluginNetRequestInit, PluginNetResponse } from '../types/openwa';
 import type { TypebotConfig, NormalizedResponse, Bubble, InputSpec, ChoiceItem } from './typebot-types.ts';
 import { buildMultipartBody } from './multipart.ts';
 
-export type ContinueMessage = string | { type: 'text'; text: string; attachedFileUrls?: string[] };
+export type ContinueMessage = string | { type: 'text'; text: string; attachedFileUrls?: string[] } | { type: 'audio'; url: string };
 type FetchFn = (url: string, init?: PluginNetRequestInit) => Promise<PluginNetResponse>;
 
 export class TypebotHttpError extends Error {
@@ -147,7 +147,8 @@ function normalizeInput(inp: any): InputSpec {
         kind: 'text',
         blockId,
         placeholder: inp.options?.labels?.placeholder,
-        attachmentsEnabled: !!(inp.options?.attachments?.isEnabled || inp.options?.audioClip?.isEnabled),
+        attachmentsEnabled: !!inp.options?.attachments?.isEnabled,
+        audioClipsEnabled: !!inp.options?.audioClip?.isEnabled,
       };
     case 'number input':
     case 'email input':

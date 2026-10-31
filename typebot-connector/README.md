@@ -14,7 +14,7 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `typebot-connector` |
-| **Version** | 0.3.5 |
+| **Version** | 0.3.6 |
 | **Released** | 2026-10-31 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
@@ -37,6 +37,9 @@
   input step accepts a photo/file the contact sends and uploads it to Typebot. Typebot takes only the
   file there, so typed text is answered with a request for one. A file step marked optional in Typebot
   is skipped when the contact replies with the step's Skip label ("Skip" unless you renamed it).
+- **Text input attachments and audio clips**: enabled attachments retain their captions. When audio
+  clips are enabled, voice notes and audio messages use Typebot's audio answer and audio variable.
+  Other media needs attachment support or a caption; without either, the step stays pending.
 - **Auto-reset** — the session resets when the flow ends or after the idle timeout, so the next message
   starts fresh.
 - **No public URL or webhook** — runs sandboxed in the plugin worker and polls Typebot's live Chat API

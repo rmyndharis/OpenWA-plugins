@@ -55,7 +55,7 @@ function recorder(responses: PluginNetResponse[]) {
 }
 
 // Drive one turn: the bot is awaiting a file, the contact sends a PNG.
-async function runFileTurn(responses: PluginNetResponse[]) {
+async function runFileTurn(responses: PluginNetResponse[], caption = '') {
   const { fetchFn, calls } = recorder(responses);
   const sent: ConversationSendEnvelope[] = [];
   const conversations: PluginConversationsCapability = { send: async e => void sent.push(e) };
@@ -70,7 +70,7 @@ async function runFileTurn(responses: PluginNetResponse[]) {
     from: 'c@c.us',
     to: 'me',
     chatId: 'c@c.us',
-    body: '',
+    body: caption,
     type: 'image',
     timestamp: 0,
     fromMe: false,
@@ -104,7 +104,7 @@ test('file input, proxy branch: PUT raw bytes, then continueChat carries the ret
       messages: [{ id: 'm2', type: 'text', content: { type: 'markdown', markdown: 'Got it' } }],
       input: { id: 'blk2', type: 'text input' },
     }),
-  ]);
+  ], 'Please check order 123');
 
   // fileSize must be the DECODED byte length. Base64 inflates by 4/3, so a mix-up is silently accepted by
   // the type system and rejected by a real presigned URL whose policy pins content-length.
@@ -184,7 +184,8 @@ test('file input, S3 branch: multipart POST with every policy field before the f
 // so the typed text is the answer and the upload rides along in attachedFileUrls. Conflating the two was
 // the root cause of the file-input regression above — this scenario pins the other side of that branch so
 // the two constructs can't be silently swapped again.
-test('text input with attachments enabled: continueChat carries the text plus attachedFileUrls', async () => {
+for (const caption of ['', 'Please check order 123', '  Please check order 123  ']) {
+test(`text input attachment preserves caption ${JSON.stringify(caption)}`, async () => {
   const { fetchFn, calls } = recorder([
     ok({ presignedUrl: 'https://typebot.io/api/uploads/tok', formData: {}, fileUrl: 'https://cdn/p.png' }),
     noBody(200),
@@ -207,7 +208,7 @@ test('text input with attachments enabled: continueChat carries the text plus at
     from: 'c@c.us',
     to: 'me',
     chatId: 'c@c.us',
-    body: '',
+    body: caption,
     type: 'image',
     timestamp: 0,
     fromMe: false,
@@ -232,9 +233,45 @@ test('text input with attachments enabled: continueChat carries the text plus at
 
   assert.equal(calls[2].url, 'https://typebot.io/api/v1/sessions/S1/continueChat');
   const cont = JSON.parse(calls[2].init!.body as string);
-  assert.deepEqual(cont.message, { type: 'text', text: '', attachedFileUrls: ['https://cdn/p.png'] });
+  assert.deepEqual(cont.message, { type: 'text', text: caption.trim(), attachedFileUrls: ['https://cdn/p.png'] });
   assert.deepEqual(sent.map(s => s.text), ['Got it']);
 });
+}
+
+for (const scenario of [
+  { name: 'audio-only voice note', type: 'voice', attachments: false, audioClip: true, expected: { type: 'audio', url: 'https://cdn/voice.ogg' } },
+  { name: 'audio-only audio file', type: 'audio', attachments: false, audioClip: true, expected: { type: 'audio', url: 'https://cdn/voice.ogg' } },
+  { name: 'attachments-only voice note', type: 'voice', attachments: true, audioClip: false, expected: { type: 'text', text: '', attachedFileUrls: ['https://cdn/voice.ogg'] } },
+  { name: 'voice note with both permissions', type: 'voice', attachments: true, audioClip: true, expected: { type: 'audio', url: 'https://cdn/voice.ogg' } },
+  { name: 'image with both permissions', type: 'image', attachments: true, audioClip: true, expected: { type: 'text', text: 'Please check order 123', attachedFileUrls: ['https://cdn/voice.ogg'] } },
+]) {
+  test(`text input maps ${scenario.name} to its Typebot message`, async () => {
+    const { fetchFn, calls } = recorder([
+      ok({ sessionId: 'S1', input: { id: 'blk', type: 'text input', options: { attachments: { isEnabled: scenario.attachments }, audioClip: { isEnabled: scenario.audioClip } } } }),
+      ok({ presignedUrl: 'https://typebot.io/api/uploads/tok', formData: {}, fileUrl: 'https://cdn/voice.ogg' }),
+      noBody(200),
+      ok({}),
+    ]);
+    const store = new SessionStore(fakeStorage());
+    const deps = {
+      cfg, client: new TypebotClient(fetchFn, cfg), store, lock: new KeyedAsyncLock(),
+      conversations: { send: async () => {} }, now: () => 1000, log: () => {},
+    };
+    const msg = {
+      id: 'm1', from: 'c@c.us', to: 'me', chatId: 'c@c.us', body: 'Hi', type: 'text',
+      timestamp: 0, fromMe: false, isGroup: false,
+    } as IncomingMessage;
+    await handleTurn(deps, 'sess', 'Engine', msg);
+    await handleTurn(deps, 'sess', 'Engine', {
+      ...msg, id: 'm2', type: scenario.type, body: scenario.type === 'image' ? 'Please check order 123' : '',
+      media: { mimetype: scenario.type === 'image' ? 'image/png' : 'audio/ogg; codecs=opus', filename: 'upload', data: PNG.toString('base64') },
+    });
+    assert.equal(calls.length, 4);
+    assert.equal(calls[3].url, 'https://typebot.io/api/v1/sessions/S1/continueChat');
+    assert.deepEqual(JSON.parse(calls[3].init!.body as string).message, scenario.expected);
+    assert.equal(await store.get('sess:c@c.us'), null);
+  });
+}
 
 // Typebot skips an optional file step on a continueChat with no message at all, as its web client's Skip
 // button does. The key must be absent, not null: Typebot up to at least v3.0 declares it optional but not

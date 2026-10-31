@@ -56,7 +56,7 @@ export async function handleTurn(deps: TurnDeps, sessionId: string, source: stri
         return; // stay on the same input
       }
       let message: ContinueMessage | undefined;
-      if (intent.kind === 'file') {
+      if (intent.kind === 'file' || intent.kind === 'audio') {
         let url: string;
         try {
           url = await deps.client.uploadFile(state.sessionId, state.awaiting.blockId, {
@@ -70,11 +70,13 @@ export async function handleTurn(deps: TurnDeps, sessionId: string, source: stri
           return; // state stays intact so the user can retry
         }
         // A `file input` block's answer IS the file: Typebot validates message.text as the URL and rejects an
-        // empty text with attachedFileUrls. A text input with attachments enabled is the opposite — there the
-        // answer is the typed text and the file rides along in attachedFileUrls.
-        message = state.awaiting.kind === 'file'
-          ? { type: 'text', text: url }
-          : { type: 'text', text: '', attachedFileUrls: [url] };
+        // empty text with attachedFileUrls. Text inputs carry captions with attachments; audio clips
+        // use their own message type so Typebot saves the URL in the audio variable.
+        message = intent.kind === 'audio'
+          ? { type: 'audio', url }
+          : state.awaiting.kind === 'file'
+            ? { type: 'text', text: url }
+            : { type: 'text', text: (msg.body ?? '').trim(), attachedFileUrls: [url] };
       } else if (intent.kind === 'text') {
         message = intent.message;
       }

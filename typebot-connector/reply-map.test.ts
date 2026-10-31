@@ -70,6 +70,75 @@ test('a contact card at a file step keeps that step\'s own wording', () => {
   assert.deepEqual(r, { kind: 'fallback', text: 'Please send a file or photo to continue.' });
 });
 
+test('attachment-enabled text inputs reject cards with or without a media envelope', () => {
+  const awaiting: Awaiting = { kind: 'text', blockId: 'b', attachmentsEnabled: true };
+  for (const type of ['contact', 'poll', 'order', 'product']) {
+    for (const media of [undefined, { mimetype: 'image/png', data: 'AAA' }, { mimetype: 'image/png', omitted: true }]) {
+      assert.deepEqual(
+        mapReply(awaiting, msg({ type, body: 'Shared content', media })),
+        { kind: 'fallback', text: 'Please type your answer to continue.' },
+        `${type} with media ${JSON.stringify(media)}`,
+      );
+    }
+  }
+});
+
+test('a card with media at an optional file step neither uploads nor skips', () => {
+  const awaiting: Awaiting = { kind: 'file', blockId: 'b', skipLabel: 'Skip' };
+  for (const type of ['contact', 'poll', 'order', 'product']) {
+    assert.deepEqual(
+      mapReply(awaiting, msg({ type, body: 'Skip', media: { mimetype: 'image/png', data: 'AAA' } })),
+      { kind: 'fallback', text: 'Please send a file or photo to continue. Or reply "Skip" to skip this step.' },
+    );
+  }
+});
+
+test('attachment-enabled text inputs still accept ordinary typed text without media', () => {
+  assert.deepEqual(
+    mapReply({ kind: 'text', blockId: 'b', attachmentsEnabled: true }, msg({ body: '  Please check order 123  ' })),
+    { kind: 'text', message: 'Please check order 123' },
+  );
+});
+
+test('audio-only inputs keep ordinary text and captions as text', () => {
+  const awaiting: Awaiting = { kind: 'text', blockId: 'b', attachmentsEnabled: false, audioClipsEnabled: true };
+  assert.deepEqual(mapReply(awaiting, msg({ body: 'My answer' })), { kind: 'text', message: 'My answer' });
+  assert.deepEqual(
+    mapReply(awaiting, msg({ type: 'image', body: 'My caption', media: { mimetype: 'image/png', data: 'AAA' } })),
+    { kind: 'text', message: 'My caption' },
+  );
+});
+
+test('a text step without an accepted upload or caption stays pending', () => {
+  for (const [attachmentsEnabled, audioClipsEnabled, type, media] of [
+    [false, false, 'image', { mimetype: 'image/png', data: 'AAA' }],
+    [false, false, 'voice', { mimetype: 'audio/ogg', data: 'AAA' }],
+    [false, true, 'image', { mimetype: 'image/png', data: 'AAA' }],
+    [true, true, 'voice', undefined],
+    [true, false, 'image', { mimetype: 'image/png', data: '' }],
+  ] as const) {
+    assert.deepEqual(
+      mapReply({ kind: 'text', blockId: 'b', attachmentsEnabled, audioClipsEnabled }, msg({ type, media })),
+      { kind: 'fallback', text: 'Please type your answer to continue.' },
+      `${type} with attachments=${attachmentsEnabled} audio=${audioClipsEnabled}`,
+    );
+  }
+});
+
+test('an older persisted text input keeps its attachment behavior for a voice note', () => {
+  assert.deepEqual(
+    mapReply({ kind: 'text', blockId: 'b', attachmentsEnabled: true }, msg({ type: 'voice', media: { mimetype: 'audio/ogg', data: 'AAA' } })),
+    { kind: 'file', mime: 'audio/ogg', filename: 'file', data: 'AAA' },
+  );
+});
+
+test('an audio-only input asks for an omitted voice note again', () => {
+  assert.deepEqual(
+    mapReply({ kind: 'text', blockId: 'b', attachmentsEnabled: false, audioClipsEnabled: true }, msg({ type: 'voice', media: { mimetype: 'audio/ogg', omitted: true } })),
+    { kind: 'fallback', text: 'That attachment did not come through. Please try sending it again, or type to continue.' },
+  );
+});
+
 test('typed/free-text and rating pass the raw text through', () => {
   const text: Awaiting = { kind: 'text', blockId: 'b', attachmentsEnabled: false };
   assert.deepEqual(mapReply(text, msg({ body: 'me@x.io' })), { kind: 'text', message: 'me@x.io' });

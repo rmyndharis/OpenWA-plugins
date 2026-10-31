@@ -46,6 +46,17 @@ test('continueChat: sessionId in the PATH; flow-end when input absent', async ()
   assert.equal(resp.input, undefined); // flow ended
 });
 
+test('text input normalizes attachment and audio permissions independently', async () => {
+  for (const [attachments, audioClip] of [[false, false], [true, false], [false, true], [true, true]]) {
+    const { fetchFn } = recorder([ok({
+      input: { id: 'blk', type: 'text input', options: { attachments: { isEnabled: attachments }, audioClip: { isEnabled: audioClip } } },
+    })]);
+    assert.deepEqual((await new TypebotClient(fetchFn, cfg).startChat({})).input, {
+      kind: 'text', blockId: 'blk', placeholder: undefined, attachmentsEnabled: attachments, audioClipsEnabled: audioClip,
+    });
+  }
+});
+
 test('non-ok response throws TypebotHttpError with the status', async () => {
   const { fetchFn } = recorder([{ ok: false, status: 404, headers: {}, body: '{"message":"not found"}' } as PluginNetResponse]);
   const client = new TypebotClient(fetchFn, cfg);

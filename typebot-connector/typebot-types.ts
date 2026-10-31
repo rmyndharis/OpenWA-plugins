@@ -26,7 +26,8 @@ export type InputSpec =
   // `placeholder` is the author's plain-text placeholder, never markup. `skipLabel` is set only for an
   // optional step; its absence, including on rows persisted by 0.2.10, means required (Typebot's default).
   | { kind: 'file'; blockId: string; placeholder?: string; skipLabel?: string }
-  | { kind: 'text'; blockId: string; placeholder?: string; attachmentsEnabled: boolean }
+  // Optional for persisted rows written before audio and attachments were distinguished.
+  | { kind: 'text'; blockId: string; placeholder?: string; attachmentsEnabled: boolean; audioClipsEnabled?: boolean }
   | { kind: 'unsupported'; blockId: string; typeLabel: string };
 
 export interface NormalizedResponse {
@@ -52,6 +53,6 @@ export type OutgoingPart =
 // ── reply-map output ──────────────────────────────────────────────────────────────────
 export type ReplyIntent =
   | { kind: 'text'; message: string }                                   // send as the continueChat message string
-  | { kind: 'file'; mime: string; filename: string; data: string }      // base64 data → upload, then continueChat
+  | { kind: 'file' | 'audio'; mime: string; filename: string; data: string } // base64 data to upload, then continueChat
   | { kind: 'fallback'; text: string }                                  // send this text to WA and DO NOT advance
   | { kind: 'skip' };                                                   // continueChat with no message: how Typebot skips an optional file step

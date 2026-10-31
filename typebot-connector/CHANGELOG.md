@@ -6,6 +6,13 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-10-31
+
+### Fixed
+
+- Reject shared cards and empty answers at text inputs without advancing the flow.
+- Preserve attachment captions and send enabled audio clips using the Typebot audio message format.
+
 ## [0.3.5] - 2026-10-31
 
 ### Changed
