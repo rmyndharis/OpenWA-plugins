@@ -6,6 +6,14 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.14] - 2026-10-31
+
+### Fixed
+
+- Handle root-shaped Chatwoot conversation events for human handover.
+- Isolate mappings and queued relays by Chatwoot destination, and restore history when a conversation is replaced.
+- Serialize reverse-mapping updates and retry queue capacity checks.
+
 ## [0.9.13] - 2026-10-31
 
 ### Changed

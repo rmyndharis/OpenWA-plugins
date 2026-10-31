@@ -15,7 +15,7 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chatwoot-adapter` |
-| **Version** | 0.9.13 |
+| **Version** | 0.9.14 |
 | **Released** | 2026-10-31 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
@@ -55,7 +55,7 @@ sees it.
 
 1. **Chatwoot — API-channel inbox.** Create an API-channel inbox and note its **inbox ID**.
 2. **Chatwoot — account-level webhook.** Integrations → Webhooks → add a webhook subscribed to
-   `message_created` and `conversation_updated`; copy the webhook **secret** shown on the edit form.
+   `message_created`, `conversation_updated`, and `conversation_status_changed`; copy the webhook **secret** shown on the edit form.
    Chatwoot generates this secret itself and won't accept a custom one — so it must be copied **into**
    OpenWA (the reverse direction is impossible).
 3. **OpenWA — mint an instance with that secret.** OpenWA verifies every webhook delivery against the
@@ -198,6 +198,12 @@ Checked against the OpenWA v0.27.0 worker runtime with isolated services. A webh
   sharded storage keys so the key count stays constant however many chats are relayed. `healthCheck`
   reports retry-queue and dead-letter health if you need operational signals. The 3-day dedup markers,
   by contrast, expire and are pruned hourly.
+
+### Existing installations
+
+Mappings, delivery markers, retry entries, and history imports are bound to the Chatwoot origin, account, and inbox. Changing any of these settings starts a separate destination. Queued messages for a different destination stay held until that destination is active again and its WhatsApp session dispatches a fresh event. Configuration updates clear captured session settings, so retry processing waits for a fresh event from each session.
+
+Older mappings and queued messages lack a destination identity. Existing mappings are preserved but rebuilt through the configured account's contact lookup on the next inbound WhatsApp message. Agent replies and handover events that still depend on an older mapping fail for retry rather than being acknowledged and dropped. If the host's retry budget expires before the mapping is rebuilt, redrive the retained ingress delivery after the next inbound message. Older queued customer messages remain stored and require operator reconciliation before replay because their original destination cannot be established safely. Configured history may be imported again when a mapping is rebuilt because old delivery markers cannot be attributed to the current destination.
 
 ### Per-session config
 

@@ -190,6 +190,49 @@ test('handover: assign→human, unassign→bot, resolve→closed', async () => {
   assert.deepEqual(handovers.map(h => h[1]), ['human', 'bot', 'closed']);
 });
 
+test('root conversation updates apply assignment, removal and resolution in the configured account and inbox', async () => {
+  const { deps: d, handovers } = deps();
+  d.accountId = 3;
+  for (const [status, assignee] of [['open', 3], ['open', null], ['resolved', null]] as const) {
+    await handleOutbound(d, req({
+      event: 'conversation_updated', id: 55, inbox_id: 7, account_id: 3, status,
+      meta: { assignee: assignee ? { id: assignee, name: 'Sam' } : null },
+      changed_attributes: [{ assignee_id: { previous_value: null, current_value: assignee } }],
+    }));
+  }
+  assert.deepEqual(handovers.map(h => h[1]), ['human', 'bot', 'closed']);
+});
+
+test('conversation updates from another account or inbox never change handover', async () => {
+  const { deps: d, handovers } = deps();
+  d.accountId = 3;
+  for (const body of [
+    { event: 'conversation_updated', id: 55, status: 'resolved', inbox_id: 8, account_id: 3 },
+    { event: 'conversation_updated', id: 55, status: 'resolved', inbox_id: 7, account_id: 4 },
+    { event: 'conversation_updated', conversation: { id: 55, status: 'resolved', inbox_id: 8 }, account: { id: 3 } },
+    { event: 'conversation_updated', conversation: { id: 55, status: 'resolved' }, inbox: { id: 7 }, account: { id: 4 } },
+  ]) await handleOutbound(d, req(body));
+  assert.deepEqual(handovers, []);
+});
+
+test('message events from another account never send a WhatsApp reply', async () => {
+  const { deps: d, sent } = deps();
+  d.accountId = 3;
+  await handleOutbound(d, req({
+    event: 'message_created', id: 9, message_type: 'outgoing', private: false,
+    account: { id: 4 }, inbox: { id: 7 }, conversation: { id: 55 }, content: 'private reply',
+  }));
+  assert.deepEqual(sent, []);
+});
+
+test('malformed conversation change lists are ignored without retrying the delivery', async () => {
+  const { deps: d, handovers } = deps();
+  for (const changed_attributes of [null, {}, 'assignee_id', [null, { assignee_id: null }]]) {
+    await handleOutbound(d, req({ event: 'conversation_updated', id: 55, inbox_id: 7, changed_attributes }));
+  }
+  assert.deepEqual(handovers, []);
+});
+
 test('status→open with no assignee change is a no-op (never infer human from status)', async () => {
   const { deps: d, handovers } = deps();
   await handleOutbound(d, req({ event: 'conversation_updated', conversation: { id: 55, status: 'open' }, changed_attributes: [{ status: { previous_value: 'pending', current_value: 'open' } }] }));
@@ -376,4 +419,36 @@ test('a mid-reply send failure still leaves the attachments that landed echo-gua
   assert.ok(marks.includes('wa:WA1'), `the first send must still be echo-guarded, saw ${JSON.stringify(marks)}`);
   // The Chatwoot-side marker must NOT be written: the reply did not complete, so the retry must run.
   assert.equal(marks.some((m) => m.startsWith('cw:')), false, JSON.stringify(marks));
+});
+
+
+test('explicit unassignment wins over stale assignee metadata', async () => {
+  const { deps: d, handovers } = deps();
+  await handleOutbound(d, req({ event: 'conversation_updated', id: 55, inbox_id: 7, status: 'open', meta: { assignee: { id: 3 } }, changed_attributes: [{ assignee_id: { previous_value: 3, current_value: null } }] }));
+  assert.deepEqual(handovers.map(h => h[1]), ['bot']);
+});
+
+test('incomplete or malformed assignee transitions never release a handover', async () => {
+  const { deps: d, handovers } = deps();
+  for (const value of [{}, [], { current_value: '3' }, { current_value: false }]) {
+    await handleOutbound(d, req({ event: 'conversation_updated', id: 55, inbox_id: 7, status: 'open', changed_attributes: [{ assignee_id: value }] }));
+  }
+  assert.deepEqual(handovers, []);
+});
+
+test('conflicting account and inbox identifiers are ignored', async () => {
+  const { deps: d, sent, handovers } = deps();
+  d.accountId = 3;
+  await handleOutbound(d, req({ event: 'conversation_updated', id: 55, status: 'resolved', account: { id: 3 }, account_id: 4, inbox_id: 7 }));
+  await handleOutbound(d, req({ event: 'message_created', id: 9, content: 'private', message_type: 'outgoing', private: false, inbox: { id: 7 }, conversation: { id: 55, inbox_id: 8 } }));
+  assert.deepEqual(sent, []);
+  assert.deepEqual(handovers, []);
+});
+
+
+test('root status-change events close a mapped conversation without inferring a new assignee', async () => {
+  const { deps: d, handovers } = deps();
+  d.accountId = 3;
+  await handleOutbound(d, req({ event: 'conversation_status_changed', id: 55, account: { id: 3 }, inbox_id: 7, status: 'resolved', changed_attributes: [{ status: { previous_value: 'open', current_value: 'resolved' } }] }));
+  assert.deepEqual(handovers.map(h => h[1]), ['closed']);
 });

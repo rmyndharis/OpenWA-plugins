@@ -48,7 +48,7 @@ export async function drainRetries(
   deps: DrainDeps,
   relay: (sessionId: string, chatId: string, msg: IncomingMessage) => Promise<void>,
   maxAttempts: number,
-  canRelay: (sessionId: string) => boolean = () => true,
+  canRelay: (sessionId: string, destination?: string) => boolean = () => true,
 ): Promise<{ deadLettered: number }> {
   // Stream by key so a large media backlog is never fully resident: fetch one entry at a time.
   const keys = await deps.store.listRetryKeys();
@@ -62,7 +62,7 @@ export async function drainRetries(
     // would post it to whichever Chatwoot the base config names) and not bumped (the message cannot fix
     // the condition, and maxAttempts ticks of that would dead-letter it). It drains on a later tick,
     // once that session has dispatched a hook again.
-    if (!canRelay(e.sessionId)) continue;
+    if (!canRelay(e.sessionId, e.destination)) continue;
     // The drain calls relayInbound directly, so it does not pass through shouldRelayInbound. Live
     // inbound now refuses channel and broadcast chats before enqueueing, but an entry queued by an
     // earlier version is still sitting here, and relaying it would mint exactly the Chatwoot contact
@@ -76,6 +76,7 @@ export async function drainRetries(
     // Lock on the RAW chatId, same deterministic key live inbound uses for this chat. @lid canonicalization
     // is a lookup concern handled inside relayInbound (best-effort), not a lock concern.
     await deps.lock.run(`${e.sessionId}:${e.chatId}`, async () => {
+      if (!(await deps.store.getRetry(e.key)) || !canRelay(e.sessionId, e.destination)) return;
       let relayed = false;
       try {
         await relay(e.sessionId, e.chatId, e.msg);

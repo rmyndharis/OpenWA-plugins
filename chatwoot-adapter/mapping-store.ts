@@ -4,6 +4,7 @@ import { KeyedAsyncLock } from './chat-lock.ts';
 // A failed inbound relay held for retry. The full message (incl. media) is stored so the retry re-posts
 // it faithfully. `enqueuedAt` is a wall-clock ms used only to pick the oldest entry to drop on overflow.
 export interface RetryEntry {
+  destination?: string;
   sessionId: string;
   chatId: string;
   msg: IncomingMessage;
@@ -87,6 +88,10 @@ type MapBucket = Record<string, unknown>;
 /** The unscoped reverse mapping: a session's chat, or a marker that two sessions claim this id. */
 type LegacyRev = { sessionId: string; chatId: string } | { ambiguous: true };
 
+export function destinationIdentity(config: { baseUrl: string; accountId: number; inboxId: number }): string {
+  return JSON.stringify([new URL(config.baseUrl).origin, config.accountId, config.inboxId]);
+}
+
 export class MappingStore {
 
   // Serializes the read-modify-write inside markSeen, per bucket. A bucket holds many markers, so two
@@ -98,32 +103,41 @@ export class MappingStore {
   // scheme had no read-modify-write and so no such window — this lock restores that guarantee.
   // Lock order is always caller-lock → bucket-lock (nothing takes a chat lock while holding this), so
   // it cannot deadlock against them.
-  private readonly bucketLock = new KeyedAsyncLock();
-
   constructor(
     private readonly storage: PluginStorage,
     private readonly mappings: PluginMappingsCapability,
+    readonly destination?: string,
+    private readonly bucketLock = new KeyedAsyncLock(),
+    private readonly assertCurrent: () => void = () => {},
   ) {}
 
+  forDestination(config: { baseUrl: string; accountId: number; inboxId: number }, assertCurrent?: () => void): MappingStore {
+    return new MappingStore(this.storage, this.mappings, destinationIdentity(config), this.bucketLock, assertCurrent);
+  }
+
+  private qualified(key: string): string {
+    return this.destination ? `${this.destination}:${key}` : key;
+  }
+
   private fwdKey(sessionId: string, chatId: string): string {
-    return `conv:${sessionId}:${chatId}`;
+    return this.qualified(`conv:${sessionId}:${chatId}`);
   }
   private revKey(sessionId: string, conversationId: number): string {
-    return `wa:${sessionId}:${conversationId}`;
+    return this.qualified(`wa:${sessionId}:${conversationId}`);
   }
   private legacyRevKey(conversationId: number): string {
-    return `wa:${conversationId}`;
+    return this.qualified(`wa:${conversationId}`);
   }
   // The pre-0.6.0 key: ONE storage file per marker. Still read (see hasSeen) until the last of them has
   // aged out, and still pruned by pruneSeen — never written again.
   private legacySeenKey(kind: 'wa' | 'cw', id: string, scope?: string): string {
-    return scope ? `seen:${scope}:${kind}:${id}` : `seen:${kind}:${id}`;
+    return this.qualified(scope ? `seen:${scope}:${kind}:${id}` : `seen:${kind}:${id}`);
   }
 
   // The logical marker id, scope+kind included so every tenant and both marker kinds share ONE shard
   // pool — key count stays SEEN_SHARDS no matter how many sessions the host runs.
   private seenId(kind: 'wa' | 'cw', id: string, scope?: string): string {
-    return scope ? `${scope}:${kind}:${id}` : `${kind}:${id}`;
+    return this.qualified(scope ? `${scope}:${kind}:${id}` : `${kind}:${id}`);
   }
 
   // Deliberately NOT under the `seen:` prefix: pruneSeen treats every `seen:`-prefixed value without a
@@ -192,8 +206,18 @@ export class MappingStore {
     await this.storage.delete(key);
   }
 
-  getByChat(sessionId: string, chatId: string): Promise<ChatLink | null> {
-    return this.readMapped<ChatLink>(this.fwdKey(sessionId, chatId));
+  async getByChat(sessionId: string, chatId: string): Promise<ChatLink | null> {
+    const link = await this.readMapped<ChatLink>(this.fwdKey(sessionId, chatId));
+    // A cached destination may become active again after another destination replaced the core row.
+    if (link && this.destination) {
+      const key = { sessionId, chatId, instanceId: sessionId };
+      const current = await this.mappings.get(key);
+      if (current?.providerConversationId !== this.qualified(String(link.conversationId))) {
+        this.assertCurrent();
+        await this.mappings.upsert(key, this.qualified(String(link.conversationId)));
+      }
+    }
+    return link;
   }
 
   // Resolve the WA chat for a Chatwoot conversation. With a `sessionId` (a delivery that carries its
@@ -212,6 +236,13 @@ export class MappingStore {
     // nothing that says which tenant it belongs to, so there is no right answer to pick here.
     if (!legacy || 'ambiguous' in legacy || (sessionId && legacy.sessionId !== sessionId)) return null;
     return legacy;
+  }
+
+  async hasLegacyConversation(conversationId: number, sessionId?: string): Promise<boolean> {
+    if (!this.destination) return false;
+    if (sessionId && await this.readMapped(`wa:${sessionId}:${conversationId}`)) return true;
+    const legacy = await this.readMapped<LegacyRev>(`wa:${conversationId}`);
+    return Boolean(legacy && ('ambiguous' in legacy || !sessionId || legacy.sessionId === sessionId));
   }
 
   // Ordering is the durability contract, not a style choice: the FORWARD key is written LAST, as the
@@ -234,17 +265,20 @@ export class MappingStore {
     // a matter of course — and whoever linked last used to win the key. Claim it only while it is
     // unclaimed, and mark it unusable once a second session claims the same id.
     const legacyKey = this.legacyRevKey(link.conversationId);
-    const legacy = await this.readMapped<LegacyRev>(legacyKey);
-    if (!legacy) {
-      await this.writeMapped(legacyKey, rev);
-    } else if (!('ambiguous' in legacy) && legacy.sessionId !== sessionId) {
-      await this.writeMapped(legacyKey, { ambiguous: true });
-    }
-    await this.mappings.upsert({ sessionId, chatId, instanceId }, String(link.conversationId));
+    await this.bucketLock.run(`reverse:${legacyKey}`, async () => {
+      const legacy = await this.readMapped<LegacyRev>(legacyKey);
+      if (!legacy) await this.writeMapped(legacyKey, rev);
+      else if (!('ambiguous' in legacy) && (legacy.sessionId !== sessionId || legacy.chatId !== chatId)) {
+        await this.writeMapped(legacyKey, { ambiguous: true });
+      }
+    });
+    this.assertCurrent();
+    await this.mappings.upsert({ sessionId, chatId, instanceId }, this.qualified(String(link.conversationId)));
     await this.writeMapped(this.fwdKey(sessionId, chatId), link); // commit marker, see above
   }
 
   async patch(sessionId: string, chatId: string, patch: Partial<ChatLink>): Promise<void> {
+    this.assertCurrent();
     const existing = await this.getByChat(sessionId, chatId);
     if (!existing) return;
     await this.writeMapped(this.fwdKey(sessionId, chatId), { ...existing, ...patch });
@@ -319,10 +353,10 @@ export class MappingStore {
 
   // Durable run-once marker for the one-time bulk history sweep, per WA session.
   async isBulkBackfilled(sessionId: string): Promise<boolean> {
-    return Boolean(await this.storage.get(`backfill:all:${sessionId}`));
+    return Boolean(await this.storage.get(this.qualified(`backfill:all:${sessionId}`)));
   }
   async setBulkBackfilled(sessionId: string): Promise<void> {
-    await this.storage.set(`backfill:all:${sessionId}`, 1);
+    await this.storage.set(this.qualified(`backfill:all:${sessionId}`), 1);
   }
 
   // ---- Inbound retry queue (durable, over ctx.storage) --------------------------------------------
@@ -331,7 +365,7 @@ export class MappingStore {
   // list(prefix) already narrows, but a fake that ignores the arg would otherwise leak other keys).
 
   private retryKey(sessionId: string, msgId: string): string {
-    return `retry:${sessionId}:${msgId}`;
+    return `retry:${this.qualified(`${sessionId}:${msgId}`)}`;
   }
 
   private async retryKeys(): Promise<string[]> {
@@ -348,29 +382,27 @@ export class MappingStore {
   }
 
   // Enqueue a failed inbound relay. No-op if this message id is already queued (never resets its attempt
-  // count). When the queue is at `maxPending`, drop the OLDEST entry (returns its msg id so the caller can
-  // log the loss) to bound storage. `attempts` starts at 0.
+  // count). Evict the oldest entries as needed to keep `maxPending`, including an older oversized queue.
+  // Return their message ids so the caller can log the loss. `attempts` starts at 0.
   async enqueueRetry(entry: Omit<RetryEntry, 'attempts'>, maxPending: number): Promise<string | null> {
-    const key = this.retryKey(entry.sessionId, entry.msg.id);
-    if (await this.storage.get(key)) return null;
-    const keys = await this.retryKeys();
-    let oldestKey: string | null = null;
-    let dropped: string | null = null;
-    if (keys.length >= maxPending) {
-      // Only NOW load the values (to pick the oldest). The common under-cap path never deserializes any
-      // queued blob — counting by key length keeps enqueue O(1) in payload size.
-      const pending = await this.readRetries(keys);
-      if (pending.length) {
-        const oldest = pending.reduce((a, b) => (a.enqueuedAt <= b.enqueuedAt ? a : b));
-        oldestKey = oldest.key;
-        dropped = oldest.msg.id;
+    return this.bucketLock.run('retry-queue', async () => {
+      const key = this.retryKey(entry.sessionId, entry.msg.id);
+      if (await this.storage.get(key)) return null;
+      const keys = await this.retryKeys();
+      const evicted = keys.length < maxPending ? [] : (await this.readRetries(keys))
+        .sort((a, b) => a.enqueuedAt - b.enqueuedAt)
+        .slice(0, keys.length - maxPending + 1);
+      // Persist the new message before eviction, so a rejected write preserves all pending messages.
+      await this.storage.set(key, { ...entry, ...(this.destination ? { destination: this.destination } : {}), attempts: 0 } satisfies RetryEntry);
+      try {
+        for (const old of evicted) await this.storage.delete(old.key);
+      } catch (err) {
+        for (const { key: oldKey, ...old } of evicted) await this.storage.set(oldKey, old);
+        await this.storage.delete(key);
+        throw err;
       }
-    }
-    // Write the NEW entry BEFORE deleting the oldest: if the set rejects (e.g. an oversized value), the
-    // oldest is preserved instead of both being lost, and no drop is reported.
-    await this.storage.set(key, { ...entry, attempts: 0 } satisfies RetryEntry);
-    if (oldestKey) await this.storage.delete(oldestKey);
-    return dropped;
+      return evicted.length ? evicted.map(e => e.msg.id).join(', ') : null;
+    });
   }
 
   async listRetries(): Promise<Array<RetryEntry & { key: string }>> {
@@ -389,12 +421,14 @@ export class MappingStore {
   }
 
   async bumpRetryAttempts(key: string, attempts: number): Promise<void> {
-    const e = await this.storage.get<RetryEntry>(key);
-    if (e) await this.storage.set(key, { ...e, attempts });
+    await this.bucketLock.run('retry-queue', async () => {
+      const e = await this.storage.get<RetryEntry>(key);
+      if (e) await this.storage.set(key, { ...e, attempts });
+    });
   }
 
   async deleteRetry(key: string): Promise<void> {
-    await this.storage.delete(key);
+    await this.bucketLock.run('retry-queue', () => this.storage.delete(key));
   }
 
   // Count by key only — never load the (media-bearing) values, so a large backlog can't spike memory.
@@ -410,9 +444,10 @@ export class MappingStore {
     await this.deleteMapped(this.revKey(sessionId, conversationId));
     // Only if it is ours. Deleting it unconditionally removed another tenant's fallback along with
     // our own, silently dropping their agent replies until their next inbound message rebuilt it.
-    const legacy = await this.readMapped<LegacyRev>(this.legacyRevKey(conversationId));
-    if (legacy && !('ambiguous' in legacy) && legacy.sessionId === sessionId) {
-      await this.deleteMapped(this.legacyRevKey(conversationId));
-    }
+    const legacyKey = this.legacyRevKey(conversationId);
+    await this.bucketLock.run(`reverse:${legacyKey}`, async () => {
+      const legacy = await this.readMapped<LegacyRev>(legacyKey);
+      if (legacy && !('ambiguous' in legacy) && legacy.sessionId === sessionId) await this.deleteMapped(legacyKey);
+    });
   }
 }

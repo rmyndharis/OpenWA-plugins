@@ -30,6 +30,10 @@ export interface InboundDeps {
   onBackfillExhausted: (chatId: string) => void;
 }
 
+export function historyScope(sessionId: string, conversationId: number): string {
+  return JSON.stringify([sessionId, conversationId]);
+}
+
 function senderLabel(msg: IncomingMessage): string {
   return msg.contact?.pushName || msg.senderPhone || msg.author || 'unknown';
 }
@@ -148,6 +152,7 @@ export async function relayMessage(
   // is always defined — never the ingress delivery's `instance.sessionScope ?? undefined`, which is
   // undefined for an unscoped instance and would key a different marker.
   if (messageType === 'outgoing') await deps.store.markSeen('cw', String(created.id), sessionId);
+  if (msg.id) await deps.store.markSeen('wa', msg.id, historyScope(sessionId, conversationId));
   });
 }
 

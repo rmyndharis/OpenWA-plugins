@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import ChatwootAdapter from './index.ts';
+import { destinationIdentity } from './mapping-store.ts';
 import { MAX_PENDING_RETRIES, RETRY_INTERVAL_MS } from './retry.ts';
 import type { PluginContext } from '../types/openwa';
 
@@ -149,9 +150,10 @@ test('retry drain leaves a dangling mapping alone on a 404 — no rebuild, the r
   const { ctx, storageMap, cbs } = fakeCtx({ ...goodConfig, relayOwnMessages: false });
   // A stale mapping: Chatwoot conversation 55 is gone (operator deleted it out of band) but the mapping
   // still points at it.
-  storageMap.set('conv:sess:c@wa', { conversationId: 55, contactId: 9, sourceId: 'src' });
+  storageMap.set(`${destinationIdentity(goodConfig)}:conv:sess:c@wa`, { conversationId: 55, contactId: 9, sourceId: 'src' });
   // Queued as if an earlier live relay against it already failed once.
   storageMap.set('retry:sess:m1', {
+    destination: destinationIdentity(goodConfig),
     sessionId: 'sess',
     chatId: 'c@wa',
     msg: { id: 'm1', from: 'x', to: 'y', chatId: 'c@wa', body: 'hi', type: 'chat', timestamp: 0, fromMe: false, isGroup: false },
@@ -190,7 +192,7 @@ test('retry drain leaves a dangling mapping alone on a 404 — no rebuild, the r
   await new Promise(res => setImmediate(res));
   await new Promise(res => setImmediate(res));
 
-  const mapping = storageMap.get('conv:sess:c@wa') as { conversationId: number } | undefined;
+  const mapping = storageMap.get(`${destinationIdentity(goodConfig)}:conv:sess:c@wa`) as { conversationId: number } | undefined;
   assert.equal(mapping?.conversationId, 55, 'the dangling mapping must be left exactly as it was — no rebuild');
   assert.ok(!calls.some(c => c.startsWith('POST') && c.endsWith('/conversations')), 'no fresh conversation is minted on the drain path');
   const retry = storageMap.get('retry:sess:m1') as { attempts: number } | undefined;
@@ -209,6 +211,7 @@ test('the retry drain never re-posts one session\'s message with another session
   const { ctx, storageMap, cbs } = fakeCtx({ ...goodConfig, relayOwnMessages: false });
   // Queued for a session this worker has never dispatched an event for.
   storageMap.set('retry:tenantB:m1', {
+    destination: destinationIdentity(goodConfig),
     sessionId: 'tenantB',
     chatId: 'c@wa',
     msg: { id: 'm1', from: 'x', to: 'y', chatId: 'c@wa', body: 'hi', type: 'chat', timestamp: 0, fromMe: false, isGroup: false },

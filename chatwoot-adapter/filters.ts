@@ -49,14 +49,19 @@ export function shouldRelayOwn(msg: IncomingMessage, source: string, relayGroups
 }
 
 // The subset of a Chatwoot account-level webhook payload the adapter reads (message_created +
-// conversation_updated). Everything is optional — Chatwoot omits fields per event/version.
+// conversation_updated/status_changed). Fields are optional because payloads vary by event/version.
 export interface ChatwootWebhookMessage {
   event?: string;
   message_type?: string;
   private?: boolean;
   content?: string;
   id?: number;
-  conversation?: { id?: number; status?: string; meta?: { assignee?: { id?: number } | null } };
+  status?: string;
+  account_id?: number;
+  inbox_id?: number;
+  meta?: { assignee?: { id?: number } | null };
+  account?: { id?: number };
+  conversation?: { id?: number; status?: string; inbox_id?: number; account_id?: number; meta?: { assignee?: { id?: number } | null } };
   inbox?: { id?: number };
   sender?: { type?: string };
   attachments?: Array<{ id?: number; file_type?: string; data_url?: string }>;

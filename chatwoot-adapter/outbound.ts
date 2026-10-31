@@ -7,6 +7,7 @@ import type {
 } from '../types/openwa';
 import type { MappingStore } from './mapping-store.ts';
 import type { KeyedAsyncLock } from './chat-lock.ts';
+import { historyScope } from './relay.ts';
 import { shouldRelayOutbound, type ChatwootWebhookMessage } from './filters.ts';
 
 export interface OutboundDeps {
@@ -17,6 +18,7 @@ export interface OutboundDeps {
   // marker + own-send handler must serialize on one canonical key).
   engine: PluginEngineReadCapability;
   store: MappingStore;
+  accountId?: number;
   inboxId: number;
   log: (m: string, e?: unknown) => void;
 }
@@ -36,20 +38,33 @@ export async function handleOutbound(deps: OutboundDeps, req: WebhookRequest): P
   } catch {
     return { status: 400 };
   }
+  if (!evt || typeof evt !== 'object' || Array.isArray(evt)) return { status: 400 };
+  const accounts = [evt.account?.id, evt.account_id, evt.conversation?.account_id];
+  const inboxes = [evt.inbox?.id, evt.inbox_id, evt.conversation?.inbox_id];
+  if ((deps.accountId !== undefined && accounts.some(id => id !== undefined && id !== deps.accountId)) ||
+      inboxes.some(id => id !== undefined && id !== deps.inboxId)) return { status: 200 };
   // The delivery's WA session scope. Present → the reverse lookup + dedup are tenant-scoped (isolating two
   // Chatwoot accounts that share a conversation id); absent → unscoped, same as a single-tenant install.
   const sessionId = req.sessionId;
   try {
-    if (evt.event === 'conversation_updated') {
+    if (evt.event === 'conversation_updated' || evt.event === 'conversation_status_changed') {
       await applyHandover(deps, sessionId, evt);
       return { status: 200 };
     }
-    if (shouldRelayOutbound(evt, deps.inboxId)) await relay(deps, sessionId, evt);
+    if (evt.event === 'message_created' && shouldRelayOutbound(evt, deps.inboxId)) await relay(deps, sessionId, evt);
   } catch (err) {
     deps.log('outbound failed', err);
     throw err;
   }
   return { status: 200 };
+}
+
+async function resolveTarget(deps: OutboundDeps, conversationId: number, sessionId?: string) {
+  const target = await deps.store.getByConversation(conversationId, sessionId);
+  if (!target && deps.store.destination && await deps.store.hasLegacyConversation(conversationId, sessionId)) {
+    throw new Error('Chatwoot mapping must be established in the current destination before this event can be delivered');
+  }
+  return target;
 }
 
 async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: ChatwootWebhookMessage): Promise<void> {
@@ -59,7 +74,7 @@ async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: Cha
   // A media-only agent reply (voice note, image, …) has no `content`, so gate on either text or media —
   // the old text-only guard dropped every attachment silently (#607).
   if (!conversationId || (!text && media.length === 0)) return;
-  const target = await deps.store.getByConversation(conversationId, sessionId);
+  const target = await resolveTarget(deps, conversationId, sessionId);
   if (!target) {
     deps.log(`no WA mapping for conversation ${conversationId}`);
     return;
@@ -69,6 +84,11 @@ async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: Cha
     // Same conversation-scoped key relayMessage holds across post+mark: an echo webhook that arrives
     // while the adapter's own post is still in flight waits here until the echo marker has landed.
     await deps.lock.run(`${target.sessionId}:conv:${conversationId}`, async () => {
+    if (deps.store.destination) {
+      const link = await deps.store.getByChat(target.sessionId, target.chatId);
+      if (!link) throw new Error('Chatwoot mapping is incomplete in the current destination');
+      if (link.conversationId !== conversationId) return;
+    }
     const id = evt.id !== undefined ? String(evt.id) : undefined;
     // Dedup, but mark only AFTER a successful send: a transient send failure must retry the reply, not be
     // silently suppressed as "already seen".
@@ -99,8 +119,10 @@ async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: Cha
     let unclaimed = 0;
     const claimEcho = async (res: unknown): Promise<void> => {
       const sentId = (res as { messageId?: string } | null)?.messageId;
-      if (sentId) await deps.store.markSeen('wa', sentId, target.sessionId);
-      else unclaimed++;
+      if (sentId) {
+        await deps.store.markSeen('wa', sentId, target.sessionId);
+        await deps.store.markSeen('wa', sentId, historyScope(target.sessionId, conversationId));
+      } else unclaimed++;
     };
     if (media.length > 0) {
       // No replyTo on a media envelope: the engine media path cannot quote, and the host REJECTS an
@@ -176,19 +198,24 @@ function mediaAttachments(
 function assigneeChange(evt: ChatwootWebhookMessage): { changed: boolean; assignee: number | undefined } {
   // Guard each element: `changed_attributes` is untrusted parsed JSON, so a non-object entry (e.g. `null`)
   // would make `'assignee_id' in a` throw a TypeError → an endless retry of a signed-but-malformed event.
-  const attr = (evt.changed_attributes ?? []).find(a => a != null && typeof a === 'object' && 'assignee_id' in a)?.[
+  const attr = (Array.isArray(evt.changed_attributes) ? evt.changed_attributes : []).find(a => a != null && typeof a === 'object' && 'assignee_id' in a)?.[
     'assignee_id'
   ];
-  const assignee = evt.conversation?.meta?.assignee?.id ?? (attr?.current_value as number | undefined) ?? undefined;
-  return { changed: attr !== undefined, assignee };
+  const conversation = evt.id !== undefined ? evt : evt.conversation;
+  if (!attr || typeof attr !== 'object' || Array.isArray(attr)) return { changed: false, assignee: undefined };
+  const assignee = Object.hasOwn(attr, 'current_value') ? attr.current_value : conversation?.meta?.assignee?.id;
+  const valid = typeof assignee === 'number' && Number.isSafeInteger(assignee) && assignee > 0;
+  return { changed: assignee === null || valid, assignee: valid ? assignee as number : undefined };
 }
 
 async function applyHandover(deps: OutboundDeps, sessionId: string | undefined, evt: ChatwootWebhookMessage): Promise<void> {
-  const conversationId = evt.conversation?.id;
-  if (conversationId === undefined) return;
-  const target = await deps.store.getByConversation(conversationId, sessionId);
+  const conversation = evt.id !== undefined ? evt : evt.conversation;
+  const conversationId = conversation?.id;
+  const inboxId = evt.inbox?.id ?? conversation?.inbox_id;
+  if (!Number.isSafeInteger(conversationId) || conversationId! <= 0 || (inboxId !== undefined && inboxId !== deps.inboxId)) return;
+  const target = await resolveTarget(deps, conversationId!, sessionId);
   if (!target) return;
-  const status = evt.conversation?.status;
+  const status = conversation?.status;
   const { changed, assignee } = assigneeChange(evt);
   let state: HandoverState | null = null;
   if (status === 'resolved') state = 'closed';
@@ -201,7 +228,12 @@ async function applyHandover(deps: OutboundDeps, sessionId: string | undefined, 
   // canonicalChatId requires a live engine — resolving it here would wedge a handover while the session is
   // offline. Handover (a state-flag write) and relay (a message send) are independent, so they don't need
   // to serialize with each other; the raw key still serializes concurrent handover events for a chat.
-  await deps.lock.run(`${target.sessionId}:${target.chatId}`, () =>
-    deps.handover.set({ sessionId: target.sessionId, chatId: target.chatId, instanceId: target.sessionId }, resolved),
-  );
+  await deps.lock.run(`${target.sessionId}:${target.chatId}`, async () => {
+    if (deps.store.destination) {
+      const link = await deps.store.getByChat(target.sessionId, target.chatId);
+      if (!link) throw new Error('Chatwoot mapping is incomplete in the current destination');
+      if (link.conversationId !== conversationId) return;
+    }
+    await deps.handover.set({ sessionId: target.sessionId, chatId: target.chatId, instanceId: target.sessionId }, resolved);
+  });
 }

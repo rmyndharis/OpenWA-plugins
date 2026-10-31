@@ -35,7 +35,7 @@ export async function relayInbound(
   const { conversationId, key, backfill } = await resolveConversation(deps, sessionId, msg, canonical);
   // Lazy backfill: replay this chat's recent history (older messages, both directions, deduped) BEFORE
   // posting this one, so the thread reads chronologically and this message's quote resolves against a
-  // just-posted source_id. This message is already markSeen, so backfill skips it.
+  // just-posted source_id. Its id is excluded explicitly from this history window.
   //
   // The trigger is the stored marker, NOT "the conversation was just created". The old derivation could
   // only ever fire once: a failed fetch left the conversation in place, so every later message saw
@@ -46,7 +46,7 @@ export async function relayInbound(
   // predates the marker — a chat an earlier release already handled, which must be left alone. The
   // tradeoff is deliberate: a chat whose import failed before the upgrade is never retried, which is
   // exactly what those installs do today; every chat from here on gets the durable retry.
-  await maybeBackfill(deps, sessionId, msg.chatId, conversationId, key, backfill);
+  await maybeBackfill(deps, sessionId, msg.chatId, conversationId, key, backfill, msg.id);
   try {
     await relayMessage(deps, sessionId, conversationId, msg, 'incoming');
   } catch (err) {
@@ -73,7 +73,7 @@ export async function relayInbound(
       // The deleted Chatwoot conversation is gone, so its history is gone too. When the rebuild mints a
       // brand-new conversation, re-import prior history under the same gate the happy path uses — a fresh
       // Chatwoot thread without context defeats the point of (lazy) backfill.
-      await maybeBackfill(deps, sessionId, msg.chatId, re.conversationId, re.key, re.backfill);
+      await maybeBackfill(deps, sessionId, msg.chatId, re.conversationId, re.key, re.backfill, msg.id);
       await relayMessage(deps, sessionId, re.conversationId, msg, 'incoming');
     } catch (rebuildErr) {
       deps.log('inbound 404-recovery failed; surfacing original 404 to retry queue', rebuildErr);
@@ -159,10 +159,11 @@ async function maybeBackfill(
   conversationId: number,
   key: string,
   backfill: { done?: boolean; attempts?: number },
+  excludeMessageId: string,
 ): Promise<void> {
   const attempts = backfill.attempts ?? 0;
   if (!(deps.backfillLimit > 0 && backfill.done === false && attempts < MAX_BACKFILL_ATTEMPTS)) return;
-  if (await backfillHistory(deps, sessionId, chatId, conversationId)) {
+  if (await backfillHistory(deps, sessionId, chatId, conversationId, excludeMessageId)) {
     await recordBackfill(deps, sessionId, key, { backfillDone: true });
   } else {
     const next = attempts + 1;

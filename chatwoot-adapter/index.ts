@@ -1,6 +1,6 @@
 import type { IPlugin, PluginContext, IncomingMessage, HookContext, HookResult, WebhookRequest } from '../types/openwa';
 import { ChatwootClient } from './chatwoot-client.ts';
-import { MappingStore, SEEN_TTL_MS, SEEN_PRUNE_INTERVAL_MS } from './mapping-store.ts';
+import { MappingStore, destinationIdentity, SEEN_TTL_MS, SEEN_PRUNE_INTERVAL_MS } from './mapping-store.ts';
 import { KeyedAsyncLock } from './chat-lock.ts';
 import { handleInbound, relayInbound, MAX_BACKFILL_ATTEMPTS } from './inbound.ts';
 import { handleSent } from './sent.ts';
@@ -95,6 +95,7 @@ export default class ChatwootAdapter implements IPlugin {
   // relays only for sessions whose own slice is in here. In memory, per worker: an enable/disable
   // cycle empties it and that session's next message refills it.
   private sessionConfigs = new Map<string, ChatwootFullConfig>();
+  private configGeneration = 0;
 
   private onBackfillExhausted = (chatId: string): void => {
     this.backfillExhausted.add(chatId);
@@ -102,6 +103,7 @@ export default class ChatwootAdapter implements IPlugin {
 
   async onEnable(ctx: PluginContext): Promise<void> {
     this.clearRetryTimer(); // idempotent re-enable: never leak a timer from a prior enable
+    this.invalidateConfigs();
     readConfig(ctx.config); // fail fast on the base config
     const lock = new KeyedAsyncLock();
     const store = new MappingStore(ctx.storage, ctx.mappings);
@@ -112,24 +114,37 @@ export default class ChatwootAdapter implements IPlugin {
     // The client is built from the `cfg` the CALLER resolved, never from a second read of ctx.config:
     // that getter returns the firing session's slice only inside a dispatch, so on the retry timer it
     // handed every session's queued messages the base tenant's origin, token, account and inbox.
-    const buildDeps = (cfg: ChatwootFullConfig, sessionId: string) => ({
-      lock,
-      client: new ChatwootClient(ctx.net.fetch.bind(ctx.net), cfg),
-      store,
-      engine: ctx.engine,
-      instanceId: sessionId,
-      relayGroups: cfg.relayGroups,
-      relayMedia: cfg.relayMedia,
-      backfillLimit: cfg.backfillLimit,
-      backfillAllOnce: cfg.backfillAllOnce,
-      log: (m: string, e?: unknown) => ctx.logger.error(m, e),
-      onInboundLost: (msgId: string, e: unknown) => {
-        this.lostCount++;
-        ctx.logger.error(`inbound message ${msgId} LOST: could not be relayed and could not be queued`, e);
-      },
-      onBackfillExhausted: this.onBackfillExhausted,
-      onRelayError: (e: unknown) => void (this.lastRelayError = e instanceof Error ? e.message : String(e)),
-    });
+    const guard = (cfg: ChatwootFullConfig, sessionId?: string): (() => void) => {
+      const generation = this.configGeneration;
+      const destination = destinationIdentity(cfg);
+      return () => {
+        const current = sessionId ? this.sessionConfigs.get(sessionId) : readConfig(ctx.config);
+        if (generation !== this.configGeneration || !current || destinationIdentity(current) !== destination) {
+          throw new Error('Chatwoot destination changed; pending work remains assigned to its original destination');
+        }
+      };
+    };
+    const buildDeps = (cfg: ChatwootFullConfig, sessionId: string) => {
+      const assertCurrent = guard(cfg, sessionId);
+      return {
+        lock,
+        client: new ChatwootClient((url, init) => { assertCurrent(); return ctx.net.fetch(url, init); }, cfg),
+        store: store.forDestination(cfg, assertCurrent),
+        engine: ctx.engine,
+        instanceId: sessionId,
+        relayGroups: cfg.relayGroups,
+        relayMedia: cfg.relayMedia,
+        backfillLimit: cfg.backfillLimit,
+        backfillAllOnce: cfg.backfillAllOnce,
+        log: (m: string, e?: unknown) => ctx.logger.error(m, e),
+        onInboundLost: (msgId: string, e: unknown) => {
+          this.lostCount++;
+          ctx.logger.error(`inbound message ${msgId} LOST: could not be relayed and could not be queued`, e);
+        },
+        onBackfillExhausted: this.onBackfillExhausted,
+        onRelayError: (e: unknown) => void (this.lastRelayError = e instanceof Error ? e.message : String(e)),
+      };
+    };
 
     ctx.registerHook(
       'message:received',
@@ -179,20 +194,24 @@ export default class ChatwootAdapter implements IPlugin {
       HOOK_PRIORITY,
     );
 
-    ctx.registerWebhook('chatwoot', async (req: WebhookRequest) =>
-      handleOutbound(
+    ctx.registerWebhook('chatwoot', async (req: WebhookRequest) => {
+      const cfg = readConfig(ctx.config);
+      if (req.sessionId) this.sessionConfigs.set(req.sessionId, cfg);
+      const assertCurrent = guard(cfg, req.sessionId);
+      return handleOutbound(
         {
           lock,
-          conversations: ctx.conversations,
-          handover: ctx.handover,
+          conversations: { ...ctx.conversations, send: envelope => { assertCurrent(); return ctx.conversations.send(envelope); } },
+          handover: { ...ctx.handover, set: (key, state) => { assertCurrent(); return ctx.handover.set(key, state); } },
           engine: ctx.engine,
-          store,
-          inboxId: readConfig(ctx.config).inboxId,
+          store: store.forDestination(cfg, assertCurrent),
+          accountId: cfg.accountId,
+          inboxId: cfg.inboxId,
           log: (m, e) => ctx.logger.error(m, e),
         },
         req,
-      ),
-    );
+      );
+    });
 
     // Retry failed inbound relays (at-least-once). The durable, storage-backed queue is drained on a timer:
     // each queued message is re-posted via the same inbound path, and a message that keeps failing is
@@ -220,7 +239,10 @@ export default class ChatwootAdapter implements IPlugin {
             recoverOn404: false,
           }),
         MAX_RETRY_ATTEMPTS,
-        sessionId => this.sessionConfigs.has(sessionId),
+        (sessionId, destination) => {
+          const cfg = this.sessionConfigs.get(sessionId);
+          return Boolean(cfg && destination && destinationIdentity(cfg) === destination);
+        },
       )
         .then(
           ({ deadLettered }) => void (this.deadLetterCount += deadLettered),
@@ -261,10 +283,21 @@ export default class ChatwootAdapter implements IPlugin {
 
   async onDisable(): Promise<void> {
     this.clearRetryTimer();
+    this.invalidateConfigs();
   }
 
   async onUnload(): Promise<void> {
     this.clearRetryTimer();
+    this.invalidateConfigs();
+  }
+
+  async onConfigChange(_ctx: PluginContext, _config: Record<string, unknown>): Promise<void> {
+    this.invalidateConfigs();
+  }
+
+  private invalidateConfigs(): void {
+    this.configGeneration++;
+    this.sessionConfigs.clear();
   }
 
   private clearRetryTimer(): void {

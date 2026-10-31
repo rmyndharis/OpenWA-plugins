@@ -215,6 +215,76 @@ function slowStorage(): PluginStorage {
   };
 }
 
+test('concurrent links make an unscoped conversation ambiguous', async () => {
+  const store = new MappingStore(slowStorage(), fakeMappings());
+  await Promise.all([
+    store.link('sessA', 'alice@wa', 'sessA', { conversationId: 42, contactId: 1, sourceId: 'a' }),
+    store.link('sessB', 'bob@wa', 'sessB', { conversationId: 42, contactId: 2, sourceId: 'b' }),
+  ]);
+  assert.equal(await store.getByConversation(42), null);
+  assert.deepEqual(await store.getByConversation(42, 'sessA'), { sessionId: 'sessA', chatId: 'alice@wa' });
+  assert.deepEqual(await store.getByConversation(42, 'sessB'), { sessionId: 'sessB', chatId: 'bob@wa' });
+});
+
+test('concurrent enqueues enforce one shared retry capacity', async () => {
+  const store = new MappingStore(slowStorage(), fakeMappings());
+  await Promise.all(Array.from({ length: 8 }, (_, i) => store.enqueueRetry({
+    sessionId: `s${i}`, chatId: 'c@wa', msg: msg(`m${i}`), enqueuedAt: i,
+  }, 2)));
+  assert.equal(await store.countRetries(), 2);
+  assert.deepEqual((await store.listRetries()).map(e => e.msg.id).sort(), ['m6', 'm7']);
+});
+
+test('destination views isolate mappings, markers, history flags and queued message IDs', async () => {
+  const store = new MappingStore(fakeStorage(), fakeMappings());
+  const config = { baseUrl: 'https://chat.example.com', accountId: 3, inboxId: 7 };
+  const first = store.forDestination(config);
+  await first.link('sess', 'c@wa', 'sess', { conversationId: 55, contactId: 17, sourceId: 'old' });
+  await first.markSeen('wa', 'm1', 'sess');
+  await first.markSeen('cw', '9', 'sess');
+  await first.setBulkBackfilled('sess');
+  await first.enqueueRetry({ sessionId: 'sess', chatId: 'c@wa', msg: msg('m1'), enqueuedAt: 1 }, 80);
+  for (const changed of [
+    { ...config, baseUrl: 'https://other.example.com' },
+    { ...config, accountId: 4 },
+    { ...config, inboxId: 8 },
+  ]) {
+    const next = store.forDestination(changed);
+    assert.equal(await next.getByChat('sess', 'c@wa'), null);
+    assert.equal(await next.getByConversation(55, 'sess'), null);
+    assert.equal(await next.hasSeen('wa', 'm1', 'sess'), false);
+    assert.equal(await next.hasSeen('cw', '9', 'sess'), false);
+    assert.equal(await next.isBulkBackfilled('sess'), false);
+    await next.enqueueRetry({ sessionId: 'sess', chatId: 'c@wa', msg: msg('m1'), enqueuedAt: 2 }, 80);
+  }
+  assert.equal(await store.countRetries(), 4);
+  assert.equal(new Set((await store.listRetries()).map(e => e.destination)).size, 4);
+  assert.equal((await store.forDestination({ ...config, baseUrl: 'https://CHAT.example.com:443/' }).getByChat('sess', 'c@wa'))?.conversationId, 55);
+});
+
+test('destination views share capacity and bucket locks', async () => {
+  const store = new MappingStore(slowStorage(), fakeMappings());
+  await Promise.all(Array.from({ length: 8 }, async (_, i) => {
+    const view = store.forDestination({ baseUrl: 'https://chat.example.com', accountId: i, inboxId: 7 });
+    await view.enqueueRetry({ sessionId: 's', chatId: 'c@wa', msg: msg(`m${i}`), enqueuedAt: i }, 2);
+  }));
+  assert.equal(await store.countRetries(), 2);
+});
+
+test('unknown legacy rows are preserved without treating them as destination-qualified', async () => {
+  const storage = fakeStorage();
+  const store = new MappingStore(storage, fakeMappings());
+  await store.link('sess', 'c@wa', 'sess', { conversationId: 55, contactId: 17, sourceId: 'legacy' });
+  await store.markSeen('wa', 'm1', 'sess');
+  await store.setBulkBackfilled('sess');
+  const view = store.forDestination({ baseUrl: 'https://chat.example.com', accountId: 3, inboxId: 7 });
+  assert.equal(await view.getByChat('sess', 'c@wa'), null);
+  assert.equal(await view.getByConversation(55, 'sess'), null);
+  assert.equal(await view.hasSeen('wa', 'm1', 'sess'), false);
+  assert.equal(await view.isBulkBackfilled('sess'), false);
+  assert.equal((await store.getByChat('sess', 'c@wa'))?.contactId, 17);
+});
+
 test('concurrent markSeen into the SAME bucket keeps both markers', async () => {
   const store = new MappingStore(slowStorage(), fakeMappings());
   const scope = 'sess';
@@ -397,4 +467,41 @@ test('an interrupted link leaves the chat unlinked, not half-linked', async () =
   await store.link('s1', 'c@wa', 'inst', link);
   assert.equal((await store.getByChat('s1', 'c@wa'))?.conversationId, 42);
   assert.deepEqual(await store.getByConversation(42, 's1'), { sessionId: 's1', chatId: 'c@wa' });
+});
+
+
+test('an eviction failure rolls back the new queue entry and preserves the older message', async () => {
+  const inner = fakeStorage();
+  let failed = false;
+  const store = new MappingStore({ ...inner, delete: async key => {
+    if (!failed && key === 'retry:s:m1') { failed = true; throw new Error('delete failed'); }
+    await inner.delete(key);
+  } }, fakeMappings());
+  await store.enqueueRetry({ sessionId: 's', chatId: 'c', msg: msg('m1'), enqueuedAt: 1 }, 1);
+  await assert.rejects(store.enqueueRetry({ sessionId: 's', chatId: 'c', msg: msg('m2'), enqueuedAt: 2 }, 1), /delete failed/);
+  assert.deepEqual((await store.listRetries()).map(e => e.msg.id), ['m1']);
+  await store.enqueueRetry({ sessionId: 's', chatId: 'c', msg: msg('m3'), enqueuedAt: 3 }, 1);
+  assert.deepEqual((await store.listRetries()).map(e => e.msg.id), ['m3']);
+});
+
+
+test('enqueue trims an older oversized queue to its current capacity', async () => {
+  const storage = fakeStorage();
+  for (let i = 1; i <= 4; i++) await storage.set(`retry:s:m${i}`, { sessionId: 's', chatId: 'c', msg: msg(`m${i}`), enqueuedAt: i, attempts: 2 });
+  const store = new MappingStore(storage, fakeMappings());
+  await store.enqueueRetry({ sessionId: 's', chatId: 'c', msg: msg('m5'), enqueuedAt: 5 }, 2);
+  assert.deepEqual((await store.listRetries()).map(e => e.msg.id), ['m4', 'm5']);
+});
+
+test('a failed multi-entry eviction restores messages removed before the failure', async () => {
+  const inner = fakeStorage();
+  for (let i = 1; i <= 3; i++) await inner.set(`retry:s:m${i}`, { sessionId: 's', chatId: 'c', msg: msg(`m${i}`), enqueuedAt: i, attempts: 2 });
+  const store = new MappingStore({ ...inner, delete: async key => {
+    if (key === 'retry:s:m2') throw new Error('delete failed');
+    await inner.delete(key);
+  } }, fakeMappings());
+  await assert.rejects(store.enqueueRetry({ sessionId: 's', chatId: 'c', msg: msg('m4'), enqueuedAt: 4 }, 2), /delete failed/);
+  const entries = await store.listRetries();
+  assert.deepEqual(entries.map(e => e.msg.id).sort(), ['m1', 'm2', 'm3']);
+  assert.equal(entries.every(e => e.attempts === 2), true);
 });
