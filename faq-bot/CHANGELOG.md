@@ -8,6 +8,12 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.17] - 2026-10-31
+
+### Fixed
+
+- Reject ambiguous repeated regex alternatives hidden by overlapping wrapper atoms while preserving separated keyword patterns.
+
 ## [0.2.16] - 2026-10-31
 
 ### Changed

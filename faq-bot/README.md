@@ -14,7 +14,7 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `faq-bot` |
-| **Version** | 0.2.16 |
+| **Version** | 0.2.17 |
 | **Released** | 2026-10-31 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
@@ -124,8 +124,8 @@ rule sets.
 Two controls, each covering what the other cannot.
 
 **The input cap.** A `regex` rule is tested against at most the first **150 characters** of a message.
-Backtracking cost grows with the input, so capping it sets the ceiling directly, whatever the pattern
-looks like. `contains` and `exact` cannot backtrack and are not capped, so they still see the whole
+The cap reduces backtracking work but does not guarantee a time limit for every pattern.
+`contains` and `exact` cannot backtrack and are not capped, so they still see the whole
 message: use `contains` when you need "mentions X anywhere in a long message".
 
 **The parse-time screen.** Every pattern is checked for catastrophic-backtracking shapes: nested,
@@ -133,16 +133,13 @@ adjacent-overlapping, and repeated-variable-width quantifiers (e.g. `(a+)+`, `.*
 ambiguous repeated alternations (`(a|a)*`, `(a|ab)+`, `^([a-z]|[a-z0-9])+$`, `^(\w|\d)+$`). An unsafe
 pattern is skipped with a warning.
 
-The split matters because the two failure modes are not alike. Exponential shapes stay fatal at any
-input length, so only the screen can stop them, and they are the ones it recognises reliably. Polynomial
-shapes are the opposite: hard to see in the pattern text, but bounded by the cap. The host aborts a hook
-at 5 s and cannot interrupt a regex already running, so the ceiling has to hold on a slow host too.
+The screen is conservative and heuristic. It examines nested alternatives with the surrounding atoms:
+`^((a|aa)a)+$` remains ambiguous, while a separator such as the space in `^((no|nope) )+$` can make
+iterations distinct. Keyword sets such as `(one|two|three)+` and `^(ya|tidak)$` remain supported.
 
-An alternation is only rejected when two branches can consume the same text AND the repetition lands
-directly on it, including through a group that adds nothing but parentheses (`((a|a))+`). A wrapper that
-also contributes a mandatory atom is not that shape: the atom realigns every iteration, so ordinary
-keyword sets like `(one|two|three)+`, `^(ya|tidak)$` and `^((no|nope) )+$` are unaffected even where two
-branches share a first letter.
+Only administrators should configure regex rules. An accepted pattern can still be expensive; the
+host's five-second hook timeout cannot interrupt JavaScript regex execution. Prefer `contains` or
+`exact` when those modes express the rule.
 The screen is a heuristic rather than a decision procedure, and it is known to accept some polynomial
 shapes: `(a|b)*(a|b)*(a|b)*$` and `[ab]*[bc]*[cd]*$` pass it. Those are safe because of the cap, not
 because the screen understood them. Measured on the worst of them against alternating input, 1000

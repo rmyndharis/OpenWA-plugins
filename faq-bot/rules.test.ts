@@ -335,3 +335,37 @@ test('an accepted alternation stays fast at the full input cap', () => {
   re.test('one'.repeat(333) + 'x');
   assert.ok(performance.now() - started < 100, 'an accepted alternation must not backtrack');
 });
+
+test('overlapping atoms do not disambiguate repeated nested alternatives', () => {
+  const patterns = ['^((a|aa)a)+$', '^(a(a|aa))+$', '^(((a|aa)a))+$', '^((a|aa)a?)+$', '^((a|aa)[aA])+$', '^((a|A)a)+$', '^(([aé]|[bé])a)+$'];
+  const { rules, skipped } = parseRules(JSON.stringify([
+    ...patterns.map(pattern => ({ mode: 'regex', pattern, reply: 'unsafe' })),
+    { mode: 'contains', pattern: 'hello', reply: 'Hello' },
+  ]));
+  assert.deepEqual(skipped, patterns);
+  assert.equal(matchRule(rules, 'a'.repeat(100) + '!'), null);
+  assert.equal(matchRule(rules, 'hello')?.reply, 'Hello');
+});
+
+test('a delimiter does not hide ambiguity across two nested alternatives', () => {
+  assert.equal(isSafeRegexPattern('^((a|aa)b(a|aa))+$'), false);
+  for (const pattern of ['^(,(a|aa))+$', '^((a|aa)[,;])+$', '^((a|aa)\\s)+$']) {
+    const { rules } = parseRules(JSON.stringify([{ mode: 'regex', pattern, reply: 'ok' }]));
+    assert.equal(matchRule(rules, ',aa')?.reply, pattern.startsWith('^(,') ? 'ok' : undefined);
+  }
+});
+
+test('escaped overlapping atoms and zero-width assertions do not separate repetitions', () => {
+  for (const pattern of ['^((a|aa)\\x61)+$', '^((a|aa)\\u0061)+$', '^((a|aa)(?=a))+$', '^((a|aa)(?!b))+$', '^((a|aa)(?<=a))+$']) {
+    assert.equal(isSafeRegexPattern(pattern), false, pattern);
+  }
+  for (const pattern of ['^((a|aa)\\x20)+$', '^((a|aa)\\u002c)+$']) {
+    assert.equal(isSafeRegexPattern(pattern), true, pattern);
+  }
+});
+
+test('character classes cannot hide overlap outside printable ASCII', () => {
+  for (const pattern of ['^([a\\u00e9]|[b\\u00e9])+$', '^([a\\t]|[b\\t])+$', '^(\\t|\\s)+$']) {
+    assert.equal(isSafeRegexPattern(pattern), false, pattern);
+  }
+});

@@ -10,23 +10,8 @@ export interface CompiledRule extends Rule {
 
 const MODES: RuleMode[] = ['contains', 'exact', 'regex'];
 /**
- * Cap on the body length a regex is tested against, and the PRIMARY control for polynomial blow-up.
- *
- * The screen below reads the pattern text, which works for the exponential shapes it can recognise
- * syntactically (a quantifier on a group that holds one, an ambiguous repeated alternation) but not
- * for the polynomial ones, where cost depends on how many ways an input splits between adjacent
- * quantifiers. Those are not reliably visible in the text, and repeated attempts to make them so each
- * closed one family of patterns while opening another.
- *
- * Bounding the input instead needs no model at all. A polynomial blow-up costs about n^3, so the cap
- * sets the ceiling directly. Measured on the worst shape that gets past the screen,
- * `((a|b)*(a|b)*)(a|b)*$` against alternating input: 1000 characters runs past 8 s, 300 takes 5.8 s,
- * 250 takes 2.8 s, and 150 takes 362 ms. 150 is chosen so the ceiling holds on a host several times
- * slower than the machine that measured it, since the host aborts a hook at 5 s and a running regex
- * cannot be interrupted before then.
- *
- * This only applies to `regex` rules. `contains` and `exact` cannot backtrack, so they still see the
- * whole message, and `contains` remains the right mode for "does this message mention X anywhere".
+ * Limit regex input as well as screening its structure. This reduces backtracking work without
+ * promising a runtime bound: JavaScript cannot interrupt a running regex. Contains/exact see all text.
  */
 export const MAX_REGEX_INPUT = 150;
 /** Reject absurdly long patterns outright. */
@@ -37,7 +22,11 @@ const MAX_PATTERN_LENGTH = 1000;
  *  atom. Two atoms "overlap" when they can match a common character. */
 function atomAt(p: string, i: number): { key: string; len: number } {
   const c = p[i];
-  if (c === '\\') return { key: p.slice(i, i + 2), len: 2 };
+  if (c === '\\') {
+    const escape = /^(?:\\x[0-9a-f]{2}|\\u[0-9a-f]{4}|\\u\{[0-9a-f]+\}|\\c[a-z]|\\[0-9]+|\\k<[^>]+>)/i.exec(p.slice(i));
+    const key = escape?.[0] ?? p.slice(i, i + 2);
+    return { key, len: key.length };
+  }
   if (c === '[') {
     let j = i + 1;
     if (p[j] === '^') j++;
@@ -94,10 +83,12 @@ function atomSource(key: string): string {
  *  atom and testing it against one character cannot itself backtrack, and this runs once when config is
  *  parsed, never per message. */
 function firstCharSet(key: string): Set<string> | null {
-  if (key === 'ANY') return null;
+  if (key === 'ANY' || /[^\x20-\x7e]/.test(key)) return null;
+  // Escaped class members may overlap outside the sampled range; do not prove them disjoint.
+  if (key.startsWith('[') && /\\[a-z0-9]/i.test(key)) return null;
   let re: RegExp;
   try {
-    re = new RegExp(`^(?:${atomSource(key)})$`, 'u');
+    re = new RegExp(`^(?:${atomSource(key)})$`, 'iu');
   } catch {
     return null; // unparseable on its own: assume it overlaps, fail closed
   }
@@ -110,7 +101,7 @@ function firstCharSet(key: string): Set<string> | null {
       return null;
     }
   }
-  return out;
+  return out.size ? out : null;
 }
 
 /** One top-level branch of an alternation. `literal` is the branch's exact text when it is nothing but
@@ -136,7 +127,7 @@ function branchesAmbiguous(branches: Branch[]): boolean {
       const x = branches[a];
       const y = branches[b];
       if (x.literal !== null && y.literal !== null) {
-        if (x.literal.startsWith(y.literal) || y.literal.startsWith(x.literal)) return true;
+        if (x.literal.toLowerCase().startsWith(y.literal.toLowerCase()) || y.literal.toLowerCase().startsWith(x.literal.toLowerCase())) return true;
         continue;
       }
       if (x.first === null || y.first === null) return true;
@@ -144,6 +135,45 @@ function branchesAmbiguous(branches: Branch[]): boolean {
       const sy = firstCharSet(y.first);
       if (sx === null || sy === null) return true;
       for (const ch of sx) if (sy.has(ch)) return true;
+    }
+  }
+  return false;
+}
+
+type Paths = string[][] | null;
+
+function concatenatePaths(left: Paths, right: Paths): Paths {
+  if (!left || !right || left.length * right.length > 64) return null;
+  return left.flatMap(prefix => right.map(suffix => [...prefix, ...suffix]));
+}
+
+// Compare complete iterations: a space can separate (no|nope), while another 'a' cannot separate (a|aa).
+function pathsAmbiguous(paths: Paths, wrapped: boolean): boolean {
+  if (!paths) return true;
+  const sets = new Map<string, Set<string> | null>();
+  const characters = (key: string) => {
+    if (!sets.has(key)) sets.set(key, firstCharSet(key));
+    return sets.get(key)!;
+  };
+  const disjoint = (a: string, b: string) => {
+    const x = characters(a), y = characters(b);
+    return !!x?.size && !!y?.size && ![...x].some(ch => y.has(ch));
+  };
+  for (let a = 0; a < paths.length; a++) {
+    for (let b = a + 1; b < paths.length; b++) {
+      const x = paths[a], y = paths[b];
+      let separated = false;
+      for (let i = 0; i < Math.min(x.length, y.length); i++) {
+        if (disjoint(x[i], y[i])) {
+          separated = true;
+          break;
+        }
+      }
+      if (!separated && wrapped && x.length !== y.length) {
+        const remainder = x.length > y.length ? x[y.length] : y[x.length];
+        separated = paths.every(path => path.length > 0 && disjoint(remainder, path[0]));
+      }
+      if (!separated) return true;
     }
   }
   return false;
@@ -180,18 +210,10 @@ export function isSafeRegexPattern(p: string): boolean {
   const stack: {
     hasUnbounded: boolean;
     hasVariable: boolean;
-    // Rule 4 state. True when this group is, or purely WRAPS, an alternation whose branches can start
-    // with the same character. Without it the rule only saw the group it was closing, so one paren of
-    // cover moved the quantifier to a single-branch frame and the check went quiet: `(a|a)+$` was
-    // refused while `((a|a))+$` was accepted and then spent ~9 s on a 27-character message.
-    //
-    // Propagated ONLY through pure cover (see `sawAtom`). A wrapper that also contributes a mandatory
-    // atom is not cover: it anchors each repetition, so the branches can no longer consume the same
-    // text two ways. `((no|nope) )+$` is linear precisely because of that trailing space, and flagging
-    // it would silently disable an ordinary keyword rule on upgrade.
+    // An ambiguous child stays unsafe unless the full iteration's alternatives can be separated.
     hasAmbiguous: boolean;
-    // Whether this group contributed an atom of its own, i.e. anything besides the nested group(s).
-    sawAtom: boolean;
+    paths: Paths[];
+    assertion: boolean;
     savedPrev: string | null;
     savedRun: number;
     // One record per top-level branch of THIS group; see Branch.
@@ -207,7 +229,10 @@ export function isSafeRegexPattern(p: string): boolean {
 
     if (c === '|') {
       prevUnbounded = null; adjacentRun = 0;
-      if (stack.length) stack[stack.length - 1].branches.push({ literal: '', first: null });
+      if (stack.length) {
+        stack[stack.length - 1].branches.push({ literal: '', first: null });
+        stack[stack.length - 1].paths.push([[]]);
+      }
       i++; continue;
     }
     if (c === '(') {
@@ -221,18 +246,28 @@ export function isSafeRegexPattern(p: string): boolean {
         if (cur) { cur.literal = null; if (cur.first === null) cur.first = null; }
       }
       stack.push({
-        hasUnbounded: false, hasVariable: false, hasAmbiguous: false, sawAtom: false,
+        hasUnbounded: false, hasVariable: false, hasAmbiguous: false, paths: [[[]]],
+        assertion: /^\(\?(?:[=!]|<[=!])/.test(p.slice(i)),
         savedPrev: prevUnbounded, savedRun: adjacentRun,
         branches: [{ literal: '', first: null }],
       });
       prevUnbounded = null; adjacentRun = 0;
       i++;
-      if (p[i] === '?') { i++; if (p[i] === '<') i++; if (p[i] === ':' || p[i] === '=' || p[i] === '!') i++; }
+      if (p[i] === '?') {
+        i++;
+        if (p[i] === '<' && p[i + 1] !== '=' && p[i + 1] !== '!') {
+          const end = p.indexOf('>', i);
+          i = end < 0 ? p.length : end + 1;
+        } else {
+          if (p[i] === '<') i++;
+          if (p[i] === ':' || p[i] === '=' || p[i] === '!') i++;
+        }
+      }
       continue;
     }
     if (c === ')') {
       const frame = stack.pop() ?? {
-        hasUnbounded: false, hasVariable: false, hasAmbiguous: false, sawAtom: false,
+        hasUnbounded: false, hasVariable: false, hasAmbiguous: false, paths: [null], assertion: false,
         savedPrev: null, savedRun: 0,
         branches: [] as Branch[],
       };
@@ -241,29 +276,19 @@ export function isSafeRegexPattern(p: string): boolean {
       // `a+a+a+`, which backtracks exponentially — the constant bounds the repeat, not the search.
       if ((q.unbounded || q.count >= 2) && frame.hasUnbounded) return false;
       if (q.count >= REPEAT_THRESHOLD && frame.hasVariable) return false; // (3) large/unbounded repeat of a variable body
-      // (4) a REPEATED group whose top-level alternation branches can start with the same character.
-      // The engine then has two ways to consume each character and must try both on failure, which is
-      // exponential: `^([a-z]|[a-z0-9])+$` needs over a minute on a 31-character input, well inside the
-      // body cap, and JS regex execution cannot be interrupted.
-      // This group's own alternation, OR one it purely wraps. Pure cover means the group added nothing
-      // but parentheses: no atom of its own and no alternation of its own. `((a|a))+$` is that shape,
-      // and the repetition lands on the inner ambiguity unchanged.
-      //
-      // A wrapper that DOES contribute an atom is deliberately not propagated through. The atom is
-      // mandatory in every iteration, so it realigns the match and the branches can no longer split
-      // the same text: `((no|nope) )+$`, `^((satu|dua|(tiga|empat)),)+$` and `((ok|oke)\s)+` are all
-      // linear (measured at 0.0 ms against a full-length input) and all of them are rules an
-      // operator really writes. Rejecting those would silently stop an upgraded install from replying.
-      const pureCover = !frame.sawAtom && frame.branches.length === 1;
+      const paths = frame.assertion ? [[]] : frame.paths.every(paths => paths !== null) ? frame.paths.flat() as string[][] : null;
       const ambiguous =
-        (frame.hasAmbiguous && pureCover) || (frame.branches.length >= 2 && branchesAmbiguous(frame.branches));
+        (frame.hasAmbiguous || (frame.branches.length >= 2 && branchesAmbiguous(frame.branches))) && pathsAmbiguous(paths, frame.hasAmbiguous);
       if ((q.unbounded || q.count >= 2) && ambiguous) {
         return false;
       }
       if (stack.length) {
-        if (q.unbounded || frame.hasUnbounded) stack[stack.length - 1].hasUnbounded = true;
-        if (q.variable || frame.hasVariable) stack[stack.length - 1].hasVariable = true;
-        if (ambiguous) stack[stack.length - 1].hasAmbiguous = true;
+        const parent = stack[stack.length - 1];
+        if (q.unbounded || frame.hasUnbounded) parent.hasUnbounded = true;
+        if (q.variable || frame.hasVariable) parent.hasVariable = true;
+        if (ambiguous) parent.hasAmbiguous = true;
+        const child = !q.present || q.count === 1 && q.min === 1 ? paths : q.count === 1 && paths ? [[], ...paths] : null;
+        parent.paths[parent.paths.length - 1] = concatenatePaths(parent.paths[parent.paths.length - 1], child);
       }
       // A group breaks flat adjacency only if it MUST consume something. `(x?)` can match empty, so
       // `.*(x?).*` is `.*.*` in disguise; resume the parked run rather than pretending it ended.
@@ -277,7 +302,9 @@ export function isSafeRegexPattern(p: string): boolean {
     const atom = atomAt(p, i);
     const q = quantifierAt(p, i + atom.len);
     if (stack.length) {
-      stack[stack.length - 1].sawAtom = true; // this group is no longer pure cover for a nested one
+      const frame = stack[stack.length - 1];
+      const paths = !q.present || q.count === 1 && q.min === 1 ? [[atom.key]] : q.count === 1 ? [[], [atom.key]] : null;
+      frame.paths[frame.paths.length - 1] = concatenatePaths(frame.paths[frame.paths.length - 1], paths);
       const br = stack[stack.length - 1].branches;
       const cur = br[br.length - 1];
       if (cur) {
