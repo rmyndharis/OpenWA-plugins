@@ -103,6 +103,8 @@ function readBool(
 
 export class TranslationPlugin implements IPlugin {
   private coordinator: TranslationCoordinator | null = null;
+  // State writes must stay ordered when configuration replaces the coordinator.
+  private readonly groupLocks = new Map<string, Promise<unknown>>();
   // Signature of the coordinator-affecting config last used to build `this.coordinator`. The hook
   // recomputes this per event and rebuilds the coordinator only when it changes — so a per-session
   // override (resolved by the host for the firing session) takes effect, WITHOUT resetting the
@@ -185,7 +187,7 @@ export class TranslationPlugin implements IPlugin {
       // stored value, and the safe reading of a missing opt-in is "not opted in".
       announceInGroups: readBool(cfg, "announceInGroups", false),
     };
-    return new TranslationCoordinator(translator, store, gateway, opts, logger);
+    return new TranslationCoordinator(translator, store, gateway, opts, logger, this.groupLocks);
   }
 
   onDisable(context: PluginContext): Promise<void> {
@@ -221,9 +223,8 @@ export class TranslationPlugin implements IPlugin {
     }
     // Re-check the config signature against the firing session's resolved config — if a per-session
     // override changed a coordinator-affecting field, rebuild now. Cheap (a JSON.stringify of a handful
-    // of primitives) and runs only the equality check on the hot path; the rebuild is rare. The swap is
-    // not locked, but a translation call is short-lived (bounded by timeoutMs), so an in-flight call on
-    // the old coordinator resolves independently; the new one serves subsequent messages.
+    // of primitives) and runs only the equality check on the hot path; the rebuild is rare. Both
+    // coordinators share the group locks, so an in-flight state write precedes newer commands.
     const sig = this.configSignature(context.config);
     if (sig !== this.coordinatorSignature || !this.coordinator) {
       this.coordinator = this.buildCoordinator(context);

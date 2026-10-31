@@ -8,6 +8,12 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.3.14] - 2026-10-31
+
+### Fixed
+
+- Preserve group command ordering across live configuration changes.
+
 ## [1.3.13] - 2026-10-31
 
 ### Changed

@@ -485,3 +485,57 @@ test("a late /tr command is still claimed, but not run", async () => {
   await settle();
   assert.deepEqual(sent, [], "the command is not run, so no confirmation is posted");
 });
+
+for (const update of ["lifecycle", "next hook"] as const) {
+  test(`a ${update} config update keeps group commands ordered across coordinators`, async () => {
+    const config = { libretranslateUrl: "https://translate.example.com", minLength: 2 };
+    let started!: () => void;
+    let release!: (response: PluginNetResponse) => void;
+    const readingLanguages = new Promise<void>(resolve => { started = resolve; });
+    const languages = new Promise<PluginNetResponse>(resolve => { release = resolve; });
+    const otherKey = "group:s1:other@g.us";
+    const state = (chatId: string) => ({
+      sessionId: "s1", chatId, active: true, participants: {},
+      delegatedControllers: [], announced: true,
+    });
+    const { ctx, getHook } = fakeContext(config, {
+      seed: { [GROUP_KEY]: state("group@g.us"), [otherKey]: state("other@g.us") },
+      net: { fetch: async url => {
+        assert.ok(url.endsWith("/languages"));
+        started();
+        return languages;
+      } },
+      engine: { getGroupInfo: async () => ({ participants: [{ id: AUTHOR, isAdmin: true }] }) },
+      messages: { sendText: async () => {} },
+    });
+    const storage = ctx.storage;
+    const saved: boolean[] = [];
+    ctx.storage = {
+      ...storage,
+      get: async <T>(key: string) => structuredClone(await storage.get<T>(key)),
+      set: async (key, value) => {
+        if (key === GROUP_KEY) saved.push((value as { active: boolean }).active);
+        await storage.set(key, structuredClone(value));
+      },
+    };
+    const plugin = new TranslationPlugin();
+    await plugin.onEnable(ctx);
+    try {
+      assert.equal((await getHook()!(engineCtx({ id: "set-language", body: "/tr setlang es me" }))).continue, false);
+      await readingLanguages;
+      config.minLength = 3;
+      if (update === "lifecycle") await plugin.onConfigChange(ctx);
+      assert.equal((await getHook()!(engineCtx({ id: "stop", body: "/tr off" }))).continue, false);
+      await getHook()!(engineCtx({ id: "other-stop", chatId: "other@g.us", body: "/tr off" }));
+      await settle();
+      assert.equal((await ctx.storage.get<{ active: boolean }>(otherKey))?.active, false, "another group is independent");
+      assert.deepEqual(saved, [], "the newer command waits for the older group command");
+    } finally {
+      release({ ok: true, status: 200, statusText: "OK", headers: {}, body: '[{"code":"es"}]' } as PluginNetResponse);
+      await settle();
+      await plugin.onDisable(ctx);
+    }
+    assert.deepEqual(saved, [true, false]);
+    assert.equal((await ctx.storage.get<{ active: boolean }>(GROUP_KEY))?.active, false);
+  });
+}

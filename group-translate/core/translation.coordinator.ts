@@ -75,8 +75,6 @@ function widEquals(a: string, b: string): boolean {
 }
 
 export class TranslationCoordinator {
-  /** Per (session,chat) promise chain serializing the load→mutate→save cycle. Self-evicts when drained. */
-  private readonly locks = new Map<string, Promise<unknown>>();
   /** `${sessionId}:${wid}` -> canonical `@c.us` wid, or null when the host could not resolve it. */
   private readonly canonicalWids = new Map<string, string | null>();
   /** `${sessionId}:${chatId}` -> epoch ms of the last `/tr help` answer posted there. In memory and per
@@ -90,6 +88,7 @@ export class TranslationCoordinator {
     private readonly gateway: ChatGateway,
     private readonly opts: CoordinatorOptions,
     private readonly logger: TranslationLogger = NOOP_LOGGER,
+    private readonly locks = new Map<string, Promise<unknown>>(),
   ) {}
 
   /** True when handleMessage would run `msg` as a command, with the same gate and the same prefix. */

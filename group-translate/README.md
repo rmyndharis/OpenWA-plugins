@@ -14,7 +14,7 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `group-translate` |
-| **Version** | 1.3.13 |
+| **Version** | 1.3.14 |
 | **Released** | 2026-10-31 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
@@ -144,6 +144,9 @@ dashboard; an override that changes a coordinator-affecting field (e.g. `libretr
 effect on the next inbound message. The plugin uses config-signature caching: the coordinator (and the
 LibreTranslate client's circuit breaker) is reused across messages with the same resolved config, and
 rebuilt only when the signature changes.
+
+Commands for one group remain serialized across coordinator rebuilds, so an older command cannot
+overwrite a later command after a configuration update. Different groups can still run concurrently.
 
 **Caveat for multi-backend deployments:** when two sessions point at *different* LibreTranslate
 instances, they share one coordinator slot and clobber each other's circuit-breaker state on every
