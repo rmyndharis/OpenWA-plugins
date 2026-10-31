@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `voice-transcription` |
-| **Version** | 1.3.3 |
-| **Released** | 2026-10-28 |
+| **Version** | 1.3.4 |
+| **Released** | 2026-10-31 |
 | **Status** | beta |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.0 (tested 0.26.0) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.27.0) |
 | **Keywords** | transcription, speech-to-text, stt, whisper, voice, audio, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/voice-transcription](https://github.com/rmyndharis/OpenWA-plugins/tree/main/voice-transcription) |
 <!-- END DETAILS -->
@@ -139,7 +139,7 @@ curl -X POST http://localhost:2785/api/plugins/voice-transcription/enable \
 
 ## Compatibility
 
-Checked against the OpenWA v0.26.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
+Checked against the OpenWA v0.27.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
 
 - Requires OpenWA **≥ 0.8.0**, the release that introduced `net.allowConfigHosts`. Both `sttBaseUrl` and
   `deliveryWebhookUrl` are resolved through it, so on a 0.7.x host every call to a configured host is

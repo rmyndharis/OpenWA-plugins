@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `gsheets-logger` |
-| **Version** | 0.3.14 |
-| **Released** | 2026-10-28 |
+| **Version** | 0.3.15 |
+| **Released** | 2026-10-31 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.26.0) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.27.0) |
 | **Keywords** | google-sheets, logging, audit, crm, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/gsheets-logger](https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger) |
 <!-- END DETAILS -->
@@ -211,7 +211,7 @@ The target tab must exist, **with a header row of your choosing** — the plugin
 
 ## Compatibility
 
-Checked against the OpenWA v0.26.0 worker runtime with isolated services. On a spreadsheet or credential change, undelivered rows are parked before switching clients. If parking fails, the plugin logs the error, retains the rows and keeps the previous client so a later retry can deliver to the original destination.
+Checked against the OpenWA v0.27.0 worker runtime with isolated services. On a spreadsheet or credential change, undelivered rows are parked before switching clients. If parking fails, the plugin logs the error, retains the rows and keeps the previous client so a later retry can deliver to the original destination.
 
 External plugins run **sandboxed in a worker thread** (since OpenWA **v0.6.0**). Requires OpenWA
 **≥ 0.7.0** — all outbound HTTP (OAuth token + Sheets append) goes through the host-proxied,
@@ -230,7 +230,11 @@ capabilities are version-dependent:
   product card text (else the product title) instead of an empty string. A share of the whole catalog
   still logs as `unknown`, with the catalog title in `body` on Baileys.
 - **`message:ack` rows** require OpenWA **≥ v0.6.1** (#427). On v0.6.0 the hook was declared but never
-  fired, so ack rows are absent.
+  fired, so ack rows are absent. From OpenWA **0.27.0**, `message:ack` fires only for outbound messages
+  (and on Baileys drops receipts whose chat does not match the stored message's chat), matching the
+  `out` direction this plugin writes on `message:ack` rows.
+- **Bulk voice-note failure rows** log `type` as `voice` from OpenWA **0.27.0** (matching single voice
+  sends); earlier hosts reported bulk `audio` items with `ptt: true` as `audio` on `message:failed`.
 - **Live config updates** (a `PUT …/config` reaching the running plugin) and **graceful-shutdown buffer
   flush** arrived with the sandbox lifecycle follow-ups (#430) in OpenWA **v0.6.2**, below this plugin's
   declared floor, so every supported host has them. A non-graceful exit (SIGKILL, OOM) still bypasses

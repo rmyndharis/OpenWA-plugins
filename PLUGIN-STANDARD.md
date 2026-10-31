@@ -5,7 +5,7 @@ management/automation stays easy. Verified against OpenWA's plugin runtime (sand
 the same baseline as [`types/openwa.d.ts`](./types/openwa.d.ts) — re-check both together, since this
 document describes host behaviour that has moved repeatedly (per-session config in 0.7, boot re-enable
 in 0.10.5, the storage quota and `message:deleted` in 0.11.0, the `storage:use` gate in 0.17.0, hook
-result checks and sandboxed hook ordering in 0.23.6). The current baseline is OpenWA v0.26.0, including host-version floor enforcement and HTTPS origin grants for configured outbound endpoints (both 0.24.0), and the secret rule for host overrides, `null` secret removal and the capped boot restore (0.26.0).
+result checks and sandboxed hook ordering in 0.23.6). The current baseline is OpenWA v0.27.0, including host-version floor enforcement and HTTPS origin grants for configured outbound endpoints (both 0.24.0), the secret rule for host overrides, `null` secret removal and the capped boot restore (0.26.0), and outbound-only `message:ack`, edit-triggered `message:persisted`, query-aware empty-body ingress dedup and config push after `onEnable` (0.27.0).
 
 ## Principles
 
@@ -69,7 +69,7 @@ OpenWA-plugins/
   "keywords": ["…"],
   "status": "stable",           // "stable" | "beta" | "development"
   "minOpenWAVersion": "0.7.0",  // enforced at install and boot load since OpenWA v0.24.0
-  "testedOpenWAVersion": "0.26.0" // newest host checked; describe the verification scope in the README
+  "testedOpenWAVersion": "0.27.0" // newest host checked; describe the verification scope in the README
 }
 ```
 
@@ -84,7 +84,7 @@ plugin:
 `catalog.mjs` only *warns* about i18n — a missing block, or a missing locale — but the test suite does
 not: `npm test` fails when a `stable` plugin is missing any supported locale, and when any plugin ships
 a locale that translates its name and description without translating every `configSchema` field. Treat
-i18n as gated; the warning is where you notice a gap, not where it is stopped. The shared locale list in `scripts/locales.mjs` matches OpenWA v0.26.0, including `id`; stable plugins must cover every non-English locale.
+i18n as gated; the warning is where you notice a gap, not where it is stopped. The shared locale list in `scripts/locales.mjs` matches OpenWA v0.27.0, including `id`; stable plugins must cover every non-English locale.
 
 ### `configSchema` field vocabulary (v0.7)
 
@@ -282,7 +282,9 @@ correct plugins and were each learned the hard way. Re-verify against OpenWA cor
      opens after at most 60 s of restore and the plugins not yet restored come up in the background.
      Until a plugin is up its hooks do not run; enabling, disabling, updating or uninstalling it answers
      `409`; and an ingress route that declares `response` is refused with `503` and `Retry-After: 5`
-     (any other route is accepted and held until the plugin runs).
+     (any other route is accepted and held until the plugin runs). If `plugin.config` is updated while
+     `onLoad`/`onEnable` is running, the host (from 0.27.0) pushes the updated config to the worker via
+     `onConfigChange` immediately after `onEnable` finishes.
    - **In-memory state does NOT survive** (each enable spawns a fresh worker). A cooldown or throttle
      kept only in a `Map` silently re-arms on every restart — persist it or document the reset.
    - **An ERROR status does NOT exclude a plugin from restore** — the boot filter keys on the operator's

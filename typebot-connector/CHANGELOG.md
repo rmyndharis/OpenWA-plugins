@@ -6,6 +6,12 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-10-31
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.27.0.
+
 ## [0.3.4] - 2026-10-28
 
 ### Changed

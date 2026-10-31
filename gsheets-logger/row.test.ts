@@ -164,6 +164,22 @@ test('a bulk failure logs blank recipient columns rather than inventing one', ()
   assert.equal(row[COLUMNS.indexOf('body')], 'promo');
 });
 
+test('a bulk voice-note failure on OpenWA 0.27.0+ logs type voice and recipient chatId', () => {
+  const row = buildRow({
+    event: 'message:failed', sessionId: 's1', timestamp: new Date(0), source: 'BulkMessageService',
+    data: {
+      sessionId: 's1',
+      type: 'voice',
+      error: 'rate limited',
+      input: { chatId: '62812@c.us', audio: { url: 'https://x/y.ogg', ptt: true } },
+    },
+  } as never);
+  assert.equal(row[COLUMNS.indexOf('chatId')], '62812@c.us');
+  assert.equal(row[COLUMNS.indexOf('to')], '62812@c.us');
+  assert.equal(row[COLUMNS.indexOf('type')], 'voice');
+  assert.equal(row[COLUMNS.indexOf('body')], '');
+});
+
 test('a cell cap never splits a surrogate pair', () => {
   // The cap lands mid-emoji when the 50 000th code unit is a high surrogate. A lone surrogate is not
   // valid Unicode and cannot be encoded as UTF-8, which is what the host does to the request body, so

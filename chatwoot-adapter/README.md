@@ -15,13 +15,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chatwoot-adapter` |
-| **Version** | 0.9.12 |
-| **Released** | 2026-10-28 |
+| **Version** | 0.9.13 |
+| **Released** | 2026-10-31 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.7 (tested 0.26.0) |
+| **Requires OpenWA** | ≥ 0.8.7 (tested 0.27.0) |
 | **Keywords** | chatwoot, helpdesk, inbox, handover, two-way, agent, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/chatwoot-adapter](https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter) |
 <!-- END DETAILS -->
@@ -152,7 +152,7 @@ instance id or route — so re-copy the ingress URL from the mint response.
 
 ## Compatibility
 
-Checked against the OpenWA v0.26.0 worker runtime with isolated services. A webhook carrying a session scope can resolve only mappings owned by that session, including legacy mappings. An unknown scoped conversation cannot send a reply or change handover through another session's mapping.
+Checked against the OpenWA v0.27.0 worker runtime with isolated services. A webhook carrying a session scope can resolve only mappings owned by that session, including legacy mappings. An unknown scoped conversation cannot send a reply or change handover through another session's mapping.
 
 - **OpenWA** ≥ 0.8.7 — needs Integration SDK v1 (webhook ingress, `ctx.mappings`, the session+chat handover
   gate, `net.allowConfigHosts`), the `conversation.send` media/voice types for outbound attachments, the
