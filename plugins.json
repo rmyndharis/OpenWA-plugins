@@ -913,7 +913,7 @@
   {
     "id": "chat-flow",
     "name": "Chat Flow",
-    "version": "1.1.14",
+    "version": "1.1.15",
     "type": "extension",
     "status": "stable",
     "description": "Interactive, stateful auto-reply: a trigger word starts a greeting + numbered menu, replies traverse a configurable menu tree, and per-chat state expires after 15 minutes.",
@@ -934,7 +934,7 @@
     "repoPath": "chat-flow",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/chat-flow",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chat-flow-v1.1.14/chat-flow.zip#sha256=7dc54c8f3753ed96028877c5564938c5d6cd0cf55e089d0955d9ff1472aac20a",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chat-flow-v1.1.15/chat-flow.zip#sha256=8037ba25af344e712f4a923bacb780812206e38e180ee0d804a53094e74298c4",
     "permissions": [
       "messages:send",
       "storage:use"
@@ -1200,7 +1200,7 @@
   {
     "id": "chatwoot-adapter",
     "name": "Chatwoot Adapter",
-    "version": "0.9.13",
+    "version": "0.9.14",
     "type": "extension",
     "status": "stable",
     "description": "Two-way sync between a WhatsApp session and a Chatwoot inbox: relays WhatsApp messages (1:1 and groups, with media) into Chatwoot as an API-channel inbox, sends agent replies back to WhatsApp, and hands a chat over to a human agent — silencing other OpenWA bots — when an agent takes it in Chatwoot. First consumer of the OpenWA Integration SDK v1; runs sandboxed in the plugin worker.",
@@ -1222,7 +1222,7 @@
     "repoPath": "chatwoot-adapter",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chatwoot-adapter-v0.9.13/chatwoot-adapter.zip#sha256=4124ae8121f8d032f654a93bee6669fe306e92d6f293c2503294607779cf7adb",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chatwoot-adapter-v0.9.14/chatwoot-adapter.zip#sha256=e1a1643f03bcef9e1db99a3d4f0ed78f8938bdc327ab5fe8dd4f8873fff03041",
     "permissions": [
       "net:fetch",
       "conversation:send",
@@ -1711,7 +1711,7 @@
   {
     "id": "faq-bot",
     "name": "FAQ / Auto-Reply Bot",
-    "version": "0.2.16",
+    "version": "0.2.17",
     "type": "extension",
     "status": "stable",
     "description": "Auto-replies to inbound WhatsApp messages from configurable FAQ keyword/regex rules.",
@@ -1731,7 +1731,7 @@
     "repoPath": "faq-bot",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.2.16/faq-bot.zip#sha256=78d343998a30b612c7de04f88fc78ba2772dc4e29ed2621c6164ed08167cae4b",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.2.17/faq-bot.zip#sha256=4c9856cab5dd74809f13d751bc3fcf1e15ff6ce37ad96c58938519487e836b10",
     "permissions": [
       "messages:send"
     ],
@@ -1996,7 +1996,7 @@
   {
     "id": "group-translate",
     "name": "Group Auto-Translation",
-    "version": "1.3.13",
+    "version": "1.3.14",
     "type": "extension",
     "status": "stable",
     "description": "Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled.",
@@ -2016,7 +2016,7 @@
     "repoPath": "group-translate",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/group-translate-v1.3.13/group-translate.zip#sha256=7f40eab2650bf87127a4ca811fc5d0a99613909fe85d35599c8b1f9325418bc1",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/group-translate-v1.3.14/group-translate.zip#sha256=33b4c47ba605138a633b70704a1d2e5192a5fda3ac696023dad529a49679073d",
     "permissions": [
       "messages:send",
       "engine:read",
@@ -2793,7 +2793,7 @@
   {
     "id": "http-action",
     "name": "HTTP Action Bot",
-    "version": "0.2.14",
+    "version": "0.2.15",
     "type": "extension",
     "status": "stable",
     "description": "Triggers safe REST API requests from WhatsApp commands and renders JSON responses back to chat.",
@@ -2813,7 +2813,7 @@
     "repoPath": "http-action",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/http-action-v0.2.14/http-action.zip#sha256=83f3357579d6f205c3665980442acd745dc509aa69ba1c9954262add0442052d",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/http-action-v0.2.15/http-action.zip#sha256=1aaed664919b2e6289e5cb420f39dbb9629dd73e6caa43ce9e444b520ba9ef78",
     "permissions": [
       "net:fetch",
       "conversation:send",
@@ -3546,7 +3546,7 @@
   {
     "id": "typebot-connector",
     "name": "Typebot Connector",
-    "version": "0.3.5",
+    "version": "0.3.6",
     "type": "extension",
     "status": "stable",
     "description": "Runs a Typebot flow as the brain of a WhatsApp bot: inbound messages drive a Typebot chat session via the live Chat API, and the bot's replies — text, media, and numbered-choice inputs — are sent back to WhatsApp. Auto-starts every chat, handles file-upload steps, and resets when the flow ends or after an idle timeout. Runs sandboxed in the plugin worker; no public URL or webhook required.",
@@ -3568,7 +3568,7 @@
     "repoPath": "typebot-connector",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/typebot-connector",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/typebot-connector-v0.3.5/typebot-connector.zip#sha256=5d9dad3aaef8f995b5508040a9439f00434979af43a9b014f0a18cbe42c87ac2",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/typebot-connector-v0.3.6/typebot-connector.zip#sha256=a6ae99abf757d7b66878c43cc57bb709949bb8143ab0cace86f78ddebcef565d",
     "permissions": [
       "net:fetch",
       "conversation:send",
