@@ -1,0 +1,133 @@
+{
+  "id": "rocketchat-adapter",
+  "name": "Rocket.Chat Adapter",
+  "version": "0.1.0",
+  "type": "extension",
+  "main": "dist/index.js",
+  "description": "Development preview: relay direct WhatsApp text messages to Rocket.Chat Omnichannel and agent text replies back to WhatsApp.",
+  "author": "yederlv",
+  "license": "MIT",
+  "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/rocketchat-adapter",
+  "repository": "https://github.com/rmyndharis/OpenWA-plugins",
+  "keywords": [
+    "rocketchat",
+    "omnichannel",
+    "whatsapp",
+    "helpdesk"
+  ],
+  "status": "development",
+  "minOpenWAVersion": "0.27.0",
+  "testedOpenWAVersion": "0.27.1",
+  "sdkVersion": "1",
+  "permissions": [
+    "net:fetch",
+    "conversation:send",
+    "webhook:ingress",
+    "storage:use"
+  ],
+  "net": {
+    "allow": [
+      "http://rocketchat:3000"
+    ],
+    "allowConfigHosts": [
+      "baseUrl"
+    ]
+  },
+  "sessionScoped": true,
+  "sessions": [
+    "*"
+  ],
+  "hooks": [
+    "message:received"
+  ],
+  "ingress": [
+    {
+      "route": "omnichannel",
+      "mode": "async",
+      "verify": "core",
+      "maxBodyBytes": 262144,
+      "signature": {
+        "scheme": "shared-secret",
+        "header": "X-RocketChat-Livechat-Token"
+      },
+      "dedupOn": "body",
+      "conversationId": {
+        "jsonPointer": "/_id"
+      },
+      "response": {
+        "preflight": [
+          {
+            "type": "session-alive"
+          }
+        ],
+        "ack": {
+          "status": 200,
+          "body": "ok",
+          "headers": {
+            "Content-Type": "text/plain"
+          }
+        }
+      }
+    }
+  ],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "title": "Rocket.Chat origin",
+        "required": true,
+        "description": "HTTPS origin of Rocket.Chat. For the documented local Docker lab only: http://rocketchat:3000."
+      },
+      "sessionId": {
+        "type": "string",
+        "title": "WhatsApp session ID",
+        "required": true,
+        "description": "Exact OpenWA session UUID. Bind the ingress instance to this same session."
+      },
+      "department": {
+        "type": "string",
+        "title": "Omnichannel department",
+        "description": "Optional Rocket.Chat department name or ID used when registering visitors. Changing it creates a new mapping namespace."
+      }
+    }
+  },
+  "i18n": {
+    "es": {
+      "name": "Conector Rocket.Chat",
+      "description": "Vista previa: conecta mensajes de texto privados de WhatsApp con agentes de Rocket.Chat Omnichannel.",
+      "config": {
+        "baseUrl": {
+          "title": "Origen de Rocket.Chat",
+          "description": "Origen HTTPS de Rocket.Chat. Solo en el laboratorio Docker documentado: http://rocketchat:3000."
+        },
+        "sessionId": {
+          "title": "ID de sesión de WhatsApp",
+          "description": "UUID exacto de la sesión OpenWA. Vincula la instancia de ingreso a esta misma sesión."
+        },
+        "department": {
+          "title": "Departamento Omnichannel",
+          "description": "Nombre o ID opcional del departamento de Rocket.Chat. Cambiarlo crea un espacio de asociaciones nuevo."
+        }
+      }
+    },
+    "zh-CN": {
+      "name": "Rocket.Chat 连接器",
+      "description": "开发预览：将 WhatsApp 私聊文本与 Rocket.Chat 全渠道客服连接。",
+      "config": {
+        "baseUrl": {
+          "title": "Rocket.Chat 源地址",
+          "description": "Rocket.Chat 的 HTTPS 源地址。仅限本地 Docker 实验环境：http://rocketchat:3000。"
+        },
+        "sessionId": {
+          "title": "WhatsApp 会话 ID",
+          "description": "OpenWA 会话的完整 UUID。入口实例必须绑定同一会话。"
+        },
+        "department": {
+          "title": "全渠道部门",
+          "description": "可选的 Rocket.Chat 部门名称或 ID。修改后使用新的映射空间。"
+        }
+      }
+    }
+  }
+}
