@@ -43,6 +43,7 @@ This repository provides:
 | [`group-translate`](./group-translate) | Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled. | 1.3.14 | stable |
 | [`gsheets-logger`](./gsheets-logger) | Logs WhatsApp message events to a Google Sheet via a service account. | 0.3.15 | stable |
 | [`http-action`](./http-action) | Triggers safe REST API requests from WhatsApp commands and renders JSON responses back to chat. | 0.2.15 | stable |
+| [`rocketchat-adapter`](./rocketchat-adapter) | Development preview: relay direct WhatsApp text messages to Rocket.Chat Omnichannel and agent text replies back to WhatsApp. | 0.1.0 | development |
 | [`supabase-otp-hook`](./supabase-otp-hook) | Deliver Supabase Auth phone OTPs over WhatsApp. | 0.3.13 | beta |
 | [`typebot-connector`](./typebot-connector) | Runs a Typebot flow as the brain of a WhatsApp bot: inbound messages drive a Typebot chat session via the live Chat API, and the bot's replies — text, media, and numbered-choice inputs — are sent back to WhatsApp. Auto-starts every chat, handles file-upload steps, and resets when the flow ends or after an idle timeout. Runs sandboxed in the plugin worker; no public URL or webhook required. | 0.3.6 | stable |
 | [`voice-transcription`](./voice-transcription) | Transcribes inbound WhatsApp voice notes to text via an OpenAI-compatible speech-to-text backend (self-hosted Speaches/faster-whisper or hosted Groq/OpenAI) and delivers a `message.transcription` event to your webhook — so bots and AI can read and reply to audio. Off the message-delivery path; disabled until enabled. | 1.3.4 | beta |
@@ -70,6 +71,7 @@ Per-session config** for details and caveats.
 | [`faq-bot`](./faq-bot) | ✅ Supported | All fields per session (different rule sets per number). |
 | [`group-translate`](./group-translate) | ⚠️ Supported, with caveat | Config-signature caching; multi-backend isolation needs one instance per session. |
 | [`gsheets-logger`](./gsheets-logger) | ❌ Not supported | Single-buffer single-sink design; use one instance per session. |
+| [`rocketchat-adapter`](./rocketchat-adapter) | ✅ Supported | Explicit session binding; one matching ingress instance per session/destination. |
 | [`http-action`](./http-action) | ✅ Supported | All fields per session (different endpoints/action sets). |
 | [`supabase-otp-hook`](./supabase-otp-hook) | ✅ Supported | All fields per session; applies to the instance's bound session. |
 | [`typebot-connector`](./typebot-connector) | ✅ Supported | All fields per session; flow state is per `(session, chat)`. |
@@ -290,7 +292,9 @@ OpenWA-plugins/
 
 ## Compatibility
 
-All 11 plugins are checked against OpenWA **v0.27.0** using its package parser, manifest validators and worker runtime with isolated service doubles. Verification covers lifecycle calls, declared hooks, representative capability calls and per-session configuration where supported. Live WhatsApp sessions, provider credentials and dashboard rendering are outside that check.
+The 11 previously released plugins are checked against OpenWA **v0.27.0** using its package parser, manifest validators and worker runtime with isolated service doubles. Verification covers lifecycle calls, declared hooks, representative capability calls and per-session configuration where supported. Live WhatsApp sessions, provider credentials and dashboard rendering are outside that check.
+
+The new `rocketchat-adapter` is a development preview verified separately against OpenWA 0.27.1; see its README for scope and live-test requirements.
 
 Each plugin declares its `minOpenWAVersion`, which remains its supported lower bound. OpenWA enforces this floor at install and boot load since v0.24.0; `testedOpenWAVersion` records the worker verification baseline and does not promise compatibility with every host configuration.
 
