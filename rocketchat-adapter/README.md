@@ -64,9 +64,49 @@ Upload `rocketchat-adapter.zip` in OpenWA → Plugins → Install. It installs d
 | `sessionId` | yes | Exact OpenWA session UUID; must also match the ingress instance's session scope. |
 | `department` | no | Department name or ID supplied to visitor registration. Changing it starts a separate mapping namespace. |
 
+### Configure and activate
+
+From the OpenWA Plugins page, open the adapter's configuration and save:
+
+```json
+{
+  "baseUrl": "https://rocket.example.com",
+  "sessionId": "<SESSION_UUID>",
+  "department": "Support"
+}
+```
+
+`sessionId` is the OpenWA session UUID, not its display name or phone number. Omit `department` if you do not use departments. In the plugin's session selection, choose only that session, then enable the plugin. For an additional session, use a matching per-session override and its own session-bound ingress instance.
+
+The equivalent REST commands are:
+
+```bash
+curl -X PUT 'https://your-openwa-host/api/plugins/rocketchat-adapter/config' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' -H 'Content-Type: application/json' \
+  -d '{"config":{"baseUrl":"https://rocket.example.com","sessionId":"<SESSION_UUID>"}}'
+
+curl -X PUT 'https://your-openwa-host/api/plugins/rocketchat-adapter/sessions' \
+  -H 'X-API-Key: <ADMIN_API_KEY>' -H 'Content-Type: application/json' \
+  -d '{"sessions":["<SESSION_UUID>"]}'
+
+curl -X POST 'https://your-openwa-host/api/plugins/rocketchat-adapter/enable' \
+  -H 'X-API-Key: <ADMIN_API_KEY>'
+```
+
+Use an unscoped ADMIN key for these management routes. The webhook secret is separate from the OpenWA API key. Generate it with `openssl rand -hex 32`, keep it private, and use exactly the same value in the ingress instance and Rocket.Chat. Secret values must be 16–512 characters.
+
 ### Docker laboratory
 
-Use the repository workspace's laboratory setup, documented outside this plugin in `docs/LABORATORIO-DOCKER.md`.
+For an isolated Docker setup, put OpenWA and Rocket.Chat on the same Compose network with service names `openwa` and `rocketchat`. Rocket.Chat also needs its supported MongoDB replica set and any other services required by its version. Use the [official Docker deployment guide](https://docs.rocket.chat/docs/deploy-with-docker-docker-compose) for that stack; this plugin does not ship Rocket.Chat or provision its administrator.
+
+In the OpenWA service configuration, add the narrow local exception:
+
+```yaml
+environment:
+  SSRF_ALLOWED_HOSTS: rocketchat
+```
+
+Recreate the OpenWA container after changing its environment. Use `baseUrl=http://rocketchat:3000` in **both** the plugin and ingress instance configs; `localhost` inside a container refers to that container, not the other service.
 
 - Inside the shared Docker network, use `baseUrl=http://rocketchat:3000`.
 - This exact HTTP origin is statically declared in `net.allow`; other HTTP origins are rejected by config validation. The lab operator must also set `SSRF_ALLOWED_HOSTS=rocketchat` on OpenWA. HTTPS config origins use `net.allowConfigHosts`; private HTTPS endpoints likewise require an explicit host SSRF exception.
@@ -75,7 +115,7 @@ Use the repository workspace's laboratory setup, documented outside this plugin 
 
 ## Compatibility
 
-Targets OpenWA **≥ 0.27.0**. The plugin is marked **development**, not stable. Unit/contract tests and any local verification are described in the workspace test record; `testedOpenWAVersion` is a host verification baseline, not a live WhatsApp guarantee.
+Targets OpenWA **≥ 0.27.0**. The plugin is marked **development**, not stable. Unit/contract tests and local verification are summarized below; `testedOpenWAVersion` is a host verification baseline, not a live WhatsApp guarantee.
 
 Rocket.Chat reference environment: 8.0.1 with Omnichannel visitor, room, message and message-history REST endpoints. A workspace without available agents may refuse room creation; the plugin retains the message for retry rather than claiming delivery. Confirm your edition's Omnichannel availability before deployment.
 
@@ -93,6 +133,25 @@ Supported by re-reading `ctx.config` for each hook/webhook. This first version e
 - An ambiguous Rocket.Chat send is reconciled against the last 100 messages in its pinned room using the deterministic message ID. It is never automatically moved to a new room. A closed/unreadable room or an old message outside that window can leave work dead-lettered for manual resolution.
 - Outbound delivery is **at least once**. Successful sends are marked afterward: a crash, storage failure or ambiguous WhatsApp timeout can produce a duplicate on retry. At most 500 recent reply IDs and 500 successful inbound IDs are remembered per namespace. Host ingress also deduplicates byte-identical webhook bodies.
 - Relay exceptions deliberately omit provider response bodies, URLs containing visitor tokens, message text and contact identities. Health remains degraded after a failure until re-enable; inspect and resolve retained work first. “Healthy” means no failures observed since enable, not verified provider connectivity.
+
+## Verification and troubleshooting
+
+1. Confirm the configured WhatsApp session is connected in OpenWA.
+2. In Rocket.Chat, add the operator as an Omnichannel agent and set the agent to **Available**. Confirm membership/availability in the configured department, if any.
+3. Send a new plain-text message from another consenting WhatsApp number. Confirm one Omnichannel room/message appears, then reply from the agent UI and confirm one reply arrives on WhatsApp.
+4. Repeat after restarting OpenWA and with another contact to check persistence and recipient isolation. Enable/disable decisions persist across restarts; disable the plugin when finished testing.
+
+| Symptom | Check |
+| --- | --- |
+| OpenWA login says Invalid API key | Use the key for the running OpenWA installation. A separate Docker data volume has a different bootstrap key from a previous npm installation. |
+| Webhook returns 401 | The Rocket.Chat Secret Token must match the ingress instance secret; do not use the OpenWA admin key here. |
+| Authenticated webhook returns 503 | The bound WhatsApp session must be connected and the plugin restored/enabled; the route has a session-alive preflight. |
+| No Omnichannel room appears | Check the origin, exact session UUID, plugin activation, agent availability and department. A provider/room failure is retained for retry. |
+| Network request refused | For public deployments use a reachable HTTPS origin. For the documented Docker origin check service names, the shared network and `SSRF_ALLOWED_HOSTS=rocketchat`. |
+| Agent reply is not delivered | Match plugin and instance origin/department/session settings, select Agent Messages, confirm plain text and inspect plugin health/host logs. Unknown rooms are never used as recipients. |
+| Health remains degraded after recovery | Inspect retained pending/dead-letter work and fix the cause before re-enabling. Do not delete plugin state to clear the warning: it contains visitor credentials, room mappings and dedup markers. |
+
+Local verification used OpenWA 0.27.1 and Rocket.Chat 8.0.1. Automated tests cover protocol filtering, retries, persistence, destination/session isolation and lifecycle behavior; real visitor/room/message/history APIs were exercised in Docker. The tester also reported successful bidirectional WhatsApp messaging, a restart, a second contact and no duplicate messages in those checks. This is limited manual evidence, not a guarantee for every deployment or exactly-once delivery.
 
 ## Development
 
