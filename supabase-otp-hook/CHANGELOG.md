@@ -7,6 +7,12 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.14] - 2026-11-06
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.29.0.
+
 ## [0.3.13] - 2026-10-31
 
 ### Changed

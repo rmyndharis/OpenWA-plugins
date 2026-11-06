@@ -81,3 +81,22 @@ test('pruneOrphans reclaims rows from sessions that stopped sending', async () =
   assert.equal(await store.get('gone:62811@c.us'), null, 'the silent session row is reclaimed');
   assert.ok(await store.get('live:62822@c.us'), 'a recent row is never touched by the orphan pass');
 });
+
+test('session keys stay within OpenWA 0.28.0 184-byte storage key limit and still prune by session prefix', async () => {
+  const inner = fakeStorage();
+  const capped: PluginStorage = {
+    ...inner,
+    set: async (k, v) => {
+      assert.ok(Buffer.byteLength(k, 'utf8') <= 184, `storage key exceeded 184 bytes (${Buffer.byteLength(k, 'utf8')}): ${k}`);
+      return inner.set(k, v);
+    },
+  };
+  const store = new SessionStore(capped);
+  const longSession = 's'.repeat(128);
+  const key = `${longSession}:120363012345678901-1600000000@g.us:123456789012345@lid`;
+  const state: SessionState = { sessionId: 'S', awaiting: { kind: 'text', blockId: 'b', attachmentsEnabled: false }, lastActivity: 0 };
+  await store.set(key, state);
+  assert.deepEqual(await store.get(key), state);
+  assert.equal(await store.pruneIdle(10_000, 1_000, longSession), 1);
+  assert.equal(await store.get(key), null);
+});

@@ -451,3 +451,20 @@ test('sweeping a stale state cannot delete a transition queued behind its delete
   assert.equal(await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', '1', 'choice'), true);
   assert.equal(replies.at(-1)!.text, 'hosting https://abc.com');
 });
+
+test('state keys stay within OpenWA 0.28.0 184-byte storage key limit for 128-char session IDs in groups', async () => {
+  const { ctx, storage, replies } = makeCtx();
+  const baseSet = ctx.storage.set;
+  ctx.storage.set = async (k: string, v: unknown) => {
+    assert.ok(Buffer.byteLength(k, 'utf8') <= 184, `storage key exceeded 184 bytes (${Buffer.byteLength(k, 'utf8')}): ${k}`);
+    return baseSet(k, v);
+  };
+  const longSession = 's'.repeat(128);
+  const groupChat = '120363012345678901-1600000000@g.us';
+  const actor = '123456789012345@lid';
+  await FlowEngine.processMessage(ctx, abc, longSession, groupChat, 'hi', 'm1', actor);
+  await FlowEngine.processMessage(ctx, abc, longSession, groupChat, '1', 'm2', actor);
+  assert.equal(replies.length, 2);
+  assert.equal(replies[1].text, 'hosting https://abc.com');
+  assert.equal(storage.size, 1);
+});

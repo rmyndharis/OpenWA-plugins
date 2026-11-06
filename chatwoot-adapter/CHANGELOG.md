@@ -6,6 +6,16 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.15] - 2026-11-06
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.29.0.
+
+### Fixed
+
+- Bound retry-queue and bulk-backfill storage keys to 184 UTF-8 bytes for long destination URLs, session IDs and message IDs.
+
 ## [0.9.14] - 2026-10-31
 
 ### Fixed

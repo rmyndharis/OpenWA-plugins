@@ -52,6 +52,20 @@ export class FlowEngine {
   private static readonly locks = new Map<string, Promise<unknown>>();
   private static readonly replyTails = new Map<string, Promise<void>>();
 
+  private static boundStateKey(key: string): string {
+    if (Buffer.byteLength(key, 'utf8') <= 184) return key;
+    let h1 = 0x811c9dc5, h2 = 0xdeadbeef;
+    for (let i = 0; i < key.length; i++) {
+      const c = key.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 0x01000193);
+      h2 = Math.imul(h2 ^ c, 0x85ebca6b);
+    }
+    const suffix = `_${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}`;
+    let prefix = key.slice(0, 184 - suffix.length).replace(/[\ud800-\udbff]$/, '');
+    while (Buffer.byteLength(prefix, 'utf8') > 184 - suffix.length) prefix = prefix.slice(0, -1).replace(/[\ud800-\udbff]$/, '');
+    return `${prefix}${suffix}`;
+  }
+
   /**
    * Process an incoming message and send auto-replies according to `flow` (the resolved per-session
    * config). Returns true if the message was consumed (a reply was queued, or it arrived late inside an
@@ -75,7 +89,7 @@ export class FlowEngine {
     sentAt?: number,
   ): Promise<boolean> {
     const conversation = actor ? `${chatId}|${actor}` : chatId;
-    const stateKey = `state__${sessionId}__${conversation}`.replace(/:/g, '_');
+    const stateKey = this.boundStateKey(`state__${sessionId}__${conversation}`.replace(/:/g, '_'));
     return this.withLock(stateKey, () =>
       this.processLocked(context, flow, sessionId, chatId, stateKey, messageBody, messageId, sentAt),
     );

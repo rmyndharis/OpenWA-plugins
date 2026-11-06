@@ -8,6 +8,13 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.3.16] - 2026-11-06
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.29.0.
+- Document OpenWA 0.28.0 Baileys group `message:ack` (`delivered`/`read`) progression and `whatsapp-web.js` system notice filtering.
+
 ## [0.3.15] - 2026-10-31
 
 ### Changed
