@@ -8,6 +8,16 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.1.16] - 2026-11-06
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.29.0.
+
+### Fixed
+
+- Bound per-conversation storage keys to 184 UTF-8 bytes for 128-character session IDs in group chats.
+
 ## [1.1.15] - 2026-10-31
 
 ### Fixed

@@ -6,6 +6,16 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-11-06
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.29.0.
+
+### Fixed
+
+- Bound per-session storage keys to 184 UTF-8 bytes for 128-character session IDs in group chats.
+
 ## [0.3.6] - 2026-10-31
 
 ### Fixed

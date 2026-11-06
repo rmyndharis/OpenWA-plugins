@@ -539,3 +539,29 @@ for (const update of ["lifecycle", "next hook"] as const) {
     assert.equal((await ctx.storage.get<{ active: boolean }>(GROUP_KEY))?.active, false);
   });
 }
+
+test("PluginConfigStore bounds keys exceeding OpenWA 0.28.0 184-byte storage key limit", async () => {
+  const { PluginConfigStore } = await import("./plugin-config.store.ts");
+  const m = new Map<string, unknown>();
+  const store = new PluginConfigStore({
+    get: async <T>(k: string) => (m.has(k) ? (m.get(k) as T) : null),
+    set: async (k: string, v: unknown) => {
+      assert.ok(Buffer.byteLength(k, "utf8") <= 184, `storage key exceeded 184 bytes (${Buffer.byteLength(k, "utf8")}): ${k}`);
+      m.set(k, v);
+    },
+    delete: async (k: string) => void m.delete(k),
+    list: async () => [...m.keys()],
+  });
+  const longSession = "s".repeat(128);
+  const longGroup = "12036301234567890123456789012345678901234567890123456789@g.us";
+  await store.save({
+    sessionId: longSession,
+    chatId: longGroup,
+    active: true,
+    participants: {},
+    delegatedControllers: [],
+    announced: true,
+  });
+  const loaded = await store.load(longSession, longGroup);
+  assert.equal(loaded.active, true);
+});

@@ -2,7 +2,7 @@
   {
     "id": "after-hours",
     "name": "After-Hours Auto-Reply",
-    "version": "0.2.12",
+    "version": "0.2.13",
     "type": "extension",
     "status": "stable",
     "description": "Auto-replies with a configurable away/closing message to messages received outside business hours.",
@@ -17,12 +17,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.7.0",
-    "testedOpenWAVersion": "0.27.0",
-    "releasedAt": "2026-10-31",
+    "testedOpenWAVersion": "0.29.0",
+    "releasedAt": "2026-11-06",
     "repoPath": "after-hours",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/after-hours",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/after-hours-v0.2.12/after-hours.zip#sha256=35facf967945224c1a0fb3f5d0371c9a2d9c3b67cb88ec750234cd8fe59655e2",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/after-hours-v0.2.13/after-hours.zip#sha256=33d47fcd15fac4d2945845c1f4389b9e5734230727444360ea6332c4adb65365",
     "permissions": [
       "messages:send"
     ],
@@ -329,7 +329,7 @@
   {
     "id": "ai-responder",
     "name": "AI Responder",
-    "version": "0.1.3",
+    "version": "0.1.4",
     "type": "extension",
     "status": "beta",
     "description": "Auto-replies to inbound WhatsApp messages with an OpenAI-compatible Chat Completions API. Single-turn, rate-limited per chat and per session, and last in the responder chain.",
@@ -345,12 +345,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.8.0",
-    "testedOpenWAVersion": "0.27.0",
-    "releasedAt": "2026-10-31",
+    "testedOpenWAVersion": "0.29.0",
+    "releasedAt": "2026-11-06",
     "repoPath": "ai-responder",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/ai-responder",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/ai-responder-v0.1.3/ai-responder.zip#sha256=adeffb4b95dbdf022811226832259aa5d8692b7db993c4b2f036487dcf18923b",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/ai-responder-v0.1.4/ai-responder.zip#sha256=da5115e8c5eadc5fa8732a4d19f5a1d0b25ed72e077a39518824fee6a4513b7f",
     "permissions": [
       "net:fetch",
       "messages:send"
@@ -913,7 +913,7 @@
   {
     "id": "chat-flow",
     "name": "Chat Flow",
-    "version": "1.1.15",
+    "version": "1.1.16",
     "type": "extension",
     "status": "stable",
     "description": "Interactive, stateful auto-reply: a trigger word starts a greeting + numbered menu, replies traverse a configurable menu tree, and per-chat state expires after 15 minutes.",
@@ -929,12 +929,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.7.0",
-    "testedOpenWAVersion": "0.27.0",
-    "releasedAt": "2026-10-31",
+    "testedOpenWAVersion": "0.29.0",
+    "releasedAt": "2026-11-06",
     "repoPath": "chat-flow",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/chat-flow",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chat-flow-v1.1.15/chat-flow.zip#sha256=8037ba25af344e712f4a923bacb780812206e38e180ee0d804a53094e74298c4",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chat-flow-v1.1.16/chat-flow.zip#sha256=4403ea23a1d6ff341eeef10b8bdc460914a50ebd91a489db27ab6ec60e15920b",
     "permissions": [
       "messages:send",
       "storage:use"
@@ -1200,7 +1200,7 @@
   {
     "id": "chatwoot-adapter",
     "name": "Chatwoot Adapter",
-    "version": "0.9.14",
+    "version": "0.9.15",
     "type": "extension",
     "status": "stable",
     "description": "Two-way sync between a WhatsApp session and a Chatwoot inbox: relays WhatsApp messages (1:1 and groups, with media) into Chatwoot as an API-channel inbox, sends agent replies back to WhatsApp, and hands a chat over to a human agent — silencing other OpenWA bots — when an agent takes it in Chatwoot. First consumer of the OpenWA Integration SDK v1; runs sandboxed in the plugin worker.",
@@ -1217,12 +1217,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.8.7",
-    "testedOpenWAVersion": "0.27.0",
-    "releasedAt": "2026-10-31",
+    "testedOpenWAVersion": "0.29.0",
+    "releasedAt": "2026-11-06",
     "repoPath": "chatwoot-adapter",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chatwoot-adapter-v0.9.14/chatwoot-adapter.zip#sha256=e1a1643f03bcef9e1db99a3d4f0ed78f8938bdc327ab5fe8dd4f8873fff03041",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chatwoot-adapter-v0.9.15/chatwoot-adapter.zip#sha256=e4437f172f4b85b7bc915e15a5bdff1de7717f59b50c054655dcd4d360eba1b1",
     "permissions": [
       "net:fetch",
       "conversation:send",
@@ -1711,7 +1711,7 @@
   {
     "id": "faq-bot",
     "name": "FAQ / Auto-Reply Bot",
-    "version": "0.2.17",
+    "version": "0.2.18",
     "type": "extension",
     "status": "stable",
     "description": "Auto-replies to inbound WhatsApp messages from configurable FAQ keyword/regex rules.",
@@ -1726,12 +1726,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.6.1",
-    "testedOpenWAVersion": "0.27.0",
-    "releasedAt": "2026-10-31",
+    "testedOpenWAVersion": "0.29.0",
+    "releasedAt": "2026-11-06",
     "repoPath": "faq-bot",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.2.17/faq-bot.zip#sha256=4c9856cab5dd74809f13d751bc3fcf1e15ff6ce37ad96c58938519487e836b10",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.2.18/faq-bot.zip#sha256=c8f65de757f0213a139315dab9beeab73da5ae34e6bbbaa9fb2fab00ed75ffe8",
     "permissions": [
       "messages:send"
     ],
@@ -1996,7 +1996,7 @@
   {
     "id": "group-translate",
     "name": "Group Auto-Translation",
-    "version": "1.3.14",
+    "version": "1.3.15",
     "type": "extension",
     "status": "stable",
     "description": "Auto-translates group messages between participants' languages via a LibreTranslate backend. Configure in-chat with /tr commands. Admin-gated; disabled until enabled.",
@@ -2011,12 +2011,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.8.0",
-    "testedOpenWAVersion": "0.27.0",
-    "releasedAt": "2026-10-31",
+    "testedOpenWAVersion": "0.29.0",
+    "releasedAt": "2026-11-06",
     "repoPath": "group-translate",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/group-translate-v1.3.14/group-translate.zip#sha256=33b4c47ba605138a633b70704a1d2e5192a5fda3ac696023dad529a49679073d",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/group-translate-v1.3.15/group-translate.zip#sha256=349a86eacd49dc03cc1f2546b0fcefd9c13049a3116e55891c2a7f7537082a6e",
     "permissions": [
       "messages:send",
       "engine:read",
@@ -2460,7 +2460,7 @@
   {
     "id": "gsheets-logger",
     "name": "Google Sheets Logger",
-    "version": "0.3.15",
+    "version": "0.3.16",
     "type": "extension",
     "status": "stable",
     "description": "Logs WhatsApp message events to a Google Sheet via a service account.",
@@ -2475,12 +2475,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.7.0",
-    "testedOpenWAVersion": "0.27.0",
-    "releasedAt": "2026-10-31",
+    "testedOpenWAVersion": "0.29.0",
+    "releasedAt": "2026-11-06",
     "repoPath": "gsheets-logger",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/gsheets-logger-v0.3.15/gsheets-logger.zip#sha256=1e446697b6650ad16958b211e6c10708a2fbc6a16094388626f455af6200330d",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/gsheets-logger-v0.3.16/gsheets-logger.zip#sha256=9cce3e8e73a6753acb7a566945123a44c35e89c78bfe43f475c838c80e7df2f4",
     "permissions": [
       "net:fetch",
       "storage:use"
@@ -2793,7 +2793,7 @@
   {
     "id": "http-action",
     "name": "HTTP Action Bot",
-    "version": "0.2.15",
+    "version": "0.2.16",
     "type": "extension",
     "status": "stable",
     "description": "Triggers safe REST API requests from WhatsApp commands and renders JSON responses back to chat.",
@@ -2808,12 +2808,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.8.0",
-    "testedOpenWAVersion": "0.27.0",
-    "releasedAt": "2026-10-31",
+    "testedOpenWAVersion": "0.29.0",
+    "releasedAt": "2026-11-06",
     "repoPath": "http-action",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/http-action-v0.2.15/http-action.zip#sha256=1aaed664919b2e6289e5cb420f39dbb9629dd73e6caa43ce9e444b520ba9ef78",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/http-action-v0.2.16/http-action.zip#sha256=431b001ce897cd9812bfd939632cf4d18b14509dcaa7e51d4a8d6161c7a9e8ae",
     "permissions": [
       "net:fetch",
       "conversation:send",
@@ -3253,7 +3253,7 @@
   {
     "id": "supabase-otp-hook",
     "name": "Supabase Auth OTP",
-    "version": "0.3.13",
+    "version": "0.3.14",
     "type": "extension",
     "status": "beta",
     "description": "Deliver Supabase Auth phone OTPs over WhatsApp.",
@@ -3270,12 +3270,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.8.16",
-    "testedOpenWAVersion": "0.27.0",
-    "releasedAt": "2026-10-31",
+    "testedOpenWAVersion": "0.29.0",
+    "releasedAt": "2026-11-06",
     "repoPath": "supabase-otp-hook",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/supabase-otp-hook",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/supabase-otp-hook-v0.3.13/supabase-otp-hook.zip#sha256=33b0694e58c3abc0708b20a3b7051b20a78cdaceebe644a497f7af3a9dd9ce9b",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/supabase-otp-hook-v0.3.14/supabase-otp-hook.zip#sha256=adbd206e0c5bee5b2f6b9bdf29a3c220756ecf5ccf1e3a6ec7f4764ba924b02f",
     "permissions": [
       "webhook:ingress",
       "messages:send"
@@ -3546,7 +3546,7 @@
   {
     "id": "typebot-connector",
     "name": "Typebot Connector",
-    "version": "0.3.6",
+    "version": "0.3.7",
     "type": "extension",
     "status": "stable",
     "description": "Runs a Typebot flow as the brain of a WhatsApp bot: inbound messages drive a Typebot chat session via the live Chat API, and the bot's replies — text, media, and numbered-choice inputs — are sent back to WhatsApp. Auto-starts every chat, handles file-upload steps, and resets when the flow ends or after an idle timeout. Runs sandboxed in the plugin worker; no public URL or webhook required.",
@@ -3563,12 +3563,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.8.2",
-    "testedOpenWAVersion": "0.27.0",
-    "releasedAt": "2026-10-31",
+    "testedOpenWAVersion": "0.29.0",
+    "releasedAt": "2026-11-06",
     "repoPath": "typebot-connector",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/typebot-connector",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/typebot-connector-v0.3.6/typebot-connector.zip#sha256=a6ae99abf757d7b66878c43cc57bb709949bb8143ab0cace86f78ddebcef565d",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/typebot-connector-v0.3.7/typebot-connector.zip#sha256=895d397cf12585e5989916992b08e32be826cd462a393029f156f49ece24f812",
     "permissions": [
       "net:fetch",
       "conversation:send",
@@ -3967,7 +3967,7 @@
   {
     "id": "voice-transcription",
     "name": "Voice Note Transcription",
-    "version": "1.3.4",
+    "version": "1.3.5",
     "type": "extension",
     "status": "beta",
     "description": "Transcribes inbound WhatsApp voice notes to text via an OpenAI-compatible speech-to-text backend (self-hosted Speaches/faster-whisper or hosted Groq/OpenAI) and delivers a `message.transcription` event to your webhook — so bots and AI can read and reply to audio. Off the message-delivery path; disabled until enabled.",
@@ -3984,12 +3984,12 @@
       "openwa"
     ],
     "minOpenWAVersion": "0.8.0",
-    "testedOpenWAVersion": "0.27.0",
-    "releasedAt": "2026-10-31",
+    "testedOpenWAVersion": "0.29.0",
+    "releasedAt": "2026-11-06",
     "repoPath": "voice-transcription",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/voice-transcription",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/voice-transcription-v1.3.4/voice-transcription.zip#sha256=d0c54284384516dd1532e24848f2c6d87505f9b5f7123fb8dcb03ca84b9d94d3",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/voice-transcription-v1.3.5/voice-transcription.zip#sha256=400cad50eefba2a308f827de0a46bf2eb8c963d63ab54e8e6e972fb9c791a40a",
     "permissions": [
       "net:fetch",
       "messages:send",

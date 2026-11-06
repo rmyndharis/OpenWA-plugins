@@ -1,7 +1,7 @@
 // Vendored OpenWA plugin contract. There is no published @openwa SDK package; keep this in sync
 // with the OpenWA version you target. All imports of this module must be `import type`.
 //
-// Last aligned against OpenWA core v0.27.0 (tag d99fa20), verified field-by-field against
+// Last aligned against OpenWA core v0.29.0 (tag af348ed), verified field-by-field against
 // src/core/plugins/plugin.interfaces.ts, src/core/hooks/{hook.interfaces,hook-results}.ts, plugin-net.ts,
 // sandbox/{protocol,worker-bootstrap,worker-capability,worker-hooks,worker-webhooks}.ts and
 // src/engine/interfaces/whatsapp-engine.interface.ts, with behavior the interfaces do not show read from
@@ -13,6 +13,34 @@
 // the HTTPS origin including its port. Since 0.25.0: IncomingMessage includes poll details and
 // ChatSummary includes lastMessageType. Hook names and capability signatures used by these plugins
 // remain compatible.
+// 0.27.0 -> 0.29.0 (spanning 0.27.1, 0.28.0 and 0.29.0):
+//   1. PluginIngressRoute gained `dedupBodyMismatchAsNew?: boolean` (0.28.0, validated as boolean at
+//      manifest load). When true, a delivery whose deliveryId matches a stored event with a different
+//      payloadHash is persisted under `${deliveryId}:${payloadHash}` as a new event while
+//      `req.deliveryId` passed to the handler remains the original `providerDeliveryId`.
+//   2. Query-borne ingress `verified` verdict (0.28.0): no signature scheme signs the query string or
+//      HTTP method, so on `hmac-sha256` and `standard-webhooks` an empty body with a non-empty query
+//      reaches the handler with `req.verified === false` (even when replaying a stored event recorded as
+//      verified by an earlier release).
+//   3. Queued ingress webhook dispatch timeout (0.28.0): inline dispatch stays at 5 s
+//      (`INGRESS_DISPATCH_TIMEOUT_MS`), while queued dispatch via `IngressProcessor` gets
+//      `Math.min(25000, simulateTypingMaxMs + 5000)` (10 s by default, capped at 25 s).
+//   4. PluginStorage 184 UTF-8 byte key limit (0.28.0): `ctx.storage.set` rejects keys exceeding 184
+//      UTF-8 bytes (`Plugin storage key exceeds 184 UTF-8 bytes`) so the base64url-encoded `key-*.json`
+//      filename stays within 255 bytes.
+//   5. Sandbox host & manifest hardening (0.28.0): `healthCheck` requires `healthy === true`;
+//      `dropMalformedDisplayFields` strips non-string `description`, `author`, `provides` items and
+//      `i18n` text fields at load; `isPluginActiveForSession` checks `sessionScoped === false`
+//      explicitly; search-provider registration is capped at one declaration per worker; and the
+//      production Docker image drops `typescript` and `ts-node` at runtime.
+//   6. Engine & message behavior (0.28.0 / 0.29.0): whatsapp-web.js no longer emits system notices
+//      (`E2E_NOTIFICATION`, `NOTIFICATION_TEMPLATE`, `NOTIFICATION`, `BROADCAST_NOTIFICATION`,
+//      `GROUP_NOTIFICATION`, `PROTOCOL`, `DEBUG`) as `unknown` messages on `message:received`,
+//      `message:sent`, or `message:ack`; Baileys emits `delivered` and `read` on `message:ack` for
+//      outbound group messages once all members receive/read them; Baileys `getChats` after restart
+//      includes chats from stored messages with group timestamps and contact pushnames; Engine-only
+//      additions (`getMessageReceipts` in 0.27.1, `getContactLid` and `deleteMessage` resolved id in
+//      0.28.0) are host-internal and not on the 19-verb sandbox capability router.
 // Unlike the ranges below, 0.23.4 → 0.23.6 moves the plugin runtime itself. 0.23.5 changed only message
 // content and one ingress redaction; the rest is 0.23.6. Each item is recorded below where it belongs:
 //   1. Hook results: from 0.23.6 message:received / message:sent adopt only a plain object with string
@@ -109,22 +137,27 @@
 // select, array/items, object/properties, min/max/pattern — see PluginConfigField) is plain manifest
 // JSON — the plugin still reads `ctx.config` as `Record<string, unknown>` and validates defensively.
 //
-// Host bounds a plugin cannot see from the types (all host-side, re-checked at v0.27.0):
+// Host bounds a plugin cannot see from the types (all host-side, re-checked at v0.29.0):
 //   30 s per lifecycle phase (onLoad/onEnable/onDisable/onUnload) and per capability call, except
 //   the send verbs (ctx.messages.sendText / ctx.messages.reply / ctx.conversations.send) at 120 s;
 //   5 s per hook dispatch (overrun → the host fails OPEN with {continue:true} and drops your result);
-//   5 s per ingress webhook dispatch; 5 s for healthCheck (an overrun is reported unhealthy, not hung);
+//   5 s per inline ingress webhook dispatch, or Math.min(25000, simulateTypingMaxMs + 5000) (default
+//   10 s, max 25 s) for queued ingress webhook dispatch (0.28.0+); 5 s for healthCheck (an overrun is
+//   reported unhealthy, not hung);
 //   32 concurrent capability calls per plugin (the 33rd throws);
 //   16 concurrent net.fetch calls GLOBALLY — shared across ALL plugins and workers, not per plugin;
-//   50 MiB total ctx.storage per plugin; 10 MiB net.fetch response body; 256 MB worker heap;
+//   50 MiB total ctx.storage per plugin, and 184 UTF-8 bytes max per storage key on set() (0.28.0+);
+//   10 MiB net.fetch response body; 256 MB worker heap;
 //   200 log lines / 10 s, 8 KiB per line.
 
 export type HookEvent =
   | 'session:created' | 'session:starting' | 'session:ready' | 'session:qr'
   | 'session:disconnected' | 'session:error' | 'session:deleted'
   // From host 0.27.0, message:ack fires only for outbound messages (both engines) and drops foreign-chat
-  // receipts on Baileys; message:persisted also re-fires when an edit changes a stored message's text; and
-  // message:sending / message:failed report bulk voice notes (audio with ptt: true) as type 'voice'.
+  // receipts on Baileys (and from 0.28.0 Baileys emits delivered/read for outbound group messages once
+  // all members receive/read them); message:persisted also re-fires when an edit changes a stored
+  // message's text; message:sending / message:failed report bulk voice notes (audio with ptt: true) as
+  // type 'voice'; and from 0.28.0 whatsapp-web.js no longer emits system notices as 'unknown' messages.
   | 'message:received' | 'message:sending' | 'message:sent' | 'message:failed' | 'message:ack' | 'message:persisted'
   // v0.11.0: emitted when the host deletes a redundant echo row during send reconciliation. The payload
   // is `{ sessionId, message }` where `message` is the host's persisted DB row — NOT an IncomingMessage.
@@ -191,7 +224,9 @@ export interface PluginLogger {
  * One JSON file per key under `<dataDir>/plugins/<pluginId>/`, so key COUNT is a real cost, not just
  * key size:
  *
- * - `set` REJECTS once the plugin's directory would exceed 50 MiB ("storage quota exceeded"). Up to
+ * - `set` REJECTS once the plugin's directory would exceed 50 MiB ("storage quota exceeded"), and from
+ *   host 0.28.0 also rejects any key longer than 184 UTF-8 bytes ("Plugin storage key exceeds 184 UTF-8
+ *   bytes") so the base64url-encoded `key-*.json` filename fits within 255 bytes. Up to
  *   0.25.x the quota was measured by a synchronous readdir + stat of every key on EVERY write, so a
  *   plugin that wrote one key per message paid O(keys) syscalls per message, on the host's event loop;
  *   0.26.0 keeps a running total (one scan to seed it, one stat per write). Hosts below 0.26.0 stay
@@ -485,8 +520,13 @@ export interface PluginIngressRoute {
    *  dropped every one after the first while still acking it. From 0.27.0, when rawBody is empty and no
    *  dedup header is used, the fallback hash also covers req.method and the code-point-sorted req.query
    *  entries when query is non-empty, so query-borne deliveries stay distinct; deliveries with neither
-   *  body nor query still share one id per route. */
+   *  body nor query still share one id per route. No scheme signs the query, so on hmac-sha256 and
+   *  standard-webhooks a query-borne delivery reaches the handler unverified (0.28.0+). */
   dedupOn?: 'header' | 'body';
+  /** Treat different bytes under one delivery id as new (0.28.0+; must be a boolean when present).
+   *  Enable only for byte-identical provider retries; when true, a mismatched payload is stored under
+   *  `${deliveryId}:${payloadHash}` while `req.deliveryId` remains the original provider delivery id. */
+  dedupBodyMismatchAsNew?: boolean;
   response?: IngressResponseContract;
 }
 
@@ -547,7 +587,13 @@ export interface WebhookRequest {
   query: Record<string, string>;
   body: string;
   rawBody: string;
+  /** True when the route's signature check passed, and false for `scheme: 'none'`. From host 0.28.0,
+   *  also false on `hmac-sha256` and `standard-webhooks` when `rawBody` is empty and `query` is
+   *  non-empty, since no scheme signs the query string or HTTP method. */
   verified: boolean;
+  /** Provider delivery id (or content hash when no header id is used). When `dedupBodyMismatchAsNew`
+   *  stores a mismatched retry under `${deliveryId}:${payloadHash}`, this remains the original
+   *  `providerDeliveryId` (host 0.28.0+). */
   deliveryId: string;
   sessionId?: string;
 }

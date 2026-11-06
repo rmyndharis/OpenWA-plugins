@@ -8,6 +8,16 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.3.15] - 2026-11-06
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.29.0.
+
+### Fixed
+
+- Bound per-group storage keys to 184 UTF-8 bytes for long session and group identifiers.
+
 ## [1.3.14] - 2026-10-31
 
 ### Fixed
