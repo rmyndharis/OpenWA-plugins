@@ -11,3 +11,5 @@ type Poll = Assert<Equal<IncomingMessage['poll'], {
 } | undefined>>;
 type LastMessageType = Assert<Equal<ChatSummary['lastMessageType'], string | undefined>>;
 type DedupBodyMismatchAsNew = Assert<Equal<PluginIngressRoute['dedupBodyMismatchAsNew'], boolean | undefined>>;
+type IsForwarded = Assert<Equal<IncomingMessage['isForwarded'], boolean | undefined>>;
+type ForwardingScore = Assert<Equal<IncomingMessage['forwardingScore'], number | undefined>>;

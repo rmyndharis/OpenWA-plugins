@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chat-flow` |
-| **Version** | 1.1.16 |
-| **Released** | 2026-11-06 |
+| **Version** | 1.1.17 |
+| **Released** | 2026-11-08 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.29.0) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.29.1) |
 | **Keywords** | menu, flow, interactive, auto-reply, chatbot, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/chat-flow](https://github.com/rmyndharis/OpenWA-plugins/tree/main/chat-flow) |
 <!-- END DETAILS -->
@@ -109,7 +109,7 @@ plugin's **Flow editor**.
 
 ## Compatibility
 
-Checked against the OpenWA v0.29.0 worker runtime with isolated services. State changes are persisted before replies are queued. Delivery remains ordered per chat while the hook returns its claim without waiting for the send. A failed send is logged and does not block later queued replies. Pending replies are best-effort and may be interrupted when the worker stops.
+Checked against the OpenWA v0.29.1 worker runtime with isolated services. State changes are persisted before replies are queued. Delivery remains ordered per chat while the hook returns its claim without waiting for the send. A failed send is logged and does not block later queued replies. Pending replies are best-effort and may be interrupted when the worker stops.
 
 Targets OpenWA **≥ 0.7.0** — relies on per-session config resolution (`sessionScoped`), live
 `onConfigChange`, and the `configUi` sandboxed config editor. Uses only `ctx.messages.reply`,

@@ -850,6 +850,7 @@ test('isCommand is true exactly when handleMessage claims the message', async ()
     const c = new TranslationCoordinator(translator, store, gateway, { ...OPTS, prefix });
     const cases: Array<[Partial<InboundMessage>, boolean]> = [
       [{ body: `${prefix} on` }, true],
+      [{ body: `${prefix} on`, isForwarded: true }, false],
       [{ body: `${prefix} on`, isGroup: false }, false],
       [{ body: `${prefix} on`, fromMe: true }, false],
       [{ body: `${prefix} on`, author: '' }, false],
@@ -865,4 +866,63 @@ test('isCommand is true exactly when handleMessage claims the message', async ()
       }
     }
   }
+});
+
+test('a forwarded message is translated for the group without teaching the forwarder language or running as a command', async () => {
+  const state = freshState({
+    active: true,
+    announced: true,
+    participants: {
+      '111@c.us': { lang: 'en', source: 'learned', enabled: true, samples: 5, updatedAt: '' },
+      '222@c.us': { lang: 'es', source: 'learned', enabled: true, samples: 5, updatedAt: '' },
+      '333@c.us': { lang: 'fr', source: 'learned', enabled: true, samples: 5, updatedAt: '' },
+    },
+  });
+  const { store, gateway, translator, logger, mocks } = makeDeps(state);
+  mocks.translate.mockImplementation(async (t, s, tgt) => `[${s}->${tgt}] ${t}`);
+  const c = new TranslationCoordinator(translator, store, gateway, OPTS, logger);
+
+  // 1. A cold-start participant forwarding a message does not create or lock a learned language entry.
+  mocks.detect.mockResolvedValue({ lang: 'es', confidence: 0.99 });
+  await c.handleMessage('s', msg({ author: '444@c.us', body: 'Hola amigos', isForwarded: true }));
+  assert.equal(state.participants['444@c.us'], undefined);
+  assert.equal(mocks.save.calls.length, 0);
+  assert.equal(mocks.sendCombinedReply.calls.length, 1);
+  assert.match(mocks.sendCombinedReply.calls[0][3] as string, /EN:/);
+  assert.match(mocks.sendCombinedReply.calls[0][3] as string, /FR:/);
+
+  // 2. Two consecutive forwards in another language do not switch the forwarder's learned language,
+  // and the forwarder's own language ('en') stays in the target set without triggering backstop.
+  mocks.sendCombinedReply.calls.length = 0;
+  mocks.warn.calls.length = 0;
+  mocks.detect.mockResolvedValue({ lang: 'es', confidence: 0.99 });
+  await c.handleMessage('s', msg({ author: '111@c.us', body: 'Buenos dias', isForwarded: true }));
+  await c.handleMessage('s', msg({ author: '111@c.us', body: 'Buenas noches', isForwarded: true }));
+  assert.equal(state.participants['111@c.us'].lang, 'en');
+  assert.equal(state.participants['111@c.us'].pendingLang, undefined);
+  assert.equal(state.participants['111@c.us'].samples, 5);
+  assert.equal(mocks.sendCombinedReply.calls.length, 2);
+  assert.match(mocks.sendCombinedReply.calls[0][3] as string, /EN:.*\[es->en] Buenos dias/s);
+  assert.match(mocks.sendCombinedReply.calls[0][3] as string, /FR:.*\[es->fr] Buenos dias/s);
+  assert.equal(
+    mocks.warn.calls.some((w) => (w[1] as { action?: string } | undefined)?.action === 'translation_backstop'),
+    false,
+  );
+
+  // 3. A forwarded message in a language nobody in the group speaks uses detected as source, not sender.lang.
+  mocks.sendCombinedReply.calls.length = 0;
+  mocks.detect.mockResolvedValue({ lang: 'de', confidence: 0.99 });
+  await c.handleMessage('s', msg({ author: '111@c.us', body: 'Guten Morgen', isForwarded: true }));
+  assert.equal(mocks.sendCombinedReply.calls.length, 1);
+  assert.match(mocks.sendCombinedReply.calls[0][3] as string, /\[de->en] Guten Morgen/);
+  assert.match(mocks.sendCombinedReply.calls[0][3] as string, /\[de->es] Guten Morgen/);
+  assert.match(mocks.sendCombinedReply.calls[0][3] as string, /\[de->fr] Guten Morgen/);
+
+  // 4. A forwarded message starting with the command prefix is translated as text, never run as a command.
+  mocks.sendCombinedReply.calls.length = 0;
+  mocks.detect.mockResolvedValue({ lang: 'en', confidence: 0.99 });
+  const res = await c.handleMessage('s', msg({ author: '111@c.us', body: '/tr off', isForwarded: true }));
+  assert.deepEqual(res, { swallow: false });
+  assert.equal(state.active, true);
+  assert.equal(mocks.sendCombinedReply.calls.length, 1);
 });

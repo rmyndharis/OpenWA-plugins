@@ -41,6 +41,8 @@ export interface InboundMessage {
   author: string; // sender WID (group participant)
   isGroup: boolean;
   fromMe: boolean;
+  /** True when the sender forwarded this message rather than writing it (OpenWA 0.29.1+). */
+  isForwarded?: boolean;
   mentionedIds: string[];
   pushName?: string;
   /** Reached the plugin more than 5 minutes after it was sent; neither translated nor run. */

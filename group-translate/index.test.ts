@@ -565,3 +565,53 @@ test("PluginConfigStore bounds keys exceeding OpenWA 0.28.0 184-byte storage key
   const loaded = await store.load(longSession, longGroup);
   assert.equal(loaded.active, true);
 });
+
+test("forwarded messages pass through without running /tr commands or teaching the forwarder's language", async () => {
+  const replies: string[] = [];
+  const { ctx, getHook } = fakeContext(
+    { libretranslateUrl: "https://translate.example.com" },
+    {
+      seed: {
+        [GROUP_KEY]: {
+          sessionId: "s1",
+          chatId: "group@g.us",
+          active: true,
+          participants: {
+            "other@c.us": { lang: "en", source: "learned", enabled: true, samples: 3, updatedAt: "" },
+          },
+          delegatedControllers: [],
+          announced: true,
+        },
+      },
+      net: {
+        fetch: async (url) => ({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          body: url.endsWith("/detect")
+            ? JSON.stringify([{ language: "es", confidence: 0.99 }])
+            : JSON.stringify({ translatedText: "Hello from Spain" }),
+        }),
+      },
+      messages: {
+        reply: async (_s: string, _c: string, _id: string, text: string) => {
+          replies.push(text);
+          return { messageId: "r1", timestamp: 0 };
+        },
+      },
+    },
+  );
+  const plugin = new TranslationPlugin();
+  await plugin.onEnable(ctx);
+
+  const cmdRes = await getHook()!(engineCtx({ body: "/tr off", isForwarded: true }));
+  assert.equal(cmdRes.continue, true, "forwarded text starting with /tr is not claimed as a command");
+  const afterCmd = (await ctx.storage.get<{
+    active: boolean;
+    participants: Record<string, { lang: string | null; samples: number }>;
+  }>(GROUP_KEY))!;
+  assert.equal(afterCmd.active, true, "forwarded /tr off does not deactivate group translation");
+  assert.equal(afterCmd.participants[AUTHOR], undefined, "forwarded message does not teach the forwarder's language");
+  assert.equal(replies.length, 1, "forwarded message is still translated for the group");
+});

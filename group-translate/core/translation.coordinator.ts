@@ -93,7 +93,13 @@ export class TranslationCoordinator {
 
   /** True when handleMessage would run `msg` as a command, with the same gate and the same prefix. */
   isCommand(msg: InboundMessage): boolean {
-    return msg.isGroup && !msg.fromMe && !!msg.author && parseCommand(msg.body, this.opts.prefix) !== null;
+    return (
+      msg.isGroup &&
+      !msg.fromMe &&
+      !!msg.author &&
+      !msg.isForwarded &&
+      parseCommand(msg.body, this.opts.prefix) !== null
+    );
   }
 
   async handleMessage(sessionId: string, msg: InboundMessage): Promise<{ swallow: boolean }> {
@@ -132,7 +138,7 @@ export class TranslationCoordinator {
       await this.store.save(state);
     }
 
-    const command = parseCommand(msg.body, this.opts.prefix);
+    const command = msg.isForwarded ? null : parseCommand(msg.body, this.opts.prefix);
     if (command) {
       await this.handleCommand(sessionId, msg, state, command);
       return { swallow: true };
@@ -150,13 +156,17 @@ export class TranslationCoordinator {
     }
 
     const senderKey = this.resolveSenderKey(state, msg);
-    const sender = this.ensureParticipant(state, senderKey);
+    const sender = msg.isForwarded
+      ? (UNSAFE_KEYS.has(senderKey) ? undefined : state.participants[senderKey])
+      : this.ensureParticipant(state, senderKey);
+    let stateChanged = false;
     // Record the pushName, but never overwrite a different existing value (a misrouted message
     // could otherwise poison the identity anchor).
-    if (msg.pushName && (sender.pushName === undefined || sender.pushName === msg.pushName)) {
+    if (sender && msg.pushName && (sender.pushName === undefined || sender.pushName === msg.pushName)) {
+      if (sender.pushName !== msg.pushName) stateChanged = true;
       sender.pushName = msg.pushName;
     }
-    if (!sender.enabled) return;
+    if (sender && !sender.enabled) return;
 
     let detected: string;
     try {
@@ -172,28 +182,35 @@ export class TranslationCoordinator {
       });
       return;
     }
-    this.applyLearning(sender, detected);
+    // Forwarded text was written by someone else, so do not attribute its language to the sender.
+    if (sender && !msg.isForwarded) {
+      this.applyLearning(sender, detected);
+      stateChanged = true;
+    }
 
-    // Pick the effective source language. Detection misfires on short/colloquial text — it often
-    // returns a near-neighbour language (e.g. es misread as gl/ca) — so trust the detected code only
-    // when it names a language the group actually uses; otherwise fall back to the sender's known
-    // language. Combined with excluding the sender's own language from the targets below, this stops
-    // a message ever being "translated" into its own language (the duplicate/echo bug).
+    // Pick the effective source language. Detection misfires on short/colloquial text, often
+    // returning a near-neighbour language (e.g. es misread as gl/ca), so for self-written messages
+    // trust the detected code only when it names a language the group actually uses; otherwise fall
+    // back to the sender's known language. Combined with excluding the sender's own language from
+    // the targets below, this stops a self-written message ever being "translated" into its own
+    // language (the duplicate/echo bug). A forwarded message is not in the forwarder's language, so
+    // it keeps its detected source and includes the forwarder's language in the target set.
     const knownLangs = this.knownLanguages(state);
-    const source = knownLangs.includes(detected) ? detected : (sender.lang ?? detected);
+    const senderLang = sender?.lang ?? null;
+    const source = !msg.isForwarded && !knownLangs.includes(detected) ? (senderLang ?? detected) : detected;
 
-    let targets = this.targetLanguages(state, source, sender.lang);
+    let targets = this.targetLanguages(state, source, msg.isForwarded ? null : senderLang);
     if (targets.length === 0) {
       // Backstop: a real message detected in a known language must never be silently dropped due
       // to a sender/source mismatch (e.g. a misrouted @lid author keyed to the wrong participant).
-      // Translate into every known language except the source — guarantees delivery.
+      // Translate into every known language except the source, guaranteeing delivery.
       const backstop = knownLangs.filter(l => l !== source);
       if (backstop.length === 0) {
         this.logger.debug('no targets; group speaks only the source language', {
           action: 'translation_no_targets',
           source,
         });
-        await this.store.save(state);
+        if (stateChanged) await this.store.save(state);
         return;
       }
       this.logger.warn('target backstop engaged (possible misroute or cross-language write)', {
@@ -201,7 +218,7 @@ export class TranslationCoordinator {
         author: msg.author,
         pushName: msg.pushName,
         source,
-        senderLang: sender.lang,
+        senderLang,
         targets: backstop,
       });
       targets = backstop;
@@ -232,7 +249,7 @@ export class TranslationCoordinator {
       pushName: msg.pushName,
       detected,
       source,
-      senderLang: sender.lang,
+      senderLang,
       knownLangs,
       targets,
       sent: translations.length,
@@ -241,7 +258,7 @@ export class TranslationCoordinator {
     if (translations.length > 0) {
       await this.gateway.sendCombinedReply(sessionId, msg.chatId, msg.id, formatCombinedReply(translations));
     }
-    await this.store.save(state);
+    if (stateChanged) await this.store.save(state);
   }
 
   /** Distinct languages currently spoken by enabled participants. */

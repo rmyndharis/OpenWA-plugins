@@ -242,6 +242,7 @@ export class TranslationPlugin implements IPlugin {
         author: msg.author ?? "",
         isGroup: msg.isGroup,
         fromMe: msg.fromMe,
+        isForwarded: msg.isForwarded === true,
         mentionedIds: msg.mentionedIds ?? [],
         pushName: msg.contact?.pushName,
         late: sent.getTime() > 0 && Date.now() - sent.getTime() > LATE_AFTER_MS,

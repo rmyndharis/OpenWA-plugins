@@ -8,6 +8,16 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.3.16] - 2026-11-08
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.29.1.
+
+### Fixed
+
+- Translate forwarded group messages into the group's languages without updating the forwarder's learned language or running `/tr` commands.
+
 ## [1.3.15] - 2026-11-06
 
 ### Changed

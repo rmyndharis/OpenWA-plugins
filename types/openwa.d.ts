@@ -1,7 +1,7 @@
 // Vendored OpenWA plugin contract. There is no published @openwa SDK package; keep this in sync
 // with the OpenWA version you target. All imports of this module must be `import type`.
 //
-// Last aligned against OpenWA core v0.29.0 (tag af348ed), verified field-by-field against
+// Last aligned against OpenWA core v0.29.1 (tag e3a7272), verified field-by-field against
 // src/core/plugins/plugin.interfaces.ts, src/core/hooks/{hook.interfaces,hook-results}.ts, plugin-net.ts,
 // sandbox/{protocol,worker-bootstrap,worker-capability,worker-hooks,worker-webhooks}.ts and
 // src/engine/interfaces/whatsapp-engine.interface.ts, with behavior the interfaces do not show read from
@@ -13,6 +13,15 @@
 // the HTTPS origin including its port. Since 0.25.0: IncomingMessage includes poll details and
 // ChatSummary includes lastMessageType. Hook names and capability signatures used by these plugins
 // remain compatible.
+// 0.29.0 -> 0.29.1:
+//   1. IncomingMessage gained `isForwarded?: boolean` and `forwardingScore?: number` (#2029): set on
+//      `message:received` and `message:sent` by both engines and on `getChatHistory` by whatsapp-web.js
+//      when the sender forwarded the message (`isForwarded: true`; `forwardingScore` only when `> 0`,
+//      absent otherwise). Both fields are stripped by `deletedPlaceholder` when a message arrives already
+//      deleted (`type: 'revoked'`).
+//   2. Engine startup fixes: whatsapp-web.js pins the next settled WhatsApp Web build from the same
+//      registry read when a build serves the logged-out landing page (#1997); Baileys seeks stored chat
+//      names by chat rather than scanning every incoming message of the session on startup.
 // 0.27.0 -> 0.29.0 (spanning 0.27.1, 0.28.0 and 0.29.0):
 //   1. PluginIngressRoute gained `dedupBodyMismatchAsNew?: boolean` (0.28.0, validated as boolean at
 //      manifest load). When true, a delivery whose deliveryId matches a stored event with a different
@@ -137,7 +146,7 @@
 // select, array/items, object/properties, min/max/pattern — see PluginConfigField) is plain manifest
 // JSON — the plugin still reads `ctx.config` as `Record<string, unknown>` and validates defensively.
 //
-// Host bounds a plugin cannot see from the types (all host-side, re-checked at v0.29.0):
+// Host bounds a plugin cannot see from the types (all host-side, re-checked at v0.29.1):
 //   30 s per lifecycle phase (onLoad/onEnable/onDisable/onUnload) and per capability call, except
 //   the send verbs (ctx.messages.sendText / ctx.messages.reply / ctx.conversations.send) at 120 s;
 //   5 s per hook dispatch (overrun → the host fails OPEN with {continue:true} and drops your result);
@@ -702,7 +711,8 @@ export interface IncomingMessage {
   /** Host `MessageType`: text|image|video|audio|voice|document|sticker|location|contact|poll|call|
    *  revoked|order|product|masked|unknown ('order' and 'product' from host 0.23.5). Kept as `string`
    *  here so a new host type never breaks a typecheck. A message delivered already deleted arrives as
-   *  `revoked` with an empty `body` and no media, quote or card fields (host 0.26.0). */
+   *  `revoked` with an empty `body` and no media, quote, card or forwarded fields (host 0.26.0;
+   *  `isForwarded` and `forwardingScore` stripped from host 0.29.1). */
   type: string;
   /**
    * Unix SECONDS, the original send time. From host 0.23.6 a Baileys session delivers after reconnect
@@ -743,6 +753,13 @@ export interface IncomingMessage {
    */
   senderPhone?: string | null;
   mentionedIds?: string[];
+  /** True when the sender forwarded this message rather than writing it (host 0.29.1+, both engines on
+   *  `message:received` and `message:sent`, and whatsapp-web.js on `getChatHistory`). Absent (never
+   *  `false`) for a message that was not forwarded, and stripped when delivered already deleted. */
+  isForwarded?: boolean;
+  /** How many times the message has been forwarded (WhatsApp flags a widely forwarded message at 5 or
+   *  more). Set only with `isForwarded: true` and only when `> 0` (host 0.29.1+). */
+  forwardingScore?: number;
   contact?: MessageContact;
   /** Choices and selection mode, without vote counts, on host 0.25.0+. */
   poll?: PollDetails;
