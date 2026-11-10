@@ -46,7 +46,7 @@ export function parseSchedule(json: string): Schedule {
     // An overnight window ("22:00-06:00") and a 24-hour one ("00:00-00:00") are both ordinary business
     // hours; rejecting them made the whole schedule unparseable rather than just that day. They are
     // stored as-is and interpreted by the comparison, which already handles a wrapped window.
-    if (openMin === closeMin && value.trim() !== '00:00-00:00') {
+    if (openMin === closeMin && value !== '00:00-00:00') {
       throw new Error(`schedule: ${day} open and close are the same ("${value}") — use 00:00-00:00 for all day`);
     }
     schedule[day] = { openMin, closeMin };

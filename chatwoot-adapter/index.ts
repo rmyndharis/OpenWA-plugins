@@ -25,7 +25,7 @@ interface ChatwootFullConfig {
 }
 
 function readConfig(raw: Record<string, unknown>): ChatwootFullConfig {
-  const baseUrl = String(raw.baseUrl ?? '');
+  const baseUrl = String(raw.baseUrl ?? '').trim();
   const apiToken = String(raw.apiToken ?? '');
   const accountId = Number(raw.accountId);
   const inboxId = Number(raw.inboxId);
@@ -51,7 +51,7 @@ function readConfig(raw: Record<string, unknown>): ChatwootFullConfig {
   // A value copied out of the dashboard's address bar (…/app/accounts/2/settings/inboxes/8) parses and
   // passes every check above, then has /api/v1/accounts/<id> appended to it and 404s on every request —
   // with the plugin reporting healthy until the retries burn out. Reject it at Save time instead.
-  if (parsed.pathname !== '/' && parsed.pathname !== '') {
+  if ((parsed.pathname !== '/' && parsed.pathname !== '') || parsed.search || parsed.hash) {
     throw new Error('chatwoot-adapter: baseUrl must be the Chatwoot origin only (e.g. https://chat.example.com), with no path');
   }
   const rawLimit = Number(raw.backfillLimit);
@@ -152,7 +152,15 @@ export default class ChatwootAdapter implements IPlugin {
         const sessionId = h.sessionId;
         const msg = h.data as IncomingMessage;
         if (sessionId && msg) {
-          const cfg = readConfig(ctx.config);
+          let cfg: ChatwootFullConfig;
+          try {
+            cfg = readConfig(ctx.config);
+          } catch (e) {
+            this.sessionConfigs.delete(sessionId);
+            this.lastRelayError = e instanceof Error ? e.message : String(e);
+            ctx.logger.warn(`chatwoot-adapter: skipping message, config invalid: ${this.lastRelayError}`);
+            return { continue: true };
+          }
           this.sessionConfigs.set(sessionId, cfg); // a dispatch is the only place this slice resolves
           const deps = buildDeps(cfg, sessionId);
           // Fire-and-forget off the hook so a slow/failing Chatwoot API never blocks the WA pipeline. The
@@ -179,7 +187,15 @@ export default class ChatwootAdapter implements IPlugin {
         const sessionId = h.sessionId;
         const msg = h.data as IncomingMessage;
         if (sessionId && msg) {
-          const cfg = readConfig(ctx.config);
+          let cfg: ChatwootFullConfig;
+          try {
+            cfg = readConfig(ctx.config);
+          } catch (e) {
+            this.sessionConfigs.delete(sessionId);
+            this.lastRelayError = e instanceof Error ? e.message : String(e);
+            ctx.logger.warn(`chatwoot-adapter: skipping message, config invalid: ${this.lastRelayError}`);
+            return { continue: true };
+          }
           // Captured BEFORE the relayOwnMessages gate: the retry drain needs this session's slice even
           // for a session whose own-send mirror is switched off.
           this.sessionConfigs.set(sessionId, cfg);

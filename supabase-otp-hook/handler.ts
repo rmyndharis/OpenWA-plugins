@@ -56,10 +56,11 @@ export function readConfig(raw: Record<string, unknown>): SupabaseSmsConfig {
   // that silently stopped all deliveries. Fail here instead, where the operator is looking.
   const rawTemplate = raw.messageTemplate ?? '{appName} | Your verification code is {otp}';
   const messageTemplate = String(rawTemplate);
-  if (!messageTemplate.trim()) {
+  if (!messageTemplate.trim() || !messageTemplate.includes('{otp}')) {
     throw new Error('supabase-otp-hook: messageTemplate must not be empty (it needs at least {otp})');
   }
-  const fallbackSessionId = raw.fallbackSessionId ? String(raw.fallbackSessionId) : undefined;
+  const rawFallback = typeof raw.fallbackSessionId === 'string' ? raw.fallbackSessionId.trim() : '';
+  const fallbackSessionId = rawFallback && rawFallback !== '*' ? rawFallback : undefined;
   const debug = raw.debug === true || raw.debug === 'true';
   return { appName, messageTemplate, fallbackSessionId, debug };
 }

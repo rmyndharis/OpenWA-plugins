@@ -321,3 +321,47 @@ test('a late backlog inside an open flow is claimed without a reply', async () =
   assert.deepEqual(sent, ['halo'], 'only the greeting goes out');
   await plugin.onDisable();
 });
+
+test('shared locations and forwarded messages never reach the flow engine, and healthCheck reports live config', async () => {
+  const ChatFlow = (await import('./index.ts')).default;
+  const sent: string[] = [];
+  let handler!: (h: unknown) => Promise<{ continue: boolean }>;
+  let live: Record<string, unknown> = { greeting: 'halo', trigger: '', options: [{ key: '1', text: 'satu' }] };
+  const store = new Map<string, unknown>();
+  const plugin = new ChatFlow();
+  assert.equal((await plugin.healthCheck()).healthy, false);
+  await plugin.onEnable({
+    get config() { return live; },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    messages: {
+      sendText: async (_s: string, _c: string, t: string) => { sent.push(t); return { messageId: 'x', timestamp: 0 }; },
+      reply: async (_s: string, _c: string, _q: string, t: string) => { sent.push(t); return { messageId: 'x', timestamp: 0 }; },
+    },
+    storage: {
+      get: async (k: string) => store.get(k) ?? null,
+      set: async (k: string, v: unknown) => void store.set(k, v),
+      delete: async (k: string) => void store.delete(k),
+      list: async () => [...store.keys()],
+    },
+    registerHook: (_e: string, h: (x: unknown) => Promise<{ continue: boolean }>) => { handler = h; },
+  } as never);
+  assert.equal((await plugin.healthCheck()).healthy, true);
+
+  const loc = await handler({
+    source: 'Engine',
+    sessionId: 's1',
+    data: { id: 'm-loc', chatId: 'c@wa', body: '/9j/4AAQSkZJRgABAQAAAQABAAD', type: 'location', fromMe: false, isGroup: false },
+  });
+  const fwd = await handler({
+    source: 'Engine',
+    sessionId: 's1',
+    data: { id: 'm-fwd', chatId: 'c@wa', body: '1', type: 'text', isForwarded: true, fromMe: false, isGroup: false },
+  });
+  assert.deepEqual(loc, { continue: true });
+  assert.deepEqual(fwd, { continue: true });
+  assert.deepEqual(sent, []);
+
+  live = { greeting: '', options: [] };
+  assert.equal((await plugin.healthCheck()).healthy, false);
+  await plugin.onDisable();
+});

@@ -1,7 +1,7 @@
 // Vendored OpenWA plugin contract. There is no published @openwa SDK package; keep this in sync
 // with the OpenWA version you target. All imports of this module must be `import type`.
 //
-// Last aligned against OpenWA core v0.29.1 (tag e3a7272), verified field-by-field against
+// Last aligned against OpenWA core v0.30.0 (tag 452aa46), verified field-by-field against
 // src/core/plugins/plugin.interfaces.ts, src/core/hooks/{hook.interfaces,hook-results}.ts, plugin-net.ts,
 // sandbox/{protocol,worker-bootstrap,worker-capability,worker-hooks,worker-webhooks}.ts and
 // src/engine/interfaces/whatsapp-engine.interface.ts, with behavior the interfaces do not show read from
@@ -13,6 +13,14 @@
 // the HTTPS origin including its port. Since 0.25.0: IncomingMessage includes poll details and
 // ChatSummary includes lastMessageType. Hook names and capability signatures used by these plugins
 // remain compatible.
+// 0.29.1 -> 0.30.0:
+//   1. Baileys inbound media stream fix (#2034): `scripts/patch-baileys-media-stream.js` wraps Axios's
+//      response stream in `getHttpStream` so Baileys v7 decrypts inbound media instead of failing every
+//      download and falling back to `media.omitted: true`.
+//   2. Engine-internal additions (not on the sandbox capability router or plugin hooks):
+//      `AccountRestriction.kind` gained `'passkey_required'`, and `onReconnecting` /
+//      `session.reconnect_loop` gained `ReconnectContext` (`stage?: ConnectionCloseStage`,
+//      `reason?: string`).
 // 0.29.0 -> 0.29.1:
 //   1. IncomingMessage gained `isForwarded?: boolean` and `forwardingScore?: number` (#2029): set on
 //      `message:received` and `message:sent` by both engines and on `getChatHistory` by whatsapp-web.js
@@ -146,7 +154,7 @@
 // select, array/items, object/properties, min/max/pattern — see PluginConfigField) is plain manifest
 // JSON — the plugin still reads `ctx.config` as `Record<string, unknown>` and validates defensively.
 //
-// Host bounds a plugin cannot see from the types (all host-side, re-checked at v0.29.1):
+// Host bounds a plugin cannot see from the types (all host-side, re-checked at v0.30.0):
 //   30 s per lifecycle phase (onLoad/onEnable/onDisable/onUnload) and per capability call, except
 //   the send verbs (ctx.messages.sendText / ctx.messages.reply / ctx.conversations.send) at 120 s;
 //   5 s per hook dispatch (overrun → the host fails OPEN with {continue:true} and drops your result);

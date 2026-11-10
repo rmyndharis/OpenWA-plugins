@@ -6,6 +6,16 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.17] - 2026-11-10
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.30.0.
+
+### Fixed
+
+- Unlink the matched canonical mapping key during own-send 404 recovery for `@lid`-migrated chats, reject query strings and fragments in `baseUrl`, and guard per-session config resolution inside `message:received` and `message:sent` hooks.
+
 ## [0.9.16] - 2026-11-08
 
 ### Changed

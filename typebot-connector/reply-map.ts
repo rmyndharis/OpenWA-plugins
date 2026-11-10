@@ -4,7 +4,12 @@ import type { Awaiting, ReplyIntent } from './typebot-types.ts';
 // Map a WhatsApp reply to the argument for continueChat, given what the bot is waiting for.
 export function mapReply(awaiting: Awaiting, msg: IncomingMessage): ReplyIntent {
   const text = (msg.body ?? '').trim();
-  const card = msg.type === 'contact' || msg.type === 'poll' || msg.type === 'order' || msg.type === 'product';
+  const card =
+    msg.type === 'contact' ||
+    msg.type === 'poll' ||
+    msg.type === 'order' ||
+    msg.type === 'product' ||
+    msg.type === 'location';
   const audio = awaiting.kind === 'text' && awaiting.audioClipsEnabled && (msg.type === 'audio' || msg.type === 'voice');
 
   // File input, or a text input that accepts this media: prefer the media.
@@ -38,7 +43,7 @@ export function mapReply(awaiting: Awaiting, msg: IncomingMessage): ReplyIntent 
   // silently select a numbered choice. Prompt instead and leave the step where it is. Deliberately after
   // the file branch above, so sharing a card at a file step still gets that step's own wording.
   // An empty body without an accepted upload is no answer, but Typebot accepts empty text and advances.
-  if (card || (awaiting.kind === 'text' && !text)) {
+  if (card || !text) {
     return { kind: 'fallback', text: 'Please type your answer to continue.' };
   }
 

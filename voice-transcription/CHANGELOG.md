@@ -6,6 +6,16 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+## [1.3.7] - 2026-11-10
+
+### Fixed
+
+- Reject query strings and fragments in `sttBaseUrl`, and skip self-sent, status broadcast, newsletter, and broadcast voice notes before transcription.
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.30.0.
+
 ## [1.3.6] - 2026-11-08
 
 ### Changed

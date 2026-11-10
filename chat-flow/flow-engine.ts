@@ -125,7 +125,15 @@ export class FlowEngine {
         if (!expired(state)) return;
         const consumed = this.consumed(state, Date.now());
         if (Object.keys(consumed).length) {
-          await context.storage.set(k, { path: [], lastActive: state!.lastActive, completed: true, consumed });
+          const alreadyCompacted =
+            state!.completed === true &&
+            Array.isArray(state!.path) &&
+            state!.path.length === 0 &&
+            state!.misses === undefined &&
+            Object.keys(state!.consumed ?? {}).length === Object.keys(consumed).length;
+          if (!alreadyCompacted) {
+            await context.storage.set(k, { path: [], lastActive: state!.lastActive, completed: true, consumed });
+          }
         } else {
           await context.storage.delete(k);
           removed++;
@@ -210,7 +218,15 @@ export class FlowEngine {
         context.logger.debug('[FlowEngine] No active state and input does not match trigger. Ignoring.');
         if (stored) {
           if (Object.keys(consumed).length) {
-            await context.storage.set(stateKey, { path: [], lastActive: stored.lastActive, completed: true, consumed });
+            const alreadyCompacted =
+              stored.completed === true &&
+              Array.isArray(stored.path) &&
+              stored.path.length === 0 &&
+              stored.misses === undefined &&
+              Object.keys(stored.consumed ?? {}).length === Object.keys(consumed).length;
+            if (!alreadyCompacted) {
+              await context.storage.set(stateKey, { path: [], lastActive: stored.lastActive, completed: true, consumed });
+            }
           } else await context.storage.delete(stateKey);
         }
         return false;

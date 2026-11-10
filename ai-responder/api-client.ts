@@ -23,7 +23,7 @@ export async function fetchChatCompletion(
   config: ChatCompletionConfig,
   userMessage: string
 ): Promise<string> {
-  const url = config.apiBaseUrl.replace(/\/$/, '') + '/chat/completions';
+  const url = config.apiBaseUrl.replace(/\/+$/, '') + '/chat/completions';
   
   const messages: Array<{ role: string; content: string }> = [];
   if (config.systemPrompt && config.systemPrompt.trim()) {

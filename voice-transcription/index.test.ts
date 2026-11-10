@@ -244,6 +244,7 @@ test("healthCheck reports the states that were previously fail-open warn lines",
   for (const [label, config] of [
     ["sttBaseUrl is not a URL", { sttBaseUrl: "stt.example.com", deliveryWebhookUrl: "https://h.example.com" }],
     ["sttBaseUrl carries credentials", { sttBaseUrl: "https://u:p@stt.example.com", deliveryWebhookUrl: "https://h.example.com" }],
+    ["sttBaseUrl carries query string", { sttBaseUrl: "https://stt.example.com?x=1", deliveryWebhookUrl: "https://h.example.com" }],
     ["delivery webhook unusable", { sttBaseUrl: "https://stt.example.com", deliveryWebhookUrl: "ftp://h.example.com" }],
     ["no delivery configured", { sttBaseUrl: "https://stt.example.com" }],
   ] as [string, Record<string, unknown>][]) {

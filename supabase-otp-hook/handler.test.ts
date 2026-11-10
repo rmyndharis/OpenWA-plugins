@@ -114,6 +114,10 @@ test('an empty messageTemplate is refused at config time, not by a failed send',
     () => readConfig({ appName: 'Acme', messageTemplate: '   ' }),
     /messageTemplate must not be empty/,
   );
+  assert.throws(
+    () => readConfig({ appName: 'Acme', messageTemplate: '{appName} verification code' }),
+    /needs at least \{otp\}/,
+  );
   assert.doesNotThrow(() => readConfig({ appName: 'Acme' }));
 });
 
@@ -263,9 +267,11 @@ test('readConfig validates appName, applies defaults, and reads booleans/strings
   assert.equal(defaults.debug, false);
   assert.equal(defaults.fallbackSessionId, undefined);
 
-  const full = readConfig({ appName: 'Acme', debug: true, fallbackSessionId: 'f-sess' });
+  const full = readConfig({ appName: 'Acme', debug: true, fallbackSessionId: '  f-sess  ' });
   assert.equal(full.debug, true);
   assert.equal(full.fallbackSessionId, 'f-sess');
+  assert.equal(readConfig({ appName: 'Acme', fallbackSessionId: '   ' }).fallbackSessionId, undefined);
+  assert.equal(readConfig({ appName: 'Acme', fallbackSessionId: '*' }).fallbackSessionId, undefined);
   assert.equal(readConfig({ appName: 'Acme', debug: 'true' }).debug, true);
   assert.equal(readConfig({ appName: 'Acme', debug: false }).debug, false);
 });

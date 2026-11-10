@@ -108,7 +108,7 @@ export default class AfterHours implements IPlugin {
     // From host 0.26.0 a message delivered already deleted reaches the hook as an empty 'revoked'
     // placeholder: there is nothing left to answer. A caption-less image or sticker is empty too and does
     // still draw the away message, so this is keyed on the type, not on an empty body.
-    if (m.type === 'revoked') return false;
+    if (m.type === 'revoked' || m.type === 'call' || m.type === 'masked') return false;
 
     // Re-parse per event so a per-session config override (resolved by the host for this hook fire) is
     // honored — a snapshot cached at enable would ignore overrides set via the dashboard after enable.

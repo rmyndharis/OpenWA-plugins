@@ -8,6 +8,16 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.3.17] - 2026-11-10
+
+### Fixed
+
+- Exclude host capability-concurrency rejections from the LibreTranslate circuit breaker failure count.
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.30.0.
+
 ## [1.3.16] - 2026-11-08
 
 ### Changed

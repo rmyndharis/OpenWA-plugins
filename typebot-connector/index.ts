@@ -29,6 +29,21 @@ export function readConfig(raw: Record<string, unknown>): TypebotConfig {
   if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
     throw new Error('typebot-connector: apiHost must be an https URL without embedded credentials');
   }
+  if (parsed.search || parsed.hash) {
+    throw new Error('typebot-connector: apiHost must not contain a query string or fragment');
+  }
+  const mediaHostRaw = String(raw.mediaHost ?? '').trim();
+  if (mediaHostRaw) {
+    let parsedMedia: URL;
+    try {
+      parsedMedia = new URL(mediaHostRaw);
+    } catch {
+      throw new Error('typebot-connector: mediaHost must be a valid URL');
+    }
+    if (parsedMedia.protocol !== 'https:' || parsedMedia.username || parsedMedia.password) {
+      throw new Error('typebot-connector: mediaHost must be an https URL without embedded credentials');
+    }
+  }
   const timeout = Number(raw.sessionTimeoutMinutes);
   return {
     apiHost: apiHost.replace(/\/+$/, ''),
@@ -49,11 +64,13 @@ const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 const ORPHAN_IDLE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export default class TypebotConnector implements IPlugin {
+  private ctx: PluginContext | null = null;
   // Per WhatsApp session: the sweep itself is scoped to one session's rows, so a single global
   // throttle would let the first session to fire starve every other session's cleanup for an hour.
   private readonly lastSweepAt = new Map<string, number>();
 
   async onEnable(ctx: PluginContext): Promise<void> {
+    this.ctx = ctx;
     readConfig(ctx.config); // fail fast at enable time
     const lock = new KeyedAsyncLock();
     const store = new SessionStore(ctx.storage);
@@ -63,7 +80,15 @@ export default class TypebotConnector implements IPlugin {
       const msg = h.data as IncomingMessage | undefined;
       if (sessionId && msg) {
         // Re-read config per event so a live edit is picked up; build the client with the resolved config.
-        const cfg = readConfig(ctx.config);
+        let cfg: TypebotConfig;
+        try {
+          cfg = readConfig(ctx.config);
+        } catch (e) {
+          ctx.logger.warn(
+            `typebot-connector: skipping message, config invalid: ${e instanceof Error ? e.message : String(e)}`,
+          );
+          return { continue: true };
+        }
         const client = new TypebotClient(ctx.net.fetch.bind(ctx.net), cfg);
         // Sweep rows left by contacts who walked away mid-flow. A finished flow clears its own row, so
         // these are the only ones that would otherwise accumulate for the life of the install — and the
@@ -104,5 +129,19 @@ export default class TypebotConnector implements IPlugin {
     }, HOOK_PRIORITY);
 
     ctx.logger.log('typebot-connector enabled');
+  }
+
+  async onConfigChange(ctx: PluginContext): Promise<void> {
+    readConfig(ctx.config);
+  }
+
+  async healthCheck(): Promise<{ healthy: boolean; message?: string }> {
+    if (!this.ctx) return { healthy: false, message: 'typebot-connector: not enabled' };
+    try {
+      const cfg = readConfig(this.ctx.config);
+      return { healthy: true, message: `typebot-connector: ${cfg.publicId} (${cfg.apiHost})` };
+    } catch (e) {
+      return { healthy: false, message: e instanceof Error ? e.message : String(e) };
+    }
   }
 }

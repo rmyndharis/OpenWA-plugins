@@ -7,6 +7,16 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.16] - 2026-11-10
+
+### Fixed
+
+- Require `messageTemplate` to include the `{otp}` placeholder in `readConfig`, and trim `fallbackSessionId` (treating blank or wildcard `*` values as unset).
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.30.0.
+
 ## [0.3.15] - 2026-11-08
 
 ### Changed

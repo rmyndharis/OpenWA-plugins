@@ -167,3 +167,19 @@ test('an attachment that did not come through at a file step does not invite typ
   const text = mapReply({ kind: 'text', blockId: 'b', attachmentsEnabled: true }, omitted);
   assert.match(text.kind === 'fallback' ? text.text : '', /or type to continue/);
 });
+
+test('shared locations and empty-body messages at choice or rating steps prompt instead of advancing', () => {
+  const rating: Awaiting = { kind: 'rating', blockId: 'b', max: 5 };
+  assert.deepEqual(
+    mapReply(choice, msg({ type: 'location', body: '/9j/4AAQSkZJRgABAQAAAQABAAD' })),
+    { kind: 'fallback', text: 'Please type your answer to continue.' },
+  );
+  assert.deepEqual(
+    mapReply(choice, msg({ type: 'sticker', body: '' })),
+    { kind: 'fallback', text: 'Please type your answer to continue.' },
+  );
+  assert.deepEqual(
+    mapReply(rating, msg({ type: 'image', body: '   ' })),
+    { kind: 'fallback', text: 'Please type your answer to continue.' },
+  );
+});
