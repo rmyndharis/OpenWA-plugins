@@ -71,6 +71,8 @@ function quantifierAt(
 }
 
 const overlaps = (a: string, b: string): boolean => a === 'ANY' || b === 'ANY' || a === b;
+const isZeroWidthAtom = (key: string): boolean =>
+  key === '^' || key === '$' || key === '\\b' || key === '\\B';
 
 /** Turn an atom key back into a regex source safe to compile on its own. */
 function atomSource(key: string): string {
@@ -292,7 +294,12 @@ export function isSafeRegexPattern(p: string): boolean {
       }
       // A group breaks flat adjacency only if it MUST consume something. `(x?)` can match empty, so
       // `.*(x?).*` is `.*.*` in disguise; resume the parked run rather than pretending it ended.
-      const nullable = frame.hasVariable || q.unbounded || (q.present && q.min === 0);
+      const nullable =
+        frame.assertion ||
+        frame.hasVariable ||
+        q.unbounded ||
+        (q.present && q.min === 0) ||
+        Boolean(paths?.some(path => path.length === 0));
       if (nullable) { prevUnbounded = frame.savedPrev; adjacentRun = frame.savedRun; }
       else { prevUnbounded = null; adjacentRun = 0; }
       i += 1 + q.len;
@@ -301,22 +308,31 @@ export function isSafeRegexPattern(p: string): boolean {
 
     const atom = atomAt(p, i);
     const q = quantifierAt(p, i + atom.len);
+    const zeroWidth = isZeroWidthAtom(atom.key);
     if (stack.length) {
       const frame = stack[stack.length - 1];
-      const paths = !q.present || q.count === 1 && q.min === 1 ? [[atom.key]] : q.count === 1 ? [[], [atom.key]] : null;
+      const paths = zeroWidth
+        ? [[]]
+        : !q.present || (q.count === 1 && q.min === 1)
+          ? [[atom.key]]
+          : q.count === 1
+            ? [[], [atom.key]]
+            : null;
       frame.paths[frame.paths.length - 1] = concatenatePaths(frame.paths[frame.paths.length - 1], paths);
       const br = stack[stack.length - 1].branches;
       const cur = br[br.length - 1];
-      if (cur) {
+      if (cur && !zeroWidth) {
         if (cur.first === null) cur.first = atom.key;
         // The branch stays a literal only while every atom is a bare, unquantified single character.
         if (cur.literal !== null) {
           cur.literal = !q.present && atom.len === 1 && atom.key !== 'ANY' ? cur.literal + atom.key : null;
         }
+      } else if (cur && zeroWidth) {
+        cur.literal = null;
       }
     }
-    if (stack.length && q.variable) stack[stack.length - 1].hasVariable = true;
-    if (q.unbounded) {
+    if (stack.length && q.variable && !zeroWidth) stack[stack.length - 1].hasVariable = true;
+    if (q.unbounded && !zeroWidth) {
       if (stack.length) stack[stack.length - 1].hasUnbounded = true;
       if (prevUnbounded !== null && overlaps(prevUnbounded, atom.key)) {
         if (++adjacentRun >= 3) return false; // (2) 3+ adjacent overlapping unbounded quantifiers
@@ -324,13 +340,16 @@ export function isSafeRegexPattern(p: string): boolean {
         adjacentRun = 1;
       }
       prevUnbounded = atom.key;
-    } else if (!q.present || q.min >= 1) {
+    } else if (!zeroWidth && (!q.present || q.min >= 1)) {
       prevUnbounded = null; adjacentRun = 0; // a mandatory (non-skippable) atom breaks adjacency
     }
     i += atom.len + q.len;
   }
   return true;
 }
+
+const RULES_CACHE_MAX = 32;
+const rulesCache = new Map<string, { rules: CompiledRule[]; skipped: string[] }>();
 
 /**
  * Parse + validate the rules JSON. Throws on structurally invalid input (not JSON, not an array, a rule
@@ -339,6 +358,12 @@ export function isSafeRegexPattern(p: string): boolean {
  * not kill the whole set.
  */
 export function parseRules(json: string): { rules: CompiledRule[]; skipped: string[] } {
+  const cached = rulesCache.get(json);
+  if (cached) {
+    rulesCache.delete(json);
+    rulesCache.set(json, cached);
+    return { rules: [...cached.rules], skipped: [...cached.skipped] };
+  }
   let parsed: unknown = JSON.parse(json);
   // Convenience: accept a single rule object and wrap it, so pasting one { mode, pattern, reply }
   // (a common mistake) works instead of erroring with "rules must be a JSON array". A JSON primitive
@@ -376,7 +401,12 @@ export function parseRules(json: string): { rules: CompiledRule[]; skipped: stri
   });
 
   if (rules.length === 0) throw new Error('rules has no usable entries');
-  return { rules, skipped };
+  if (rulesCache.size >= RULES_CACHE_MAX) {
+    const oldest = rulesCache.keys().next().value;
+    if (oldest !== undefined) rulesCache.delete(oldest);
+  }
+  rulesCache.set(json, { rules, skipped });
+  return { rules: [...rules], skipped: [...skipped] };
 }
 
 /** First rule that matches `text` (contains/exact are case-insensitive; regex uses its compiled flags). */

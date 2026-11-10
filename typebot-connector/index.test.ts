@@ -13,6 +13,12 @@ test('readConfig: defaults, normalization, and fail-fast', () => {
   assert.throws(() => readConfig({ publicId: 'bot' }), /apiHost is required/);
   assert.throws(() => readConfig({ publicId: 'b', apiHost: 'http://x' }), /https/);
   assert.throws(() => readConfig({ publicId: 'b', apiHost: 'https://u:p@x' }), /credentials/);
+  assert.throws(() => readConfig({ publicId: 'b', apiHost: 'https://typebot.io?foo=1' }), /query string or fragment/);
+  assert.throws(() => readConfig({ publicId: 'b', apiHost: 'https://typebot.io#frag' }), /query string or fragment/);
+  assert.doesNotThrow(() => readConfig({ publicId: 'b', apiHost: 'https://typebot.io', mediaHost: 'https://s3.example.com' }));
+  assert.throws(() => readConfig({ publicId: 'b', apiHost: 'https://typebot.io', mediaHost: 'not-a-url' }), /mediaHost must be a valid URL/);
+  assert.throws(() => readConfig({ publicId: 'b', apiHost: 'https://typebot.io', mediaHost: 'http://s3.example.com' }), /mediaHost must be an https URL/);
+  assert.throws(() => readConfig({ publicId: 'b', apiHost: 'https://typebot.io', mediaHost: 'https://u:p@s3.example.com' }), /mediaHost must be an https URL/);
 });
 
 test('onEnable registers a message:received hook that returns {continue:true}', async () => {
@@ -157,4 +163,44 @@ test('a replayed backlog does not trigger the idle sweep', async () => {
   assert.equal(lists, 0, 'a message written an hour ago does not sweep');
   await fire(Math.floor(Date.now() / 1000));
   assert.ok(lists > 0, 'the next live message does');
+});
+
+test('an invalid per-session config logs a warning and passes the message on, and healthCheck tracks live config', async () => {
+  let handler!: HookHandler;
+  let live: Record<string, unknown> = { publicId: 'bot', apiHost: 'https://typebot.io' };
+  const warnings: string[] = [];
+  const plugin = new Plugin();
+  assert.equal((await plugin.healthCheck()).healthy, false);
+  await plugin.onEnable({
+    get config() { return live; },
+    logger: { log() {}, debug() {}, warn: (m: string) => warnings.push(m), error() {} },
+    storage: { get: async () => null, set: async () => {}, delete: async () => {}, list: async () => [] },
+    net: { fetch: async () => ({ ok: true, status: 200, headers: {}, body: '{}' }) },
+    conversations: { send: async () => {} },
+    registerHook: (_e: string, h: HookHandler) => { handler = h; },
+  } as unknown as PluginContext);
+  assert.equal((await plugin.healthCheck()).healthy, true);
+
+  for (const type of ['call', 'masked']) {
+    const res = await handler({
+      event: 'message:received',
+      source: 'Engine',
+      sessionId: 's1',
+      timestamp: new Date(),
+      data: { id: `m-${type}`, from: 'x@c.us', to: 'y', chatId: 'c@c.us', body: '', type, timestamp: 0, fromMe: false, isGroup: false },
+    });
+    assert.deepEqual(res, { continue: true });
+  }
+
+  live = { publicId: 'bot', apiHost: 'http://insecure.example.com' };
+  assert.equal((await plugin.healthCheck()).healthy, false);
+  const badRes = await handler({
+    event: 'message:received',
+    source: 'Engine',
+    sessionId: 's1',
+    timestamp: new Date(),
+    data: { id: 'm-bad', from: 'x@c.us', to: 'y', chatId: 'c@c.us', body: 'hi', type: 'chat', timestamp: 0, fromMe: false, isGroup: false },
+  });
+  assert.deepEqual(badRes, { continue: true });
+  assert.ok(warnings.some(w => /config invalid/.test(w)));
 });

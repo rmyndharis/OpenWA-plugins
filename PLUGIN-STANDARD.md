@@ -5,7 +5,7 @@ management/automation stays easy. Verified against OpenWA's plugin runtime (sand
 the same baseline as [`types/openwa.d.ts`](./types/openwa.d.ts) — re-check both together, since this
 document describes host behaviour that has moved repeatedly (per-session config in 0.7, boot re-enable
 in 0.10.5, the storage quota and `message:deleted` in 0.11.0, the `storage:use` gate in 0.17.0, hook
-result checks and sandboxed hook ordering in 0.23.6). The current baseline is OpenWA v0.29.1, including host-version floor enforcement and HTTPS origin grants for configured outbound endpoints (both 0.24.0), the secret rule for host overrides, `null` secret removal and the capped boot restore (0.26.0), outbound-only `message:ack`, edit-triggered `message:persisted`, query-aware empty-body ingress dedup and config push after `onEnable` (0.27.0), the 184 UTF-8 byte storage key limit, queued ingress dispatch timeout budget, `dedupBodyMismatchAsNew`, query-borne ingress `verified: false`, Baileys group `message:ack` progression and whatsapp-web.js system notice filtering (0.28.0/0.29.0), and `isForwarded` / `forwardingScore` on `IncomingMessage` (0.29.1).
+result checks and sandboxed hook ordering in 0.23.6). The current baseline is OpenWA v0.30.0, including host-version floor enforcement and HTTPS origin grants for configured outbound endpoints (both 0.24.0), the secret rule for host overrides, `null` secret removal and the capped boot restore (0.26.0), outbound-only `message:ack`, edit-triggered `message:persisted`, query-aware empty-body ingress dedup and config push after `onEnable` (0.27.0), the 184 UTF-8 byte storage key limit, queued ingress dispatch timeout budget, `dedupBodyMismatchAsNew`, query-borne ingress `verified: false`, Baileys group `message:ack` progression and whatsapp-web.js system notice filtering (0.28.0/0.29.0), `isForwarded` / `forwardingScore` on `IncomingMessage` (0.29.1), and the Baileys inbound media stream fix (0.30.0).
 
 ## Principles
 
@@ -69,7 +69,7 @@ OpenWA-plugins/
   "keywords": ["…"],
   "status": "stable",           // "stable" | "beta" | "development"
   "minOpenWAVersion": "0.7.0",  // enforced at install and boot load since OpenWA v0.24.0
-  "testedOpenWAVersion": "0.29.1" // newest host checked; describe the verification scope in the README
+  "testedOpenWAVersion": "0.30.0" // newest host checked; describe the verification scope in the README
 }
 ```
 
@@ -84,7 +84,7 @@ plugin:
 `catalog.mjs` only *warns* about i18n — a missing block, or a missing locale — but the test suite does
 not: `npm test` fails when a `stable` plugin is missing any supported locale, and when any plugin ships
 a locale that translates its name and description without translating every `configSchema` field. Treat
-i18n as gated; the warning is where you notice a gap, not where it is stopped. The shared locale list in `scripts/locales.mjs` matches OpenWA v0.29.1, including `id`; stable plugins must cover every non-English locale.
+i18n as gated; the warning is where you notice a gap, not where it is stopped. The shared locale list in `scripts/locales.mjs` matches OpenWA v0.30.0, including `id`; stable plugins must cover every non-English locale.
 
 ### `configSchema` field vocabulary (v0.7)
 

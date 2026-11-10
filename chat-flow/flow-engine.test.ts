@@ -468,3 +468,21 @@ test('state keys stay within OpenWA 0.28.0 184-byte storage key limit for 128-ch
   assert.equal(replies[1].text, 'hosting https://abc.com');
   assert.equal(storage.size, 1);
 });
+
+test('sweepExpired and non-trigger messages do not rewrite an already-compacted completed state', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1_800_000_000_000 });
+  const { ctx, storage } = makeCtx();
+  await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'hi', 'm1');
+  await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', '1', 'm2');
+  t.mock.timers.tick(20 * 60_000);
+  let writes = 0;
+  const baseSet = ctx.storage.set;
+  ctx.storage.set = async (k: string, v: unknown) => {
+    writes++;
+    return baseSet(k, v);
+  };
+  await FlowEngine.sweepExpired(ctx);
+  await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'not-trigger', 'm3');
+  assert.equal(writes, 0, 'already-compacted state with unexpired consumed ids should not be rewritten');
+  assert.equal(storage.has(key), true);
+});

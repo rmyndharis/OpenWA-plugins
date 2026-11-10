@@ -332,3 +332,37 @@ test('an own-send rebuild creates the contact WITH the recipient phone derived f
   await handleSent(d, 'sess', 'Engine', own);
   assert.deepEqual(createArgs, [['621@c.us', '621@c.us', '+621']]);
 });
+
+test('a 404 on a migrated (@lid) own-send unlinks the canonical @c.us mapping and rebuilds cleanly', async () => {
+  const unlinksChat: string[] = [];
+  const posts: number[] = [];
+  const links = new Map<string, unknown>([
+    ['sess:628@c.us', { conversationId: 55, contactId: 9, sourceId: 'oldSrc', name: 'Budi' }],
+  ]);
+  const { deps: d } = deps({
+    engine: { canonicalChatId: async (_s: string, c: string) => (c === '628@lid' ? '628@c.us' : c) },
+    store: {
+      getByChat: async (_s: string, c: string) => links.get(`sess:${c}`) ?? null,
+      link: async (_s: string, c: string, _i: string, l: unknown) => void links.set(`sess:${c}`, l),
+      unlinkByChatId: async (_s: string, c: string) => { unlinksChat.push(c); links.delete(`sess:${c}`); },
+      unlinkByConversationId: async () => {},
+    },
+    client: {
+      postText: async (id: number) => {
+        posts.push(id);
+        if (id === 55) {
+          const e = new Error('Chatwoot POST -> 404') as Error & { status?: number };
+          e.status = 404;
+          throw e;
+        }
+        return { id: 1 };
+      },
+      searchContact: async () => ({ id: 9, sourceId: 'newSrc' }),
+      findOpenConversation: async () => null,
+      createConversation: async () => 88,
+    },
+  });
+  await handleSent(d, 'sess', 'Engine', { ...own, id: 'o-lid-404', chatId: '628@lid' });
+  assert.ok(unlinksChat.includes('628@c.us'), 'must unlink the canonical key where the stale mapping lived');
+  assert.deepEqual(posts, [55, 88], 'rebuilt conversation 88 is used instead of reusing stale 55');
+});

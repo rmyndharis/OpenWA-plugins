@@ -76,6 +76,19 @@ test('a success resets the consecutive-failure counter', async () => {
   assert.equal(c.isHealthy(), true);
 });
 
+test('host concurrency rejections do not increment the circuit breaker counter', async () => {
+  const rejectConcurrent = async () => {
+    throw new Error('Plugin group-translate has too many concurrent capability calls');
+  };
+  const ok = async () => res({ body: { translatedText: 'hola' } });
+  const { net } = fakeNet([rejectConcurrent, rejectConcurrent, ok]);
+  const c = new LibreTranslateClient({ url: 'http://lt:7001', timeoutMs: 4000, net, failureThreshold: 2 });
+  await assert.rejects(c.translate('a', 'en', 'es'), /too many concurrent/i);
+  await assert.rejects(c.translate('b', 'en', 'es'), /too many concurrent/i);
+  assert.equal(c.isHealthy(), true);
+  assert.equal(await c.translate('c', 'en', 'es'), 'hola');
+});
+
 test('a host fetch refusal is rethrown without the URL credentials it quotes', async () => {
   // The host names the full request URL when it refuses a fetch, and a credentialed
   // `libretranslateUrl` is dropped from the config-derived allowlist, so that refusal fires on EVERY

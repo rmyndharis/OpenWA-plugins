@@ -288,13 +288,37 @@
       var textIn = nodeDiv.querySelector('.node-text');
       var childrenEl = nodeDiv.querySelector('.children');
       var key = keyIn ? keyIn.value.trim() : '';
-      if (!key) continue; // drop nodes with empty key
-      var node = { key: key, text: textIn ? textIn.value : '' };
+      var text = textIn ? textIn.value : '';
       var childNodes = childrenEl ? assembleNodes(childrenEl) : [];
+      if (!key && !text && !childNodes.length) continue; // drop completely blank rows
+      var node = { key: key, text: text };
       if (childNodes.length) node.options = childNodes;
       result.push(node);
     }
     return result;
+  }
+
+  function validateNodes(nodes) {
+    var seen = Object.create(null);
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (!n.key) return 'Each menu option needs a non-empty key.';
+      if (n.key === '__proto__') return 'Option key "__proto__" is not allowed.';
+      if (!n.text) return 'Option "' + n.key + '" needs reply text.';
+      if (seen[n.key]) return 'Duplicate option key "' + n.key + '".';
+      seen[n.key] = true;
+      if (n.options) {
+        var childErr = validateNodes(n.options);
+        if (childErr) return childErr;
+      }
+    }
+    return null;
+  }
+
+  function validateConfig(cfg) {
+    if (!cfg.greeting) return 'Greeting is required.';
+    if (!cfg.options || !cfg.options.length) return 'At least one menu option is required.';
+    return validateNodes(cfg.options);
   }
 
   function assembleConfig() {
@@ -369,9 +393,14 @@
   });
 
   saveBtn.addEventListener('click', function() {
-    saveBtn.disabled = true;
     hideFeedback();
     var cfg = assembleConfig();
+    var err = validateConfig(cfg);
+    if (err) {
+      showFeedback(err, false);
+      return;
+    }
+    saveBtn.disabled = true;
     parent.postMessage({ type: 'config:save', config: cfg }, '*');
   });
 

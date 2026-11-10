@@ -87,7 +87,7 @@ function readStringArray(
 // loopback over http, which is a first-class supported install, and a plugin cannot see its own
 // effective allowlist. The value itself is never rewritten and never logged: `deliveryWebhookUrl` is one
 // an operator may have put a token in.
-function backendUrlProblem(url: string): string | null {
+function backendUrlProblem(url: string, allowQuery = true): string | null {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -100,6 +100,9 @@ function backendUrlProblem(url: string): string | null {
   // A credentialed value is dropped from the config-derived allowlist outright, so a non-loopback host
   // named this way is refused on every call.
   if (parsed.username || parsed.password) return "carries embedded credentials";
+  if (!allowQuery && (parsed.search || parsed.hash)) {
+    return "must not include a query string or fragment";
+  }
   return null;
 }
 
@@ -150,7 +153,7 @@ export class VoiceTranscriptionPlugin implements IPlugin {
         { action: "transcription_no_backend" },
       );
     } else {
-      const problem = backendUrlProblem(readString(context.config, "sttBaseUrl", ""));
+      const problem = backendUrlProblem(readString(context.config, "sttBaseUrl", ""), false);
       if (problem) {
         context.logger.warn(
           `voice-transcription: sttBaseUrl ${problem}; every transcription will be refused`,
@@ -221,7 +224,7 @@ export class VoiceTranscriptionPlugin implements IPlugin {
     if (!stt) {
       return Promise.resolve({ healthy: false, message: "voice-transcription: sttBaseUrl is not set" });
     }
-    const sttProblem = backendUrlProblem(stt);
+    const sttProblem = backendUrlProblem(stt, false);
     if (sttProblem) {
       return Promise.resolve({ healthy: false, message: `voice-transcription: sttBaseUrl ${sttProblem}` });
     }

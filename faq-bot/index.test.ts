@@ -188,6 +188,10 @@ test('allowFallback enforces the per-chat cooldown window', () => {
 test('parseConfig falls back to 600 when fallbackCooldownSec is not a finite number', () => {
   const rules = JSON.stringify([{ mode: 'contains', pattern: 'hi', reply: 'hello' }]);
   assert.equal(parseConfig({ rules, fallbackCooldownSec: 'abc' }).config.fallbackCooldownSec, 600);
+  assert.equal(parseConfig({ rules, fallbackCooldownSec: '' }).config.fallbackCooldownSec, 600);
+  assert.equal(parseConfig({ rules, fallbackCooldownSec: '   ' }).config.fallbackCooldownSec, 600);
+  assert.equal(parseConfig({ rules, fallbackCooldownSec: 0 }).config.fallbackCooldownSec, 0);
+  assert.equal(parseConfig({ rules, fallbackCooldownSec: '0' }).config.fallbackCooldownSec, 0);
 });
 
 test('allowFallback caps the map at 5000 entries, dropping the oldest', () => {
@@ -404,4 +408,41 @@ test('recent, future-skewed and unusable send times are all answered', async () 
     const { sent } = await fireAt({ rules: priceRule }, [{ id: 'm1', body: 'berapa harga?', timestamp }]);
     assert.deepEqual(sent, ['Harga mulai 50rb'], `timestamp ${String(timestamp)} must be answered`);
   }
+});
+
+test('shared locations and forwarded messages are never answered or claimed, and healthCheck tracks live config', async () => {
+  const replies: string[] = [];
+  const cfg = {
+    rules: [{ mode: 'contains', pattern: 'harga', reply: 'Harga mulai 50rb' }],
+    fallbackReply: 'Maaf',
+  };
+  const asLocation = await runHook(cfg, '/9j/4AAQSkZJRgABAQAAAQABAAD', t => replies.push(t), 'location');
+  assert.equal(asLocation.continue, true);
+  assert.equal(replies.length, 0);
+
+  let live: Record<string, unknown> = { rules: priceRule };
+  let handler!: (hook: unknown) => Promise<{ continue: boolean }>;
+  const { default: FaqBot } = await import('./index.ts');
+  const plugin = new FaqBot();
+  assert.equal((await plugin.healthCheck()).healthy, false);
+  const ctx = {
+    get config() { return live; },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    registerHook: (_e: string, h: (x: unknown) => Promise<{ continue: boolean }>) => { handler = h; },
+    messages: { reply: async (_s: string, _c: string, _q: string, text: string) => { replies.push(text); return { messageId: 'x', timestamp: 0 }; } },
+  };
+  await plugin.onEnable(ctx as never);
+  assert.equal((await plugin.healthCheck()).healthy, true);
+
+  const fwd = await handler({
+    source: 'Engine',
+    sessionId: 's1',
+    timestamp: new Date(),
+    data: { id: 'm-fwd', chatId: 'c@x', body: 'berapa harga?', type: 'text', isForwarded: true, fromMe: false, isGroup: false },
+  });
+  assert.equal(fwd.continue, true);
+  assert.deepEqual(replies, []);
+
+  live = { rules: '{ not json' };
+  assert.equal((await plugin.healthCheck()).healthy, false);
 });

@@ -50,9 +50,11 @@ const SWEEP_INTERVAL_MS = 30 * 60 * 1000;
 const HOOK_PRIORITY = 75;
 
 export default class ChatFlow implements IPlugin {
+  private ctx: PluginContext | null = null;
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
 
   async onEnable(ctx: PluginContext): Promise<void> {
+    this.ctx = ctx;
     parseConfig(ctx.config); // fail-fast: surface invalid config at enable, not per-message
     ctx.registerHook(
       'message:received',
@@ -71,6 +73,19 @@ export default class ChatFlow implements IPlugin {
   // the resolved per-session slice — read that (re-parsing _newConfig would lose the per-session merge).
   async onConfigChange(ctx: PluginContext, _newConfig: Record<string, unknown>): Promise<void> {
     parseConfig(ctx.config); // re-validate on change (fail-fast feedback in the dashboard)
+  }
+
+  async healthCheck(): Promise<{ healthy: boolean; message?: string }> {
+    if (!this.ctx) return { healthy: false, message: 'chat-flow: not enabled' };
+    try {
+      const cfg = parseConfig(this.ctx.config);
+      return {
+        healthy: true,
+        message: `chat-flow: ${Object.keys(cfg.flow.options ?? {}).length} root option(s)`,
+      };
+    } catch (e) {
+      return { healthy: false, message: e instanceof Error ? e.message : String(e) };
+    }
   }
 
   async onDisable(): Promise<void> {
@@ -103,7 +118,14 @@ export default class ChatFlow implements IPlugin {
     // so body alone no longer means "a human typed this". 'unknown' is deliberately admitted: business
     // button and list replies land there on whatsapp-web.js (Baileys sends them as 'text' from 0.23.6),
     // and a tapped menu button is exactly what this plugin wants.
-    if (m.type === 'contact' || m.type === 'poll' || m.type === 'order' || m.type === 'product') {
+    if (m.isForwarded) return { continue: true };
+    if (
+      m.type === 'contact' ||
+      m.type === 'poll' ||
+      m.type === 'order' ||
+      m.type === 'product' ||
+      m.type === 'location'
+    ) {
       return { continue: true };
     }
 

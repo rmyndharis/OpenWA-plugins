@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `typebot-connector` |
-| **Version** | 0.3.8 |
-| **Released** | 2026-11-08 |
+| **Version** | 0.3.9 |
+| **Released** | 2026-11-10 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.2 (tested 0.29.1) |
+| **Requires OpenWA** | ≥ 0.8.2 (tested 0.30.0) |
 | **Keywords** | typebot, chatbot, flow, bot, no-code, two-way, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/typebot-connector](https://github.com/rmyndharis/OpenWA-plugins/tree/main/typebot-connector) |
 <!-- END DETAILS -->
@@ -109,7 +109,7 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 
 ## Compatibility
 
-Checked against the OpenWA v0.29.1 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
+Checked against the OpenWA v0.30.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
 
 - Targets OpenWA **≥ 0.8.2** — uses the live Typebot Chat API over `ctx.net.fetch`
   (`allowConfigHosts` resolves `apiHost`/`mediaHost` from config) and `ctx.conversations.send` for

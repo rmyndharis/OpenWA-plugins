@@ -8,6 +8,17 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.1.18] - 2026-11-10
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.30.0.
+- Expose live configuration status through `healthCheck()` and validate menu fields in the config editor before saving.
+
+### Fixed
+
+- Ignore shared location messages and forwarded messages, and skip redundant storage writes when sweeping or reading already-completed flow states.
+
 ## [1.1.17] - 2026-11-08
 
 ### Changed

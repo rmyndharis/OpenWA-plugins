@@ -85,6 +85,7 @@ export async function handleMessage(deps: HandleDeps, sessionId: string, msg: In
 }
 
 async function handleLocked(deps: HandleDeps, sessionId: string, msg: IncomingMessage): Promise<void> {
+  if (msg.isForwarded || msg.type === 'location') return;
   const hit = matchAction(deps.cfg.actions, msg.body);
   if (!hit) return; // no trigger matched → silent
 
@@ -235,7 +236,14 @@ export default class HttpActionPlugin implements IPlugin {
       // them as 'text' from 0.23.6), and that is a legitimate way to invoke an action. A Baileys
       // whole-catalog share is 'unknown' too, with the catalog title as the body, and cannot be told
       // apart from a button reply by type.
-      if (msg.type === 'contact' || msg.type === 'poll' || msg.type === 'order' || msg.type === 'product') {
+      if (msg.isForwarded) return { continue: true };
+      if (
+        msg.type === 'contact' ||
+        msg.type === 'poll' ||
+        msg.type === 'order' ||
+        msg.type === 'product' ||
+        msg.type === 'location'
+      ) {
         return { continue: true };
       }
 
@@ -263,6 +271,7 @@ export default class HttpActionPlugin implements IPlugin {
       // handleMessage resolves the trigger with this same call (:75), so the claim and the reply can
       // never disagree about which messages belong to this plugin.
       const mine = matchAction(liveCfg.actions, msg.body) !== null;
+      if (!mine) return { continue: true };
 
       // Off-dispatch (§1.2 #2): return synchronously and float handleMessage, so a slow or blocked
       // upstream never stalls the WA hook.

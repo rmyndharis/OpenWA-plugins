@@ -6,6 +6,17 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-11-10
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.30.0.
+- Validate `mediaHost` and reject query strings or fragments in `apiHost` in `readConfig`, add `onConfigChange` and `healthCheck()`, and guard per-session config resolution on inbound events.
+
+### Fixed
+
+- Reject shared locations and empty-body messages at `choice` and `rating` steps instead of submitting empty answers, and skip `call` and `masked` message placeholders.
+
 ## [0.3.8] - 2026-11-08
 
 ### Changed

@@ -42,8 +42,9 @@ export async function handleSent(
       // the helpdesk is visible and harmless; a missing customer message is neither.
       const identifiable = Boolean(msg.id);
       if (identifiable && (await deps.store.hasSeen('wa', msg.id, sessionId))) return;
-      let conversationId = await findMappedConversation(deps, sessionId, msg, key);
-      if (conversationId === null) return; // unmapped chat — drop, never create outside a 404 recovery (no split)
+      const mapped = await findMappedConversation(deps, sessionId, msg, key);
+      if (mapped === null) return; // unmapped chat — drop, never create outside a 404 recovery (no split)
+      let conversationId = mapped.conversationId;
       if (identifiable) await deps.store.markSeen('wa', msg.id, sessionId);
       else deps.log('own send has no engine message id; relaying it without de-duplication');
       try {
@@ -60,12 +61,15 @@ export async function handleSent(
         if ((err as { status?: number } | null)?.status !== 404) throw err;
         const originalErr = err;
         try {
-          // Unlink by the RAW chatId (msg.chatId), not the canonical key. findMappedConversation checks
-          // msg.chatId first, so a stale row under the raw key would shadow the fresh one we're about
-          // to create. ensureConversation also links under msg.chatId, matching the original key.
-          await deps.store.unlinkByChatId(sessionId, msg.chatId);
+          // Unlink the key the mapping actually lived under (`mapped.key`, which is canonical `@c.us` for a
+          // pre-migration contact or raw `msg.chatId` for a post-migration one) and rebuild under that same
+          // key so ensureConversation reuses the existing Chatwoot contact instead of splitting a duplicate.
+          await deps.store.unlinkByChatId(sessionId, mapped.key);
+          if (mapped.key !== msg.chatId) {
+            await deps.store.unlinkByChatId(sessionId, msg.chatId);
+          }
           await deps.store.unlinkByConversationId(sessionId, conversationId);
-          conversationId = await ensureConversation(deps, sessionId, msg.chatId, {
+          conversationId = await ensureConversation(deps, sessionId, mapped.key, {
             name: msg.contact?.pushName || msg.contact?.name || (msg.isGroup ? `Group ${msg.chatId}` : msg.chatId),
             // `key` is the canonical id resolved at the top of this handler. resolvePhone is called
             // WITHOUT the message on purpose: on an own send `senderPhone` would be OUR number, not the
@@ -94,9 +98,12 @@ async function findMappedConversation(
   sessionId: string,
   msg: IncomingMessage,
   canonicalChatId: string,
-): Promise<number | null> {
-  const existing =
-    (await deps.store.getByChat(sessionId, msg.chatId)) ??
-    (canonicalChatId !== msg.chatId ? await deps.store.getByChat(sessionId, canonicalChatId) : null);
-  return existing ? existing.conversationId : null;
+): Promise<{ conversationId: number; key: string } | null> {
+  const raw = await deps.store.getByChat(sessionId, msg.chatId);
+  if (raw) return { conversationId: raw.conversationId, key: msg.chatId };
+  if (canonicalChatId !== msg.chatId) {
+    const canonical = await deps.store.getByChat(sessionId, canonicalChatId);
+    if (canonical) return { conversationId: canonical.conversationId, key: canonicalChatId };
+  }
+  return null;
 }

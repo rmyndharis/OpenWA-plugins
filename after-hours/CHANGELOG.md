@@ -8,6 +8,16 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.15] - 2026-11-10
+
+### Fixed
+
+- Skip `call` and `masked` placeholder messages alongside `revoked` tombstones.
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.30.0.
+
 ## [0.2.14] - 2026-11-08
 
 ### Changed

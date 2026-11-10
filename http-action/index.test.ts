@@ -695,3 +695,40 @@ test('pending POST replies use bounded bucket files and expire together on bucke
   assert.ok(!Object.hasOwn(bucket!, 's1:pending0'));
   assert.ok(Object.hasOwn(bucket!, `s1:${partner}`));
 });
+
+test('forwarded messages and shared locations never trigger an action or claim the message', async () => {
+  const { d, fetched, sendCalls } = postDeps();
+  await handleMessage(d, 's1', { ...msg('buat X', 'fwd-1'), isForwarded: true });
+  await handleMessage(d, 's1', { ...msg('buat X', 'loc-1'), type: 'location' });
+  assert.deepEqual(fetched, []);
+  assert.deepEqual(sendCalls, []);
+
+  let handler!: (h: unknown) => Promise<{ continue: boolean }>;
+  const plugin = new HttpAction();
+  const ctx = {
+    config: {
+      baseUrl: 'https://api.example.com',
+      actions: JSON.stringify(d.cfg.actions),
+    },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    registerHook: (_e: string, h: (x: unknown) => Promise<{ continue: boolean }>) => { handler = h; },
+    net: { fetch: d.fetch },
+    conversations: d.conversations,
+    storage: d.storage,
+  };
+  await plugin.onEnable(ctx as never);
+
+  const fwdRes = await handler({
+    source: 'Engine',
+    sessionId: 's1',
+    data: { ...msg('buat X', 'fwd-2'), isForwarded: true },
+  });
+  const locRes = await handler({
+    source: 'Engine',
+    sessionId: 's1',
+    data: { ...msg('buat X', 'loc-2'), type: 'location' },
+  });
+  assert.deepEqual(fwdRes, { continue: true });
+  assert.deepEqual(locRes, { continue: true });
+  assert.deepEqual(fetched, []);
+});
