@@ -6,6 +6,13 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+## [0.3.10] - 2026-11-12
+
+### Fixed
+
+- Throttle unscoped orphan session sweeps once per interval across the plugin instead of repeating full scans per active WhatsApp session.
+- Clear stored session state when a flow reaches an unsupported input block, and reset stale sessions when `publicId` or `apiHost` changes.
+
 ## [0.3.9] - 2026-11-10
 
 ### Changed

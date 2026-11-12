@@ -116,23 +116,27 @@ export class FlowEngine {
   /** Expire abandoned positions without discarding unexpired consumed message IDs. */
   public static async sweepExpired(context: PluginContext): Promise<number> {
     const keys = (await context.storage.list('state__')).filter(k => k.startsWith('state__'));
-    const expired = (s: UserState | null): boolean => !!s && Date.now() - s.lastActive > this.TIMEOUT_MS;
+    const expired = (s: UserState | null): boolean =>
+      !!s && (!Number.isFinite(s.lastActive) || Date.now() - s.lastActive > this.TIMEOUT_MS);
     let removed = 0;
     for (const k of keys) {
       if (!expired(await context.storage.get<UserState>(k))) continue;
       await this.withLock(k, async () => {
         const state = await context.storage.get<UserState>(k);
         if (!expired(state)) return;
-        const consumed = this.consumed(state, Date.now());
+        const now = Date.now();
+        const consumed = this.consumed(state, now);
         if (Object.keys(consumed).length) {
           const alreadyCompacted =
             state!.completed === true &&
             Array.isArray(state!.path) &&
             state!.path.length === 0 &&
             state!.misses === undefined &&
+            Number.isFinite(state!.lastActive) &&
             Object.keys(state!.consumed ?? {}).length === Object.keys(consumed).length;
           if (!alreadyCompacted) {
-            await context.storage.set(k, { path: [], lastActive: state!.lastActive, completed: true, consumed });
+            const lastActive = Number.isFinite(state!.lastActive) ? state!.lastActive : now;
+            await context.storage.set(k, { path: [], lastActive, completed: true, consumed });
           }
         } else {
           await context.storage.delete(k);
@@ -174,8 +178,16 @@ export class FlowEngine {
     const now = Date.now();
     const consumed = this.consumed(stored, now);
     if (Object.hasOwn(consumed, messageId)) return consumed[messageId].handled;
-    let state = stored && !stored.completed && now - stored.lastActive <= this.TIMEOUT_MS
-      ? { ...stored, path: [...stored.path] } : null;
+    let state =
+      stored &&
+      typeof stored === 'object' &&
+      !stored.completed &&
+      Number.isFinite(stored.lastActive) &&
+      now - stored.lastActive <= this.TIMEOUT_MS &&
+      Array.isArray(stored.path) &&
+      stored.path.every((p): p is string => typeof p === 'string')
+        ? { ...stored, path: [...stored.path] }
+        : null;
     const save = async (next: UserState | null, handled: boolean): Promise<void> => {
       await context.storage.set(stateKey, {
         ...(next ?? { path: [], lastActive: now, completed: true }),
@@ -223,9 +235,11 @@ export class FlowEngine {
               Array.isArray(stored.path) &&
               stored.path.length === 0 &&
               stored.misses === undefined &&
+              Number.isFinite(stored.lastActive) &&
               Object.keys(stored.consumed ?? {}).length === Object.keys(consumed).length;
             if (!alreadyCompacted) {
-              await context.storage.set(stateKey, { path: [], lastActive: stored.lastActive, completed: true, consumed });
+              const lastActive = Number.isFinite(stored.lastActive) ? stored.lastActive : now;
+              await context.storage.set(stateKey, { path: [], lastActive, completed: true, consumed });
             }
           } else await context.storage.delete(stateKey);
         }
@@ -284,7 +298,7 @@ export class FlowEngine {
       await save(null, false);
       return false;
     } else {
-      const misses = (state.misses ?? 0) + 1;
+      const misses = (typeof state.misses === 'number' && Number.isFinite(state.misses) && state.misses >= 0 ? state.misses : 0) + 1;
       if (misses >= FlowEngine.MAX_MISSES) {
         // Budget spent: end the flow WITHOUT another reply. This is the bound on the runaway, so it
         // must not itself send, or two bots would still trade one message per flow forever.

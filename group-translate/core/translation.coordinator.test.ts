@@ -926,3 +926,68 @@ test('a forwarded message is translated for the group without teaching the forwa
   assert.equal(state.active, true);
   assert.equal(mocks.sendCombinedReply.calls.length, 1);
 });
+
+test('caps concurrent translate calls per message while preserving target order', async () => {
+  const langs = ['es', 'fr', 'de', 'id', 'pt', 'it', 'tr', 'ko', 'hi'];
+  const participants: GroupState['participants'] = {
+    'sender@c.us': { lang: 'en', source: 'pinned', enabled: true, samples: 1, updatedAt: '' },
+  };
+  langs.forEach((lang, idx) => {
+    participants[`p${idx}@c.us`] = { lang, source: 'pinned', enabled: true, samples: 1, updatedAt: '' };
+  });
+  const state = freshState({ active: true, announced: true, participants });
+  const { store, gateway, translator, logger, mocks } = makeDeps(state);
+
+  let inFlight = 0;
+  let maxInFlight = 0;
+  mocks.detect.mockResolvedValue({ lang: 'en', confidence: 0.99 });
+  mocks.translate.mockImplementation(async (t, _s, tgt) => {
+    inFlight++;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    inFlight--;
+    return `[${tgt}] ${t}`;
+  });
+
+  const c = new TranslationCoordinator(translator, store, gateway, OPTS, logger);
+  await c.handleMessage('s', msg({ author: 'sender@c.us', body: 'Hello everyone' }));
+  assert.ok(maxInFlight <= 4, `expected at most 4 concurrent translate calls, saw ${maxInFlight}`);
+  assert.equal(mocks.sendCombinedReply.calls.length, 1);
+  const reply = String(mocks.sendCombinedReply.calls[0][3]);
+  for (const lang of langs) {
+    assert.match(reply, new RegExp(`\\[${lang}] Hello everyone`));
+  }
+});
+
+test('announceInGroups persists announced before sending and rolls back only when sendText fails', async () => {
+  let persisted = freshState();
+  let failSave = true;
+  let failSend = false;
+  const sends: string[] = [];
+  const store: ConfigStore = {
+    load: async () => JSON.parse(JSON.stringify(persisted)) as GroupState,
+    save: async (s) => {
+      if (failSave) throw new Error('Plugin storage quota exceeded');
+      persisted = JSON.parse(JSON.stringify(s)) as GroupState;
+    },
+  };
+  const { gateway, translator } = makeDeps(persisted);
+  gateway.sendText = async (_s, _c, text) => {
+    if (failSend) throw new Error('send failed');
+    sends.push(text);
+  };
+
+  const c = new TranslationCoordinator(translator, store, gateway, { ...OPTS, announceInGroups: true });
+  await assert.rejects(() => c.handleMessage('s', msg()), /quota exceeded/);
+  assert.equal(sends.length, 0, 'must not spam an unpersisted announcement when storage save fails');
+
+  failSave = false;
+  failSend = true;
+  await assert.rejects(() => c.handleMessage('s', msg()), /send failed/);
+  assert.equal(persisted.announced, false, 'rolls back announced when sendText fails');
+
+  failSend = false;
+  await c.handleMessage('s', msg());
+  assert.equal(sends.length, 1);
+  assert.equal(persisted.announced, true);
+});

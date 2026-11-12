@@ -8,6 +8,14 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.3.18] - 2026-11-12
+
+### Fixed
+
+- Run non-command group translation off-dispatch so slow backend responses do not hold up later message hooks.
+- Cap concurrent translation requests per message to 4 so multi-language groups do not exhaust the host outbound fetch pool.
+- Persist group announcement state before sending the introduction and roll back only when delivery fails.
+
 ## [1.3.17] - 2026-11-10
 
 ### Fixed

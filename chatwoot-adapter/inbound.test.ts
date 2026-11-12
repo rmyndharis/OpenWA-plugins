@@ -854,3 +854,17 @@ test('a non-422 failure leaves the phone unrecorded, so it is retried (#114)', a
   await handleInbound(d, 'sess', 'Engine', { ...msg, id: 'm2' } as IncomingMessage);
   assert.equal(updates.length, 2); // so the next message tries again
 });
+
+test('inbound messages with empty msg.id both relay without poisoning seen dedup', async () => {
+  const seenIds: string[] = [];
+  const { deps: d, posted } = makeDeps({
+    store: {
+      hasSeen: async (_k: string, id: string) => seenIds.includes(id),
+      markSeen: async (_k: string, id: string) => void seenIds.push(id),
+    },
+  });
+  await handleInbound(d, 'sess', 'Engine', { ...msg, id: '', body: 'first id-less' } as IncomingMessage);
+  await handleInbound(d, 'sess', 'Engine', { ...msg, id: '', body: 'second id-less' } as IncomingMessage);
+  assert.deepEqual(posted.map(p => p.c), ['first id-less', 'second id-less']);
+  assert.equal(seenIds.includes(''), false, 'must not write empty seen id');
+});

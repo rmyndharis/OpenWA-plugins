@@ -5,6 +5,13 @@ and the top entry's version must match `manifest.json`.
 
 ## [Unreleased]
 
+## [0.2.19] - 2026-11-12
+
+### Fixed
+
+- Render and validate outgoing request templates before persisting POST intent so local template errors reply with `errorTemplate` instead of recording an uncertain POST.
+- Distinguish post-response body or reply-template errors from transport failures on POST actions so completed HTTP responses record completion and send `errorTemplate` rather than the uncertain-outcome notice.
+
 ## [0.2.18] - 2026-11-10
 
 ### Changed

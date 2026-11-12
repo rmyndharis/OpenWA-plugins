@@ -452,3 +452,30 @@ test('root status-change events close a mapped conversation without inferring a 
   await handleOutbound(d, req({ event: 'conversation_status_changed', id: 55, account: { id: 3 }, inbox_id: 7, status: 'resolved', changed_attributes: [{ status: { previous_value: 'open', current_value: 'resolved' } }] }));
   assert.deepEqual(handovers.map(h => h[1]), ['closed']);
 });
+
+test('wildcard sessionId="*" ingress delivery resolves mapped conversation like unscoped delivery', async () => {
+  const store = new MappingStore(fakeStorage(), fakeMappings);
+  await store.link('sess', 'c@wa', 'sess', { conversationId: 55, contactId: 1, sourceId: 'a' });
+  const sent: unknown[] = [];
+  const handovers: Array<[unknown, string]> = [];
+  const d = {
+    lock: new KeyedAsyncLock(),
+    conversations: { send: async (e: unknown) => { sent.push(e); return { messageId: 'WA_W', timestamp: 0 }; } },
+    handover: { set: async (k: unknown, s: string) => void handovers.push([k, s]) },
+    engine: { canonicalChatId: async (_s: string, c: string) => c },
+    store,
+    inboxId: 7,
+    log: () => {},
+  } as unknown as OutboundDeps;
+
+  await handleOutbound(
+    d,
+    reqScoped('*', { event: 'message_created', message_type: 'outgoing', private: false, id: 77, content: 'wildcard reply', inbox: { id: 7 }, conversation: { id: 55 } }),
+  );
+  await handleOutbound(
+    d,
+    reqScoped('*', { event: 'conversation_updated', id: 55, inbox_id: 7, status: 'resolved' }),
+  );
+  assert.deepEqual(sent, [{ sessionId: 'sess', chatId: 'c@wa', type: 'text', text: 'wildcard reply' }]);
+  assert.deepEqual(handovers.map(h => h[1]), ['closed']);
+});

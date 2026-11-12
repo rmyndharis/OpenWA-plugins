@@ -53,6 +53,13 @@ export function isHostBackpressure(err: unknown): boolean {
   return /too many concurrent/i.test(message);
 }
 
+/** Strip URL userinfo and query/fragment tokens before surfacing fetch errors to logs or webhooks. */
+export function redactUrlSecrets(text: string): string {
+  return text
+    .replace(/(https?:\/\/)[^/\s?#]+@/gi, '$1***@')
+    .replace(/(https?:\/\/[^\s?#]+)[?#][^\s'")\]]*/gi, '$1?[redacted]');
+}
+
 export class OpenAiSttClient implements SttProvider {
   private readonly base: string;
   private readonly failureThreshold: number;
@@ -95,6 +102,10 @@ export class OpenAiSttClient implements SttProvider {
         if (this.consecutiveFailures >= this.failureThreshold) {
           this.openUntil = this.now() + this.cooldownMs;
         }
+      }
+      if (err instanceof Error) {
+        const redacted = redactUrlSecrets(err.message);
+        if (redacted !== err.message) throw new Error(redacted);
       }
       throw err;
     }

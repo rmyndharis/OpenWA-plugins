@@ -8,6 +8,17 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.21] - 2026-11-12
+
+### Changed
+
+- Raise `minOpenWAVersion` to `0.7.0` to match the per-session configuration capability floor.
+
+### Fixed
+
+- Reject bounded variable-width regex patterns whose combined state count exceeds the repeat budget and ambiguous repeated alternations with optional leading atoms.
+- Throttle retries for 60 seconds after a failed rule or fallback send instead of retrying on every inbound message.
+
 ## [0.2.20] - 2026-11-10
 
 ### Changed

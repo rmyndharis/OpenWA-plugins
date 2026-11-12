@@ -309,7 +309,7 @@ export class VoiceTranscriptionPlugin implements IPlugin {
    * critical path. The coordinator is fail-open, so the floated promise needs no rejection handling.
    */
   private onMessage(ctx: HookContext<IncomingMessage>): HookResult {
-    if (ctx.source === "Engine" && ctx.sessionId) {
+    if (ctx.source === "Engine" && ctx.sessionId && ctx.data) {
       // Re-check the config signature against the firing session's resolved config — if a per-session
       // override changed a coordinator-affecting field, rebuild now. Cheap (a JSON.stringify of a handful
       // of primitives) and the rebuild is rare. The swap is not locked, but a transcription call runs

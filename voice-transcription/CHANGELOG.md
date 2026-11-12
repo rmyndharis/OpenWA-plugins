@@ -6,6 +6,13 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+## [1.3.8] - 2026-11-12
+
+### Fixed
+
+- Redact embedded URL credentials, query tokens, and fragments before surfacing STT or webhook fetch errors in logs and failure payloads.
+- Bound `seen` and `rate` storage keys to 184 UTF-8 bytes, emit a `failed` webhook event on storage quota errors instead of dropping silently, and guard empty message IDs and group recipients in chat delivery.
+
 ## [1.3.7] - 2026-11-10
 
 ### Fixed

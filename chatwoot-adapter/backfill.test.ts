@@ -337,3 +337,12 @@ test('the bulk sweep skips channel and broadcast chats', async () => {
   assert.deepEqual(touched, ['628111@c.us'], 'only the real chat is fetched');
   assert.equal(posts.length, 1);
 });
+
+test('backfillHistory replays id-less history entries without poisoning the empty-string seen key', async () => {
+  const history = [hist('', 10, false, 'first no-id'), hist('', 20, false, 'second no-id')];
+  const { deps, posts, seen } = makeDeps({ engine: { getChatHistory: async () => history } });
+  const result = await backfillHistory(deps, 'sess', 'c@c.us', 55, '');
+  assert.equal(result, true);
+  assert.deepEqual(posts.map(p => p.body), ['first no-id', 'second no-id']);
+  assert.equal(seen.has(''), false);
+});

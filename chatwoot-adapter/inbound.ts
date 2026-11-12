@@ -110,8 +110,10 @@ export async function handleInbound(
       // once the plugin is at its storage quota, and a plugin's 33rd concurrent capability call, which a
       // reconnect delivering a backlog across many chats can reach) threw straight out of the hook with the
       // message neither relayed nor queued.
-      if (await deps.store.hasSeen('wa', msg.id, sessionId)) return;
-      await deps.store.markSeen('wa', msg.id, sessionId);
+      if (msg.id) {
+        if (await deps.store.hasSeen('wa', msg.id, sessionId)) return;
+        await deps.store.markSeen('wa', msg.id, sessionId);
+      }
       await relayInbound(deps, sessionId, msg);
     } catch (err) {
       deps.log('inbound relay failed; queued for retry', err);

@@ -5,7 +5,7 @@
 
 ![type: extension](https://img.shields.io/badge/type-extension-blue.svg)
 ![license: MIT](https://img.shields.io/badge/license-MIT-green.svg)
-![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.6.1-25D366.svg)
+![built for OpenWA](https://img.shields.io/badge/OpenWA-%E2%89%A5%200.7.0-25D366.svg)
 [![downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Frmyndharis%2FOpenWA-plugins%2Fbadges%2Fdownloads%2Ffaq-bot.json)](https://github.com/rmyndharis/OpenWA-plugins/releases?q=faq-bot)
 
 ## Details
@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `faq-bot` |
-| **Version** | 0.2.20 |
-| **Released** | 2026-11-10 |
+| **Version** | 0.2.21 |
+| **Released** | 2026-11-12 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.6.1 (tested 0.30.0) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.30.0) |
 | **Keywords** | faq, auto-reply, chatbot, support, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/faq-bot](https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot) |
 <!-- END DETAILS -->
@@ -51,7 +51,7 @@
 
 ## Setup
 
-1. Have OpenWA **≥ 0.6.1** running with a logged-in WhatsApp session.
+1. Have OpenWA **≥ 0.7.0** running with a logged-in WhatsApp session.
 2. Install and enable the plugin (see [Install](#install)).
 3. Add your FAQ rules (see [Configuration](#configuration)).
 
@@ -85,11 +85,9 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 
 ## Compatibility
 
-Checked against the OpenWA v0.30.0 worker runtime with isolated services. Rule and fallback replies claim their message before delivery completes, so a slow send cannot activate another responder. A failed send is logged, releases its cooldown slot and retains the claim on that message. Pending sends are best-effort and may be interrupted when the worker stops.
+Checked against the OpenWA v0.30.0 worker runtime with isolated services. Rule and fallback replies claim their message before delivery completes, so a slow send cannot activate another responder. A failed send is logged, releases its cooldown slot behind a 60-second retry backoff, and retains the claim on that message. Pending sends are best-effort and may be interrupted when the worker stops.
 
-Targets OpenWA **≥ 0.6.1** (sandboxed plugin runtime). Live config edits (`PUT …/config`) apply
-immediately on builds that forward `onConfigChange` to sandboxed plugins (the #430 follow-ups);
-on v0.6.0/v0.6.1 a disable + re-enable is needed after changing rules.
+Targets OpenWA **≥ 0.7.0** (sandboxed plugin runtime with per-session config overrides). Live config edits (`PUT …/config`) apply immediately through `onConfigChange`.
 
 Shared contact cards and polls never match a rule and never draw `fallbackReply`: from OpenWA 0.23.2
 both carry text in the message body, and a vCard is free text that matches ordinary `contains` and

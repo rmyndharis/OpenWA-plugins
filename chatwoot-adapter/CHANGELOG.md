@@ -6,6 +6,13 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.18] - 2026-11-12
+
+### Fixed
+
+- Treat wildcard `sessionId: "*"` on Chatwoot ingress deliveries as unscoped so mapped conversations and handover updates resolve cleanly without polluting `sessionConfigs`.
+- Skip `seen` deduplication on inbound and history replay messages with an empty `id`, and synthesize unique retry-queue keys.
+
 ## [0.9.17] - 2026-11-10
 
 ### Changed

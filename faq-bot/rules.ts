@@ -112,6 +112,7 @@ function firstCharSet(key: string): Set<string> | null {
 export interface Branch {
   literal: string | null;
   first: string | null;
+  firstLocked?: boolean;
 }
 
 /** True when a REPEATED alternation is ambiguous: two branches can consume the same text, so at each
@@ -184,6 +185,7 @@ function pathsAmbiguous(paths: Paths, wrapped: boolean): boolean {
 /** A group repeated this many times (or unbounded) with a variable-width body backtracks catastrophically;
  *  a smaller bounded repeat is bounded by the constant and safe. */
 const REPEAT_THRESHOLD = 10;
+const MAX_REPEAT_STATES = 2 ** REPEAT_THRESHOLD;
 
 /**
  * Conservatively reject patterns prone to catastrophic backtracking. Four classes are closed:
@@ -209,9 +211,14 @@ const REPEAT_THRESHOLD = 10;
  */
 export function isSafeRegexPattern(p: string): boolean {
   if (p.length > MAX_PATTERN_LENGTH) return false;
+  const root = { hasBoundedVariable: false, hasBoundedChoice: false, totalChoices: 0, branchChoices: 1 };
   const stack: {
     hasUnbounded: boolean;
     hasVariable: boolean;
+    hasBoundedVariable: boolean;
+    hasBoundedChoice: boolean;
+    totalChoices: number;
+    branchChoices: number;
     // An ambiguous child stays unsafe unless the full iteration's alternatives can be separated.
     hasAmbiguous: boolean;
     paths: Paths[];
@@ -231,27 +238,37 @@ export function isSafeRegexPattern(p: string): boolean {
 
     if (c === '|') {
       prevUnbounded = null; adjacentRun = 0;
+      const tracker = stack.length ? stack[stack.length - 1] : root;
+      tracker.totalChoices = Math.min(MAX_REPEAT_STATES, tracker.totalChoices + tracker.branchChoices);
+      tracker.branchChoices = 1;
       if (stack.length) {
-        stack[stack.length - 1].branches.push({ literal: '', first: null });
-        stack[stack.length - 1].paths.push([[]]);
+        const top = stack[stack.length - 1];
+        top.branches.push({ literal: '', first: null, firstLocked: false });
+        top.paths.push([[]]);
       }
       i++; continue;
     }
     if (c === '(') {
+      const assertion = /^\(\?(?:[=!]|<[=!])/.test(p.slice(i));
       // The run so far is parked, not discarded: whether this group breaks it depends on whether it can
       // match empty, which is only known at the closing paren.
       if (stack.length) {
-        // A nested group means this branch is no longer a plain literal and its first character is not a
-        // single atom. Both are recorded as unknown, which branchesAmbiguous treats as overlapping.
+        // A nested non-assertion group means this branch is no longer a plain literal and its first
+        // character is not a single atom unless a mandatory atom already locked it earlier.
         const br = stack[stack.length - 1].branches;
         const cur = br[br.length - 1];
-        if (cur) { cur.literal = null; if (cur.first === null) cur.first = null; }
+        if (cur) {
+          cur.literal = null;
+          if (!assertion) cur.firstLocked = true;
+        }
       }
       stack.push({
-        hasUnbounded: false, hasVariable: false, hasAmbiguous: false, paths: [[[]]],
-        assertion: /^\(\?(?:[=!]|<[=!])/.test(p.slice(i)),
+        hasUnbounded: false, hasVariable: false,
+        hasBoundedVariable: false, hasBoundedChoice: false, totalChoices: 0, branchChoices: 1,
+        hasAmbiguous: false, paths: [[[]]],
+        assertion,
         savedPrev: prevUnbounded, savedRun: adjacentRun,
-        branches: [{ literal: '', first: null }],
+        branches: [{ literal: '', first: null, firstLocked: false }],
       });
       prevUnbounded = null; adjacentRun = 0;
       i++;
@@ -269,27 +286,58 @@ export function isSafeRegexPattern(p: string): boolean {
     }
     if (c === ')') {
       const frame = stack.pop() ?? {
-        hasUnbounded: false, hasVariable: false, hasAmbiguous: false, paths: [null], assertion: false,
+        hasUnbounded: false, hasVariable: false,
+        hasBoundedVariable: false, hasBoundedChoice: false, totalChoices: 0, branchChoices: 1,
+        hasAmbiguous: false, paths: [null], assertion: false,
         savedPrev: null, savedRun: 0,
         branches: [] as Branch[],
       };
       const q = quantifierAt(p, i + 1);
-      // (1) nested unbounded. A BOUNDED repeat counts too once it repeats at all: `(a+){3}` expands to
-      // `a+a+a+`, which backtracks exponentially — the constant bounds the repeat, not the search.
+      // (1) nested unbounded: a bounded repeat of an unbounded body still expands to a+a+...
       if ((q.unbounded || q.count >= 2) && frame.hasUnbounded) return false;
-      if (q.count >= REPEAT_THRESHOLD && frame.hasVariable) return false; // (3) large/unbounded repeat of a variable body
+      // (3) unbounded repeat of a variable-width body
+      if (frame.hasVariable && q.unbounded) return false;
       const paths = frame.assertion ? [[]] : frame.paths.every(paths => paths !== null) ? frame.paths.flat() as string[][] : null;
       const ambiguous =
         (frame.hasAmbiguous || (frame.branches.length >= 2 && branchesAmbiguous(frame.branches))) && pathsAmbiguous(paths, frame.hasAmbiguous);
       if ((q.unbounded || q.count >= 2) && ambiguous) {
         return false;
       }
+      const rawBodyChoices = Math.min(MAX_REPEAT_STATES, frame.totalChoices + frame.branchChoices);
+      const bodyHasChoices = frame.hasBoundedVariable || ambiguous;
+      if (bodyHasChoices && rawBodyChoices >= MAX_REPEAT_STATES) {
+        return false;
+      }
+      const boundedRepeat = !frame.assertion && !q.unbounded && (!q.present || q.count > 0);
+      const effectiveBodyChoices = bodyHasChoices ? rawBodyChoices : 1;
+      const rawGroupChoices = !boundedRepeat
+        ? 1
+        : !q.present
+          ? effectiveBodyChoices
+          : Math.pow(effectiveBodyChoices, q.count) * Math.max(1, q.count - q.min + 1);
+      const groupHasBoundedVariable = boundedRepeat && (frame.hasBoundedVariable || q.variable);
+      const groupHasBoundedChoice = boundedRepeat && (bodyHasChoices || q.variable);
+      if (groupHasBoundedChoice && rawGroupChoices >= MAX_REPEAT_STATES) {
+        return false;
+      }
+      const target = stack.length ? stack[stack.length - 1] : root;
+      if (groupHasBoundedVariable) target.hasBoundedVariable = true;
+      if (groupHasBoundedChoice) {
+        target.hasBoundedChoice = true;
+        target.branchChoices = Math.min(MAX_REPEAT_STATES, target.branchChoices * rawGroupChoices);
+      }
       if (stack.length) {
         const parent = stack[stack.length - 1];
         if (q.unbounded || frame.hasUnbounded) parent.hasUnbounded = true;
-        if (q.variable || frame.hasVariable) parent.hasVariable = true;
+        if (q.variable || (frame.hasVariable && q.count > 0)) parent.hasVariable = true;
         if (ambiguous) parent.hasAmbiguous = true;
-        const child = !q.present || q.count === 1 && q.min === 1 ? paths : q.count === 1 && paths ? [[], ...paths] : null;
+        const child = !q.present || q.count === 1 && q.min === 1
+          ? paths
+          : q.count === 0
+            ? [[]]
+            : q.count === 1 && paths
+              ? [[], ...paths]
+              : null;
         parent.paths[parent.paths.length - 1] = concatenatePaths(parent.paths[parent.paths.length - 1], child);
       }
       // A group breaks flat adjacency only if it MUST consume something. `(x?)` can match empty, so
@@ -315,14 +363,19 @@ export function isSafeRegexPattern(p: string): boolean {
         ? [[]]
         : !q.present || (q.count === 1 && q.min === 1)
           ? [[atom.key]]
-          : q.count === 1
-            ? [[], [atom.key]]
-            : null;
+          : q.count === 0
+            ? [[]]
+            : q.count === 1
+              ? [[], [atom.key]]
+              : null;
       frame.paths[frame.paths.length - 1] = concatenatePaths(frame.paths[frame.paths.length - 1], paths);
-      const br = stack[stack.length - 1].branches;
+      const br = frame.branches;
       const cur = br[br.length - 1];
       if (cur && !zeroWidth) {
-        if (cur.first === null) cur.first = atom.key;
+        if (!cur.firstLocked) {
+          cur.firstLocked = true;
+          if (!q.present || q.min >= 1) cur.first = atom.key;
+        }
         // The branch stays a literal only while every atom is a bare, unquantified single character.
         if (cur.literal !== null) {
           cur.literal = !q.present && atom.len === 1 && atom.key !== 'ANY' ? cur.literal + atom.key : null;
@@ -331,7 +384,18 @@ export function isSafeRegexPattern(p: string): boolean {
         cur.literal = null;
       }
     }
-    if (stack.length && q.variable && !zeroWidth) stack[stack.length - 1].hasVariable = true;
+    if (!zeroWidth) {
+      if (stack.length && q.variable) stack[stack.length - 1].hasVariable = true;
+      if (!q.unbounded && q.variable) {
+        const tracker = stack.length ? stack[stack.length - 1] : root;
+        tracker.hasBoundedVariable = true;
+        tracker.hasBoundedChoice = true;
+        tracker.branchChoices = Math.min(
+          MAX_REPEAT_STATES,
+          tracker.branchChoices * Math.max(1, q.count - q.min + 1),
+        );
+      }
+    }
     if (q.unbounded && !zeroWidth) {
       if (stack.length) stack[stack.length - 1].hasUnbounded = true;
       if (prevUnbounded !== null && overlaps(prevUnbounded, atom.key)) {
@@ -344,6 +408,9 @@ export function isSafeRegexPattern(p: string): boolean {
       prevUnbounded = null; adjacentRun = 0; // a mandatory (non-skippable) atom breaks adjacency
     }
     i += atom.len + q.len;
+  }
+  if (root.hasBoundedChoice && root.totalChoices + root.branchChoices >= MAX_REPEAT_STATES) {
+    return false;
   }
   return true;
 }

@@ -390,3 +390,37 @@ test('zero-width assertions and nullable alternations do not break adjacent unbo
     assert.equal(isSafeRegexPattern(pattern), true, `should accept: ${pattern}`);
   }
 });
+
+test('nested bounded repeats of variable-width bodies cannot multiply past the repeat budget', () => {
+  for (const pattern of [
+    '((a?){1,9}){1,9}$',
+    '((a?){9}){9}$',
+    '((a?){3}){4}$',
+    '(((a?){2}){2}){3}$',
+    '((a){1,9}){4}$',
+    '(a{0,9}){9}$',
+    '((a?){1,3}){1,4}$',
+    '^(a?){9}(a?){9}(a?){9}$',
+    '^((a?){9}(a?){9}(a?){9})$',
+    '^((a?|b?|c?|d?|e?){3}){3}$',
+    '^a{0,9}a{0,9}a{0,9}a{0,9}$',
+    '^(a|aa)(a|aa)(a|aa)(a|aa)(a|aa)(a|aa)(a|aa)(a|aa)(a|aa)(a|aa)$',
+    '^(a{0}b|b)+$',
+    '^(a?b|b)+$',
+    '^((a)?b|b)+$',
+  ]) {
+    assert.equal(isSafeRegexPattern(pattern), false, `should reject: ${pattern}`);
+  }
+  for (const pattern of [
+    '(ab?){2}',
+    '((ab?){2}){2}',
+    '(\\d{2,4}){3}',
+    '((\\d{2}){3}){5}',
+    '((a){1,9}){2}',
+    '(a|b)*(c|d)*',
+    '^(harga|jam|lokasi|alamat|kontak|promo|diskon|cabang|member|paket|garansi)$',
+    '^(a{0}b|c)+$',
+  ]) {
+    assert.equal(isSafeRegexPattern(pattern), true, `should accept: ${pattern}`);
+  }
+});

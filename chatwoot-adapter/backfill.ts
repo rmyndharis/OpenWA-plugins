@@ -44,10 +44,16 @@ async function replayHistory(
 ): Promise<boolean> {
   let allPosted = true;
   for (const msg of ordered) {
-    if (msg.id === excludeMessageId || await deps.store.hasSeen('wa', msg.id, historyScope(sessionId, conversationId))) continue;
+    const identifiable = Boolean(msg.id);
+    if (
+      (identifiable && msg.id === excludeMessageId) ||
+      (identifiable && (await deps.store.hasSeen('wa', msg.id, historyScope(sessionId, conversationId))))
+    ) {
+      continue;
+    }
     try {
       await relayMessage(deps, sessionId, conversationId, msg, msg.fromMe ? 'outgoing' : 'incoming');
-      await deps.store.markSeen('wa', msg.id, sessionId);
+      if (identifiable) await deps.store.markSeen('wa', msg.id, sessionId);
     } catch (err) {
       deps.log(`history message ${msg.id} failed`, err);
       allPosted = false;

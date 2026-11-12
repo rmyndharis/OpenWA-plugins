@@ -8,6 +8,14 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.3.19] - 2026-11-12
+
+### Fixed
+
+- Validate and URL-encode `spreadsheetId`, trim surrounding whitespace, and fall back blank `sheetTab` values to `Logs`.
+- Drain buffered rows in bounded chunks so multi-megabyte outage backlogs flush incrementally without hitting payload limits.
+- Delete drained buffer checkpoints to release storage quota and keep post-append checkpoint errors from reporting a false Sheets flush failure.
+
 ## [0.3.18] - 2026-11-10
 
 ### Changed

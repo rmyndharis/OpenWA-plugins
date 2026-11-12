@@ -55,6 +55,8 @@ const HOOK_PRIORITY = 80;
 // Keyed on the text rather than the rule or the chat, so two different questions are both answered even
 // when they match the same rule.
 const MATCHED_REPLY_COOLDOWN_MS = 10_000;
+const RETRY_BACKOFF_MS = 60_000;
+const MAX_RETRY_ENTRIES = 5_000;
 
 // A message sent longer ago than this is never answered. From OpenWA 0.23.6 a Baileys session delivers,
 // after it reconnects, what WhatsApp queued while it was disconnected, each message with its original send
@@ -69,6 +71,7 @@ export default class FaqBot implements IPlugin {
   /** `${sessionId}:${chatId}:${pattern}` -> last answer for that rule, for MATCHED_REPLY_COOLDOWN_MS. */
   private readonly matchedAt = new Map<string, number>();
   private readonly replyAttempts = new Map<string, object>();
+  private readonly retryNotBefore = new Map<string, number>();
 
   async onEnable(ctx: PluginContext): Promise<void> {
     this.ctx = ctx;
@@ -167,41 +170,61 @@ export default class FaqBot implements IPlugin {
         // plugin's, and the standard allows a claim to resolve to silence.
         if (late) return true;
         const key = `${sessionId}:${m.chatId}:${m.body.trim().toLowerCase().slice(0, 200)}`;
-        if (!allowCooldown(this.matchedAt, key, Date.now(), MATCHED_REPLY_COOLDOWN_MS)) return true;
         const attemptKey = `matched:${key}`;
-        const attempt = {};
-        this.replyAttempts.set(attemptKey, attempt);
-        void ctx.messages.reply(sessionId, m.chatId, m.id, rule.reply).catch(e => {
-          // Release the window: a reply that never arrived must not silence the next identical question.
-          if (this.replyAttempts.get(attemptKey) === attempt) this.matchedAt.delete(key);
-          ctx.logger.error('faq-bot: reply failed', e);
-        }).finally(() => {
-          if (this.replyAttempts.get(attemptKey) === attempt) this.replyAttempts.delete(attemptKey);
-        });
+        const notBefore = this.retryNotBefore.get(attemptKey);
+        if (notBefore !== undefined && Date.now() < notBefore) return true;
+        if (!allowCooldown(this.matchedAt, key, Date.now(), MATCHED_REPLY_COOLDOWN_MS)) return true;
+        this.dispatchReply(ctx, sessionId, m.chatId, m.id, rule.reply, attemptKey, this.matchedAt, key);
         return true;
       }
       if (cfg.config.fallbackReply && !late) {
         const key = `${sessionId}:${m.chatId}`;
+        const attemptKey = `fallback:${key}`;
+        const notBefore = this.retryNotBefore.get(attemptKey);
+        if (notBefore !== undefined && Date.now() < notBefore) return false;
         const cooldownMs = Math.max(0, cfg.config.fallbackCooldownSec) * 1000;
         if (allowCooldown(this.fallbackAt, key, Date.now(), cooldownMs)) {
-          const attemptKey = `fallback:${key}`;
-          const attempt = {};
-          this.replyAttempts.set(attemptKey, attempt);
-          void ctx.messages.reply(sessionId, m.chatId, m.id, cfg.config.fallbackReply).catch(err => {
-            // The slot is claimed before the send, so a failed send would otherwise silence the chat for
-            // a whole cooldown window over a reply that never arrived. Release it: a message that matched
-            // a rule is retried on the next message too, and this costs at most one send attempt each.
-            if (this.replyAttempts.get(attemptKey) === attempt) this.fallbackAt.delete(key);
-            ctx.logger.error('faq-bot: reply failed', err);
-          }).finally(() => {
-            if (this.replyAttempts.get(attemptKey) === attempt) this.replyAttempts.delete(attemptKey);
-          });
+          this.dispatchReply(ctx, sessionId, m.chatId, m.id, cfg.config.fallbackReply, attemptKey, this.fallbackAt, key);
           return true;
         }
       }
     } catch (err) {
       ctx.logger.error('faq-bot: reply failed', err);
     }
-    return false; // nothing delivered — a later plugin may still have an answer
+    return false;
+  }
+
+  private dispatchReply(
+    ctx: PluginContext,
+    sessionId: string,
+    chatId: string,
+    messageId: string,
+    text: string,
+    attemptKey: string,
+    cooldownMap: Map<string, number>,
+    cooldownKey: string,
+  ): void {
+    const attempt = {};
+    this.replyAttempts.set(attemptKey, attempt);
+    void ctx.messages.reply(sessionId, chatId, messageId, text).then(() => {
+      if (this.replyAttempts.get(attemptKey) !== attempt) return;
+      this.replyAttempts.delete(attemptKey);
+      this.retryNotBefore.delete(attemptKey);
+    }, err => {
+      if (this.replyAttempts.get(attemptKey) === attempt) {
+        this.replyAttempts.delete(attemptKey);
+        cooldownMap.delete(cooldownKey);
+        this.retryNotBefore.set(attemptKey, Date.now() + RETRY_BACKOFF_MS);
+        if (this.retryNotBefore.size > MAX_RETRY_ENTRIES) {
+          const now = Date.now();
+          for (const [k, until] of this.retryNotBefore) if (until <= now) this.retryNotBefore.delete(k);
+          for (const k of this.retryNotBefore.keys()) {
+            if (this.retryNotBefore.size <= MAX_RETRY_ENTRIES) break;
+            this.retryNotBefore.delete(k);
+          }
+        }
+      }
+      ctx.logger.error('faq-bot: reply failed', err);
+    });
   }
 }
