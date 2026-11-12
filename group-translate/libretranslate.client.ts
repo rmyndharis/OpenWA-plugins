@@ -32,6 +32,11 @@ export function redactUrlCredentials(text: string): string {
   return text.replace(/\/\/[^/@\s]*:[^/\s]*@/g, '//***:***@');
 }
 
+function isConcurrencyRejection(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /too many concurrent/i.test(msg);
+}
+
 export class LibreTranslateClient implements Translator {
   private readonly base: string;
   private readonly failureThreshold: number;
@@ -108,10 +113,12 @@ export class LibreTranslateClient implements Translator {
       this.consecutiveFailures = 0;
       return data;
     } catch (err) {
-      this.consecutiveFailures++;
-      if (this.consecutiveFailures >= this.failureThreshold) {
-        this.openUntil = Date.now() + this.cooldownMs;
-        this.logger.warn(`LibreTranslate circuit opened for ${this.cooldownMs}ms`, { action: 'lt_circuit_open' });
+      if (!isConcurrencyRejection(err)) {
+        this.consecutiveFailures++;
+        if (this.consecutiveFailures >= this.failureThreshold) {
+          this.openUntil = Date.now() + this.cooldownMs;
+          this.logger.warn(`LibreTranslate circuit opened for ${this.cooldownMs}ms`, { action: 'lt_circuit_open' });
+        }
       }
       // Redact before it leaves this method, not at each log site: this catch is the single point where
       // a host-produced message (which quotes the full request URL) enters the plugin, and the

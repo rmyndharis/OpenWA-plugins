@@ -5,6 +5,28 @@ and the top entry's version must match `manifest.json`.
 
 ## [Unreleased]
 
+## [0.2.18] - 2026-11-10
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.30.0.
+
+### Fixed
+
+- Ignore forwarded messages and shared locations so neither triggers a configured HTTP action, and skip background dispatch when no action matches.
+
+## [0.2.17] - 2026-11-08
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.29.1.
+
+## [0.2.16] - 2026-11-06
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.29.0.
+
 ## [0.2.15] - 2026-10-31
 
 ### Fixed

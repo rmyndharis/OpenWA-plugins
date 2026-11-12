@@ -8,6 +8,28 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-11-10
+
+### Fixed
+
+- Skip forwarded messages (`isForwarded`), reject query strings and fragments in `apiBaseUrl`, strip multiple trailing slashes when building the `/chat/completions` URL, and guard against replies that become empty after Markdown conversion.
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.30.0.
+
+## [0.1.5] - 2026-11-08
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.29.1.
+
+## [0.1.4] - 2026-11-06
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.29.0.
+
 ## [0.1.3] - 2026-10-31
 
 ### Changed

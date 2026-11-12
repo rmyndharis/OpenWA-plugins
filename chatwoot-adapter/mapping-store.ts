@@ -79,6 +79,21 @@ export function shardOf(logicalId: string): number {
   return (h >>> 0) % SEEN_SHARDS;
 }
 
+// OpenWA 0.28.0+ rejects ctx.storage.set keys above 184 UTF-8 bytes (`key-<b64>.json` <= 255 bytes).
+function boundStorageKey(key: string): string {
+  if (Buffer.byteLength(key, 'utf8') <= 184) return key;
+  let h1 = 0x811c9dc5, h2 = 0xdeadbeef;
+  for (let i = 0; i < key.length; i++) {
+    const c = key.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193);
+    h2 = Math.imul(h2 ^ c, 0x85ebca6b);
+  }
+  const suffix = `:${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}`;
+  let prefix = key.slice(0, 184 - suffix.length).replace(/[\ud800-\udbff]$/, '');
+  while (Buffer.byteLength(prefix, 'utf8') > 184 - suffix.length) prefix = prefix.slice(0, -1).replace(/[\ud800-\udbff]$/, '');
+  return `${prefix}${suffix}`;
+}
+
 // One bucket: logical marker id -> first-seen wall-clock ms.
 type SeenBucket = Record<string, number>;
 
@@ -353,10 +368,10 @@ export class MappingStore {
 
   // Durable run-once marker for the one-time bulk history sweep, per WA session.
   async isBulkBackfilled(sessionId: string): Promise<boolean> {
-    return Boolean(await this.storage.get(this.qualified(`backfill:all:${sessionId}`)));
+    return Boolean(await this.storage.get(boundStorageKey(this.qualified(`backfill:all:${sessionId}`))));
   }
   async setBulkBackfilled(sessionId: string): Promise<void> {
-    await this.storage.set(this.qualified(`backfill:all:${sessionId}`), 1);
+    await this.storage.set(boundStorageKey(this.qualified(`backfill:all:${sessionId}`)), 1);
   }
 
   // ---- Inbound retry queue (durable, over ctx.storage) --------------------------------------------
@@ -365,7 +380,7 @@ export class MappingStore {
   // list(prefix) already narrows, but a fake that ignores the arg would otherwise leak other keys).
 
   private retryKey(sessionId: string, msgId: string): string {
-    return `retry:${this.qualified(`${sessionId}:${msgId}`)}`;
+    return boundStorageKey(`retry:${this.qualified(`${sessionId}:${msgId}`)}`);
   }
 
   private async retryKeys(): Promise<string[]> {

@@ -5,7 +5,7 @@ management/automation stays easy. Verified against OpenWA's plugin runtime (sand
 the same baseline as [`types/openwa.d.ts`](./types/openwa.d.ts) — re-check both together, since this
 document describes host behaviour that has moved repeatedly (per-session config in 0.7, boot re-enable
 in 0.10.5, the storage quota and `message:deleted` in 0.11.0, the `storage:use` gate in 0.17.0, hook
-result checks and sandboxed hook ordering in 0.23.6). The current baseline is OpenWA v0.27.0, including host-version floor enforcement and HTTPS origin grants for configured outbound endpoints (both 0.24.0), the secret rule for host overrides, `null` secret removal and the capped boot restore (0.26.0), and outbound-only `message:ack`, edit-triggered `message:persisted`, query-aware empty-body ingress dedup and config push after `onEnable` (0.27.0).
+result checks and sandboxed hook ordering in 0.23.6). The current baseline is OpenWA v0.30.0, including host-version floor enforcement and HTTPS origin grants for configured outbound endpoints (both 0.24.0), the secret rule for host overrides, `null` secret removal and the capped boot restore (0.26.0), outbound-only `message:ack`, edit-triggered `message:persisted`, query-aware empty-body ingress dedup and config push after `onEnable` (0.27.0), the 184 UTF-8 byte storage key limit, queued ingress dispatch timeout budget, `dedupBodyMismatchAsNew`, query-borne ingress `verified: false`, Baileys group `message:ack` progression and whatsapp-web.js system notice filtering (0.28.0/0.29.0), `isForwarded` / `forwardingScore` on `IncomingMessage` (0.29.1), and the Baileys inbound media stream fix (0.30.0).
 
 ## Principles
 
@@ -69,7 +69,7 @@ OpenWA-plugins/
   "keywords": ["…"],
   "status": "stable",           // "stable" | "beta" | "development"
   "minOpenWAVersion": "0.7.0",  // enforced at install and boot load since OpenWA v0.24.0
-  "testedOpenWAVersion": "0.27.0" // newest host checked; describe the verification scope in the README
+  "testedOpenWAVersion": "0.30.0" // newest host checked; describe the verification scope in the README
 }
 ```
 
@@ -84,7 +84,7 @@ plugin:
 `catalog.mjs` only *warns* about i18n — a missing block, or a missing locale — but the test suite does
 not: `npm test` fails when a `stable` plugin is missing any supported locale, and when any plugin ships
 a locale that translates its name and description without translating every `configSchema` field. Treat
-i18n as gated; the warning is where you notice a gap, not where it is stopped. The shared locale list in `scripts/locales.mjs` matches OpenWA v0.27.0, including `id`; stable plugins must cover every non-English locale.
+i18n as gated; the warning is where you notice a gap, not where it is stopped. The shared locale list in `scripts/locales.mjs` matches OpenWA v0.30.0, including `id`; stable plugins must cover every non-English locale.
 
 ### `configSchema` field vocabulary (v0.7)
 
@@ -294,7 +294,10 @@ correct plugins and were each learned the hard way. Re-verify against OpenWA cor
    - `onDisable` now runs on graceful shutdown (SIGTERM), and `onUnload` on uninstall/in-place update.
 5. **Cross-host redirects cannot be blocked plugin-side** (`PluginNetRequestInit` exposes no redirect
    option) — redirect-based SSRF defense is the host's job; do not treat it as a plugin release gate.
-6. **`ctx.storage` charges per KEY, not just per byte.** Each key is one JSON file. Up to 0.25.x the
+6. **`ctx.storage` charges per KEY, not just per byte, and bounds key length.** Each key is one JSON
+   file. From 0.28.0 `set` rejects any key longer than 184 UTF-8 bytes ("Plugin storage key exceeds 184
+   UTF-8 bytes") so the base64url-encoded `key-*.json` filename fits within 255 bytes; bound composite
+   keys that embed session ids, URLs, JIDs or message ids. Up to 0.25.x the
    host re-measured the plugin's 50 MiB quota on **every** `set` with a synchronous readdir + stat of
    every existing key, on the host's event loop; from 0.26.0 it keeps a running total (one scan to seed
    it per host start, one `stat` per write), though `list()` is still a directory scan. The floors here
@@ -314,10 +317,12 @@ correct plugins and were each learned the hard way. Re-verify against OpenWA cor
    `webhook:before` subscription in a submitted plugin with the same scrutiny as an ingress route.
 9. **Host bounds, none of them visible from the types:** 30 s per lifecycle phase; 30 s per capability
    call, except the send verbs (`ctx.messages.sendText`, `ctx.messages.reply`, `ctx.conversations.send`)
-   at 120 s; 5 s per ingress webhook dispatch and 5 s for `healthCheck`;
+   at 120 s; 5 s per inline ingress webhook dispatch (or `Math.min(25000, simulateTypingMaxMs + 5000)`,
+   default 10 s / max 25 s, for queued ingress webhook dispatch from 0.28.0) and 5 s for `healthCheck`;
    5 s per hook dispatch, after which the host fails **open** with `{ continue: true }` and discards
    your result; 32 concurrent capability calls per plugin (the 33rd throws); 16 concurrent `net.fetch` calls
-   **globally** — that one is shared across all plugins and workers, not per plugin; 50 MiB storage; 10 MiB
+   **globally** — that one is shared across all plugins and workers, not per plugin; 50 MiB storage (and
+   184 UTF-8 bytes max per storage key on `set` from 0.28.0); 10 MiB
    fetch response body; 200 log lines / 10 s at 8 KiB per line.
 10. **The worker is crash containment, not a security boundary** (core says so itself). Plugin code can
    `require('fs')`/`('net')`/`('child_process')`; what the worker actually buys you is a 256 MB heap

@@ -369,3 +369,24 @@ test('character classes cannot hide overlap outside printable ASCII', () => {
     assert.equal(isSafeRegexPattern(pattern), false, pattern);
   }
 });
+
+test('zero-width assertions and nullable alternations do not break adjacent unbounded runs or separate ambiguous branches', () => {
+  for (const pattern of [
+    '.*\\b.*\\b.*!',
+    '.*\\B.*\\B.*!',
+    '.*^.*$.*!',
+    '.*(?=a).*(?=a).*!',
+    '.*(?!a).*(?!a).*!',
+    '.*(|a).*(|a).*!',
+    '^((a|aa)\\b)+$',
+    '^((a|aa)\\B)+$',
+    '^((a|aa)^)+$',
+    '^((a|aa)$)+$',
+    '(^a|^ab)+',
+  ]) {
+    assert.equal(isSafeRegexPattern(pattern), false, `should reject: ${pattern}`);
+  }
+  for (const pattern of ['^(ya|tidak)$', '\\b(one|two|three)\\b', '(^one|^two|^three)+']) {
+    assert.equal(isSafeRegexPattern(pattern), true, `should accept: ${pattern}`);
+  }
+});

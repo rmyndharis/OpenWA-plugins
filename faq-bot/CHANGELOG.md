@@ -8,6 +8,30 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.20] - 2026-11-10
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.30.0.
+- Cache compiled FAQ rules across inbound events and expose live configuration status through `healthCheck()`.
+
+### Fixed
+
+- Treat zero-width assertions and nullable groups as non-consuming in the regex safety screen.
+- Ignore shared location messages and forwarded messages, and fall back to the default cooldown when `fallbackCooldownSec` is blank.
+
+## [0.2.19] - 2026-11-08
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.29.1.
+
+## [0.2.18] - 2026-11-06
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.29.0.
+
 ## [0.2.17] - 2026-10-31
 
 ### Fixed

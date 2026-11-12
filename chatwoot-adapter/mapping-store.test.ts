@@ -505,3 +505,27 @@ test('a failed multi-entry eviction restores messages removed before the failure
   assert.deepEqual(entries.map(e => e.msg.id).sort(), ['m1', 'm2', 'm3']);
   assert.equal(entries.every(e => e.attempts === 2), true);
 });
+
+test('retry and bulk-backfill keys stay within OpenWA 0.28.0 184-byte storage key limit', async () => {
+  const inner = fakeStorage();
+  const capped: PluginStorage = {
+    ...inner,
+    set: async (k: string, v: unknown) => {
+      assert.ok(Buffer.byteLength(k, 'utf8') <= 184, `storage key exceeded 184 bytes (${Buffer.byteLength(k, 'utf8')}): ${k}`);
+      return inner.set(k, v);
+    },
+  };
+  const store = new MappingStore(capped, fakeMappings()).forDestination({
+    baseUrl: 'https://chatwoot-customer-support-production.example.com',
+    accountId: 12345,
+    inboxId: 67890,
+  });
+  const longSessionId = 's'.repeat(128);
+  const longMsgId = 'false_120363012345678901@g.us_3EB0123456789ABCDEF0123456789ABC_123456789012345@lid';
+  await store.setBulkBackfilled(longSessionId);
+  assert.equal(await store.isBulkBackfilled(longSessionId), true);
+  await store.enqueueRetry({ sessionId: longSessionId, chatId: '120363012345678901@g.us', msg: msg(longMsgId), enqueuedAt: 10 }, 80);
+  const retries = await store.listRetries();
+  assert.equal(retries.length, 1);
+  assert.equal(retries[0].msg.id, longMsgId);
+});

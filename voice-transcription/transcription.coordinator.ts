@@ -116,6 +116,15 @@ export class TranscriptionCoordinator {
     const { config, store, logger } = this.deps;
     try {
       // Not our concern → no event at all.
+      const lowerChatId = (msg.chatId ?? '').toLowerCase();
+      if (
+        msg.fromMe ||
+        msg.isStatusBroadcast ||
+        lowerChatId.endsWith('@newsletter') ||
+        lowerChatId.endsWith('@broadcast')
+      ) {
+        return;
+      }
       if (!config.enabledMessageTypes.includes(msg.type)) return;
       if (!msg.media) return;
 

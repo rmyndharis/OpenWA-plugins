@@ -76,7 +76,12 @@ test('onEnable rejects a baseUrl carrying a path (the address-bar copy-paste)', 
   // `base()` appends /api/v1/accounts/<id> to this value, so a URL copied out of the Chatwoot dashboard
   // produces .../app/accounts/2/settings/inboxes/8/api/v1/... and 404s every single request — while enable
   // succeeds and healthCheck stays green until the retries burn out.
-  for (const bad of ['https://chat.acme.com/app', 'https://chat.acme.com/app/accounts/2/settings/inboxes/8']) {
+  for (const bad of [
+    'https://chat.acme.com/app',
+    'https://chat.acme.com/app/accounts/2/settings/inboxes/8',
+    'https://chat.acme.com?foo=1',
+    'https://chat.acme.com#inbox',
+  ]) {
     const { ctx } = fakeCtx({ ...goodConfig, baseUrl: bad });
     await assert.rejects(new ChatwootAdapter().onEnable(ctx), /baseUrl must be the Chatwoot origin/);
   }
@@ -272,4 +277,30 @@ test('healthCheck reports chats whose history import gave up', async () => {
   assert.match(health.message ?? '', /1 chat\(s\) gave up on history import/);
   // A gave-up history import doesn't touch the live relay, so it must not flip the health verdict.
   assert.equal(health.healthy, true);
+});
+
+test('an invalid per-session config in message:received or message:sent warns and returns {continue:true} without throwing', async () => {
+  let live: Record<string, unknown> = { ...goodConfig };
+  const warnings: string[] = [];
+  const { ctx, cbs } = fakeCtx(goodConfig);
+  Object.defineProperty(ctx, 'config', { get: () => live });
+  ctx.logger.warn = (m: string) => warnings.push(m);
+  const plugin = new ChatwootAdapter();
+  await plugin.onEnable(ctx);
+
+  live = { ...goodConfig, baseUrl: 'http://insecure.example.com' };
+  const r1 = await cbs['message:received']({
+    sessionId: 'sess',
+    source: 'Engine',
+    data: { id: 'm1', fromMe: false, chatId: '628123@c.us', body: 'hi', type: 'chat', isGroup: false },
+  });
+  const r2 = await cbs['message:sent']({
+    sessionId: 'sess',
+    source: 'Engine',
+    data: { id: 'm2', fromMe: true, chatId: '628123@c.us', body: 'hi', type: 'chat', isGroup: false },
+  });
+  assert.deepEqual(r1, { continue: true });
+  assert.deepEqual(r2, { continue: true });
+  assert.equal(warnings.length, 2);
+  await plugin.onDisable();
 });

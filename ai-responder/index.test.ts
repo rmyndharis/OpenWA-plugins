@@ -125,6 +125,7 @@ test('events that are not a live inbound message are never claimed or sent to th
     ['no message id', msg({ id: '' })],
     ['no chat id', msg({ chatId: '' })],
     ['sent by this account', msg({ fromMe: true })],
+    ['forwarded message', msg({ isForwarded: true })],
     ['empty body', msg({ body: '' })],
     ['whitespace body', msg({ body: '  \n ' })],
     ['non-string body', msg({ body: 42 })],
@@ -281,6 +282,8 @@ test('apiBaseUrl must be https, or http on a loopback host, without credentials'
     'ftp://api.openai.com/v1',
     'https://user:pass@api.openai.com/v1',
     'http://user@localhost:11434/v1',
+    'https://api.openai.com/v1?x=1',
+    'https://api.openai.com/v1#frag',
   ]) {
     assert.throws(() => parseConfig({ ...BASE, apiBaseUrl: bad }), /apiBaseUrl/, JSON.stringify(bad));
   }
@@ -349,4 +352,15 @@ test('a failed send is logged', async () => {
   const errors = h.logs.filter(l => l.startsWith('error'));
   assert.equal(errors.length, 1);
   assert.match(errors[0], /send refused/);
+});
+
+test('strips multiple trailing slashes from apiBaseUrl and rejects replies that become empty after formatting', async () => {
+  const h = await enable({ ...BASE, apiBaseUrl: 'https://api.openai.com/v1///' });
+  h.state.respond = async () => okBody('`   `');
+  assert.deepEqual(await h.fire(msg()), CLAIMED);
+  assert.equal(h.fetches[0].url, 'https://api.openai.com/v1/chat/completions');
+  assert.deepEqual(h.replies, []);
+  const errors = h.logs.filter(l => l.startsWith('error'));
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /empty reply after formatting/);
 });

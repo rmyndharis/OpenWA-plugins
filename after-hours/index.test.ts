@@ -366,6 +366,8 @@ test('a message delivered already deleted draws no away reply, an empty image st
     });
 
   assert.deepEqual(await fire('628111111111@c.us', 'revoked', ''), { continue: true }, 'a tombstone is not claimed');
+  assert.deepEqual(await fire('628111111111@c.us', 'call', ''), { continue: true }, 'a call placeholder is not claimed');
+  assert.deepEqual(await fire('628111111111@c.us', 'masked', ''), { continue: true }, 'a masked placeholder is not claimed');
   assert.deepEqual(replies, [], 'nothing is sent for a deleted message');
   // The cooldown slot was not spent either: the same chat is answered when it writes for real.
   assert.deepEqual(await fire('628111111111@c.us', 'text', 'halo'), { continue: false });

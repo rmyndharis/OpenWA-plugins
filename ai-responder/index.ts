@@ -38,9 +38,9 @@ export function parseConfig(raw: Record<string, unknown>): ResponderConfig {
     throw new Error('ai-responder: apiBaseUrl must be a valid URL');
   }
   const loopbackHttp = url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname);
-  if ((url.protocol !== 'https:' && !loopbackHttp) || url.username || url.password) {
+  if ((url.protocol !== 'https:' && !loopbackHttp) || url.username || url.password || url.search || url.hash) {
     throw new Error(
-      'ai-responder: apiBaseUrl must be an https URL without embedded credentials (http only for localhost, 127.0.0.1 or [::1])',
+      'ai-responder: apiBaseUrl must be an https URL without embedded credentials, query string or fragment (http only for localhost, 127.0.0.1 or [::1])',
     );
   }
 
@@ -133,7 +133,7 @@ export default class AIResponder implements IPlugin {
     const pass = { continue: true };
     if (hook.source !== 'Engine' || !hook.sessionId) return pass;
     const m = (hook.data ?? {}) as Partial<IncomingMessage>;
-    if (m.fromMe || typeof m.body !== 'string' || !m.body.trim() || !m.chatId || !m.id) return pass;
+    if (m.fromMe || m.isForwarded || typeof m.body !== 'string' || !m.body.trim() || !m.chatId || !m.id) return pass;
     // A contact card carries its vCard in the body, a poll its question, and from 0.23.5 a Baileys order
     // its note and a product card its title: text nobody typed at this bot, and a vCard would send a
     // contact's details to the provider. 'unknown' stays admitted, since business button and list
@@ -233,6 +233,8 @@ export default class AIResponder implements IPlugin {
     body: string,
   ): Promise<void> {
     const text = await fetchChatCompletion(ctx.net.fetch.bind(ctx.net), cfg, truncate(body.trim(), cfg.maxInputChars));
-    await ctx.messages.reply(sessionId, chatId, messageId, mdToWhatsApp(text.trim()));
+    const formatted = mdToWhatsApp(text.trim()).trim();
+    if (!formatted) throw new Error('AI API returned an empty reply after formatting');
+    await ctx.messages.reply(sessionId, chatId, messageId, formatted);
   }
 }

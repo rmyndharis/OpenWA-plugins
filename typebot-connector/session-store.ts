@@ -1,12 +1,26 @@
 import type { PluginStorage } from '../types/openwa';
 import type { SessionState } from './typebot-types.ts';
 
+function boundStorageKey(key: string): string {
+  if (Buffer.byteLength(key, 'utf8') <= 184) return key;
+  let h1 = 0x811c9dc5, h2 = 0xdeadbeef;
+  for (let i = 0; i < key.length; i++) {
+    const c = key.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193);
+    h2 = Math.imul(h2 ^ c, 0x85ebca6b);
+  }
+  const suffix = `:${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}`;
+  let prefix = key.slice(0, 184 - suffix.length).replace(/[\ud800-\udbff]$/, '');
+  while (Buffer.byteLength(prefix, 'utf8') > 184 - suffix.length) prefix = prefix.slice(0, -1).replace(/[\ud800-\udbff]$/, '');
+  return `${prefix}${suffix}`;
+}
+
 // Thin per-key wrapper over ctx.storage. One document per session key; the idle-timeout and start-vs-continue
 // decisions live in turn.ts (they need the config clock).
 export class SessionStore {
   constructor(private readonly storage: PluginStorage) {}
   private k(key: string): string {
-    return `sess:${key}`;
+    return boundStorageKey(`sess:${key}`);
   }
   get(key: string): Promise<SessionState | null> {
     return this.storage.get<SessionState>(this.k(key));

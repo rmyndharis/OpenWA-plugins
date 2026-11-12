@@ -8,6 +8,36 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.3.17] - 2026-11-10
+
+### Fixed
+
+- Exclude host capability-concurrency rejections from the LibreTranslate circuit breaker failure count.
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.30.0.
+
+## [1.3.16] - 2026-11-08
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.29.1.
+
+### Fixed
+
+- Translate forwarded group messages into the group's languages without updating the forwarder's learned language or running `/tr` commands.
+
+## [1.3.15] - 2026-11-06
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.29.0.
+
+### Fixed
+
+- Bound per-group storage keys to 184 UTF-8 bytes for long session and group identifiers.
+
 ## [1.3.14] - 2026-10-31
 
 ### Fixed

@@ -122,6 +122,16 @@ test('skips a non-enabled message type — no STT, no event', async () => {
   assert.equal(deliveries.length, 0);
 });
 
+test('skips self-sent, status broadcast, newsletter, and broadcast voice notes', async () => {
+  const { co, provider, deliveries } = setup({});
+  await co.handle('s1', voiceMsg({ id: 'm-self', fromMe: true }));
+  await co.handle('s1', voiceMsg({ id: 'm-status', isStatusBroadcast: true }));
+  await co.handle('s1', voiceMsg({ id: 'm-news', chatId: '1203630@newsletter' }));
+  await co.handle('s1', voiceMsg({ id: 'm-bcast', chatId: 'status@broadcast' }));
+  assert.equal(provider.calls.length, 0);
+  assert.equal(deliveries.length, 0);
+});
+
 test('skips when media is absent — no event', async () => {
   const { co, provider, deliveries } = setup({});
   await co.handle('s1', voiceMsg({ media: undefined }));

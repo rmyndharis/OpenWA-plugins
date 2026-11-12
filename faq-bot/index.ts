@@ -28,7 +28,11 @@ export function parseConfig(raw: Record<string, unknown>): {
     );
   }
 
-  const cooldown = Number(raw.fallbackCooldownSec ?? 600);
+  const rawCooldown =
+    typeof raw.fallbackCooldownSec === 'string' && !raw.fallbackCooldownSec.trim()
+      ? undefined
+      : raw.fallbackCooldownSec;
+  const cooldown = Number(rawCooldown ?? 600);
   return {
     rules: parsed.rules,
     skipped: parsed.skipped,
@@ -60,12 +64,14 @@ const MATCHED_REPLY_COOLDOWN_MS = 10_000;
 const LATE_AFTER_MS = 5 * 60_000;
 
 export default class FaqBot implements IPlugin {
+  private ctx: PluginContext | null = null;
   private readonly fallbackAt = new Map<string, number>();
   /** `${sessionId}:${chatId}:${pattern}` -> last answer for that rule, for MATCHED_REPLY_COOLDOWN_MS. */
   private readonly matchedAt = new Map<string, number>();
   private readonly replyAttempts = new Map<string, object>();
 
   async onEnable(ctx: PluginContext): Promise<void> {
+    this.ctx = ctx;
     this.warnSkipped(ctx); // fail-fast + surface any invalid regex rules at enable
     ctx.registerHook(
       'message:received',
@@ -76,6 +82,16 @@ export default class FaqBot implements IPlugin {
 
   async onConfigChange(ctx: PluginContext): Promise<void> {
     this.warnSkipped(ctx); // re-validate on change (fail-fast feedback + fresh skipped warning)
+  }
+
+  async healthCheck(): Promise<{ healthy: boolean; message?: string }> {
+    if (!this.ctx) return { healthy: false, message: 'faq-bot: not enabled' };
+    try {
+      const { rules } = parseConfig(this.ctx.config);
+      return { healthy: true, message: `faq-bot: ${rules.length} rule(s)` };
+    } catch (e) {
+      return { healthy: false, message: e instanceof Error ? e.message : String(e) };
+    }
   }
 
   private warnSkipped(ctx: PluginContext): void {
@@ -105,7 +121,16 @@ export default class FaqBot implements IPlugin {
     // list replies land there on whatsapp-web.js (Baileys delivers them as 'text' from 0.23.6, as
     // 'unknown' before) and are real answers to a question this bot asked. A Baileys whole-catalog share
     // also arrives as 'unknown' with the catalog title as the body, and cannot be told apart from those.
-    if (m.type === 'contact' || m.type === 'poll' || m.type === 'order' || m.type === 'product') return false;
+    if (m.isForwarded) return false;
+    if (
+      m.type === 'contact' ||
+      m.type === 'poll' ||
+      m.type === 'order' ||
+      m.type === 'product' ||
+      m.type === 'location'
+    ) {
+      return false;
+    }
 
     // Re-parse per event so a per-session config override (resolved by the host for this hook fire) is
     // honored — a snapshot cached at enable would ignore overrides set via the dashboard after enable.
