@@ -63,6 +63,8 @@ Upload `rocketchat-adapter.zip` in OpenWA → Plugins → Install. It installs d
 | `baseUrl` | yes | Rocket.Chat HTTPS origin only, without paths, credentials, queries or fragments. |
 | `sessionId` | yes | Exact OpenWA session UUID; must also match the ingress instance's session scope. |
 | `department` | no | Department name or ID supplied to visitor registration. Changing it starts a separate mapping namespace. |
+| `deadLetterAction` | no | `none` (default), `replay` or `clear`. |
+| `deadLetterActionId` | for replay/clear | Fresh operation ID: 1–100 letters, digits, hyphens or underscores. |
 
 ### Configure and activate
 
@@ -97,21 +99,20 @@ Use an unscoped ADMIN key for these management routes. The webhook secret is sep
 
 ### Docker laboratory
 
-For an isolated Docker setup, put OpenWA and Rocket.Chat on the same Compose network with service names `openwa` and `rocketchat`. Rocket.Chat also needs its supported MongoDB replica set and any other services required by its version. Use the [official Docker deployment guide](https://docs.rocket.chat/docs/deploy-with-docker-docker-compose) for that stack; this plugin does not ship Rocket.Chat or provision its administrator.
+Use the [official Docker deployment guide](https://docs.rocket.chat/docs/deploy-with-docker-docker-compose). Keep published ports on localhost and put the services on a shared private network.
 
-In the OpenWA service configuration, add the narrow local exception:
+The distributed plugin accepts **HTTPS only**, including in a lab. Put a TLS reverse proxy in front of Rocket.Chat, use its HTTPS origin in both configs, and install the lab CA into OpenWA's Node trust store using `NODE_EXTRA_CA_CERTS`. For an internal hostname, add only that hostname to the host's `SSRF_ALLOWED_HOSTS`. Do not disable TLS verification or SSRF protection globally. No lab hostname is shipped in the manifest.
 
-```yaml
-environment:
-  SSRF_ALLOWED_HOSTS: rocketchat
-```
+Rocket.Chat may call OpenWA's internal ingress URL `http://openwa:2785/api/ingress/rocketchat-adapter/support/omnichannel` inside an isolated Docker lab. Public ingress must use HTTPS.
 
-Recreate the OpenWA container after changing its environment. Use `baseUrl=http://rocketchat:3000` in **both** the plugin and ingress instance configs; `localhost` inside a container refers to that container, not the other service.
+### Dead-letter maintenance
 
-- Inside the shared Docker network, use `baseUrl=http://rocketchat:3000`.
-- This exact HTTP origin is statically declared in `net.allow`; other HTTP origins are rejected by config validation. The lab operator must also set `SSRF_ALLOWED_HOSTS=rocketchat` on OpenWA. HTTPS config origins use `net.allowConfigHosts`; private HTTPS endpoints likewise require an explicit host SSRF exception.
-- Rocket.Chat calls the internal ingress URL `http://openwa:2785/api/ingress/rocketchat-adapter/support/omnichannel`.
-- Keep published ports bound to localhost. Plain HTTP and unregistered local workspaces are for isolated development only; do not disable SSRF or TLS verification globally.
+The plugin settings expose `deadLetterAction` (`none`, `replay`, `clear`) and `deadLetterActionId`. After resolving an outage, select `replay` and provide a fresh ID, for example `retry-2026-11-11`. Save the config for the affected origin/department/session. The action also runs when that resolved per-session config next dispatches an event. Base-config maintenance runs on save/enable without network calls.
+
+- `replay` resets retained failures into the pending queue up to its available capacity. Ambiguous deliveries retain their original room and visitor token. Entries conflicting with a newer visitor/room mapping stay retained; they are not silently redirected.
+- `clear` discards retained failed messages only. It does not delete visitor mappings or active pending work.
+- A repeated action ID is a no-op across saves/restarts (last 100 IDs retained). Use a new ID for another attempt; the fields may remain saved unchanged. Health reports pending/dead counts for active destinations. Inspect the maintenance count log to see how many were replayed, cleared or retained.
+- Retention is at most 100 dead letters for seven days, independent of the 100 live pending slots. Expired/oldest records are removed on the next state mutation, with a count-only warning. Clear/export failures before that deadline if needed.
 
 ## Compatibility
 
@@ -127,12 +128,12 @@ Supported by re-reading `ctx.config` for each hook/webhook. This first version e
 
 - One-to-one `text` messages only, at most 4096 characters. No media, captions, groups, calls, contacts, polls, edits, deletions, quoted replies, own-phone message mirroring or automated handover. Unsupported inputs are ignored.
 - Disable overlapping bot responders for the test session. This plugin is an observer at priority 20; it does not silence bots when an agent takes a room.
-- Maximum 500 chat mappings and 100 combined pending/dead-letter entries per destination/session. Queue exhaustion or storage errors surface in health/logs; a rejected enqueue is not guaranteed recoverable.
-- Inbound work runs off the hook path. There is a crash window before enqueue is persisted. One item is processed per tick (10 seconds) in FIFO order, with five attempts and increasing delays. Exhausted items stay in storage for inspection; there is no automated replay or purge UI yet. A temporarily failing first item blocks later queued items until it succeeds or dead-letters.
+- At most 500 active/recent chat mappings per destination/session. Least recently used mappings without pending/in-flight work are evicted when a new contact arrives; this is not a lifetime contact ceiling. Old room replies after eviction are ignored. Dead letters keep a token snapshot for replay. If every mapping is pinned, enqueue fails explicitly until work completes. Live pending capacity is 100, separate from dead-letter retention. A rejected enqueue/storage failure is not guaranteed recoverable.
+- Inbound work runs off the hook path; a crash before durable enqueue can lose that event. Four workers drain up to 100 due items per pump, preserving FIFO within each chat. A retrying chat does not block other customers. Provider I/O runs outside the short storage lock, so slow Rocket.Chat calls do not hold up agent replies. Five attempts use increasing delays before dead-letter retention.
 - Pending queues survive restarts, but draining resumes only after that resolved destination/session dispatches a hook or webhook. In-memory destination caches are cleared on disable or config changes.
 - An ambiguous Rocket.Chat send is reconciled against the last 100 messages in its pinned room using the deterministic message ID. It is never automatically moved to a new room. A closed/unreadable room or an old message outside that window can leave work dead-lettered for manual resolution.
 - Outbound delivery is **at least once**. Successful sends are marked afterward: a crash, storage failure or ambiguous WhatsApp timeout can produce a duplicate on retry. At most 500 recent reply IDs and 500 successful inbound IDs are remembered per namespace. Host ingress also deduplicates byte-identical webhook bodies.
-- Relay exceptions deliberately omit provider response bodies, URLs containing visitor tokens, message text and contact identities. Health remains degraded after a failure until re-enable; inspect and resolve retained work first. “Healthy” means no failures observed since enable, not verified provider connectivity.
+- Relay exceptions deliberately omit provider response bodies, URLs containing visitor tokens, message text and contact identities. Health retains a failure indication until re-enable or a valid config/maintenance save; inspect and resolve retained work first. “Healthy” means no failures observed since enable, not verified provider connectivity.
 
 ## Verification and troubleshooting
 
@@ -147,11 +148,13 @@ Supported by re-reading `ctx.config` for each hook/webhook. This first version e
 | Webhook returns 401 | The Rocket.Chat Secret Token must match the ingress instance secret; do not use the OpenWA admin key here. |
 | Authenticated webhook returns 503 | The bound WhatsApp session must be connected and the plugin restored/enabled; the route has a session-alive preflight. |
 | No Omnichannel room appears | Check the origin, exact session UUID, plugin activation, agent availability and department. A provider/room failure is retained for retry. |
-| Network request refused | For public deployments use a reachable HTTPS origin. For the documented Docker origin check service names, the shared network and `SSRF_ALLOWED_HOSTS=rocketchat`. |
-| Agent reply is not delivered | Match plugin and instance origin/department/session settings, select Agent Messages, confirm plain text and inspect plugin health/host logs. Unknown rooms are never used as recipients. |
+| Network request refused | For public deployments use a reachable HTTPS origin. For a Docker lab check the HTTPS proxy, CA trust and exact internal-host SSRF exception. |
+| Agent reply is not delivered | Match plugin and instance origin/department/session settings, select Agent Messages, confirm plain text and inspect plugin health/host logs. Unknown rooms or mismatched visitor tokens are acknowledged and ignored, without sending to WhatsApp or degrading health. |
 | Health remains degraded after recovery | Inspect retained pending/dead-letter work and fix the cause before re-enabling. Do not delete plugin state to clear the warning: it contains visitor credentials, room mappings and dedup markers. |
 
 Local verification used OpenWA 0.27.1 and Rocket.Chat 8.0.1. Automated tests cover protocol filtering, retries, persistence, destination/session isolation and lifecycle behavior; real visitor/room/message/history APIs were exercised in Docker. The tester also reported successful bidirectional WhatsApp messaging, a restart, a second contact and no duplicate messages in those checks. This is limited manual evidence, not a guarantee for every deployment or exactly-once delivery.
+
+The adapter sends a phone number when the chat JID is a real telephone identity (`@c.us` or `@s.whatsapp.net`, device suffix stripped). Privacy IDs (`@lid`) are never presented as telephone numbers.
 
 ## Development
 

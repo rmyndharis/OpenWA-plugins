@@ -30,9 +30,14 @@ export class RocketClient {
     return result;
   }
 
-  async visitor(token: string, name: string): Promise<void> {
+  async visitor(token: string, name: string, phone?: string): Promise<void> {
     await this.request('livechat/visitor', {
-      visitor: { token, name, ...(this.config.department ? { department: this.config.department } : {}) },
+      visitor: {
+        token,
+        name,
+        ...(phone ? { phone } : {}),
+        ...(this.config.department ? { department: this.config.department } : {}),
+      },
     });
   }
 

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { IncomingMessage, PluginContext, WebhookRequest, ConversationSendEnvelope } from '../types/openwa';
-import { Bridge, MAX_ATTEMPTS } from './bridge.ts';
+import { Bridge, MAX_ATTEMPTS, MAX_CHATS, MAX_DEAD, DEAD_RETENTION_MS } from './bridge.ts';
 import { readConfig, stateKey } from './config.ts';
 
 const config = readConfig({ baseUrl: 'https://rocket.example', sessionId: 'session-a' });
@@ -29,6 +29,7 @@ function harness() {
   let failCompletion = false;
   let sendError = false;
   const ctx = {
+    logger: { warn: () => {}, log: () => {} },
     storage: {
       get: async (key: string) => structuredClone(rows.get(key) ?? null),
       set: async (key: string, value: unknown) => {
@@ -94,6 +95,7 @@ function harness() {
     ...over,
   });
   return {
+    ctx,
     make,
     state,
     req,
@@ -232,7 +234,7 @@ test('unverified, unscoped, foreign-session and wrong-visitor deliveries cannot 
   }
   const body = JSON.parse(h.req().body);
   body.visitor.token = 'wrong';
-  await assert.rejects(h.bridge.webhook(h.req({ body: JSON.stringify(body) })));
+  await assert.doesNotReject(h.bridge.webhook(h.req({ body: JSON.stringify(body) })));
   assert.equal(h.sends.length, 0);
 });
 
@@ -243,7 +245,7 @@ test('same provider room id cannot leak across destinations or sessions', async 
     { ...config, sessionId: 'other' },
     { ...config, department: 'other' },
   ]) {
-    await assert.rejects(h.make(cfg).webhook(h.req({ sessionId: cfg.sessionId })));
+    await assert.doesNotReject(h.make(cfg).webhook(h.req({ sessionId: cfg.sessionId })));
   }
   assert.equal(h.sends.length, 0);
 });
@@ -282,4 +284,159 @@ test('identical WhatsApp IDs in different chats do not suppress one another', as
   await bridge.pump();
   assert.equal(h.posts.length, 2);
   assert.equal(h.state().inboundSeen.length, 2);
+});
+
+test('dead letters do not consume live capacity and can be cleared idempotently', async () => {
+  const h = await seeded();
+  const state = h.state();
+  state.dead = Array.from({ length: MAX_DEAD }, (_, i) => ({
+    id: `dead-${i}`,
+    chatId: message().chatId,
+    text: 'old',
+    name: 'test',
+    attempts: 5,
+    nextAt: 0,
+    failedAt: 1,
+  }));
+  h.rows.set(stateKey(config), state);
+  await h.bridge.enqueue(message('new'));
+  assert.equal(h.state().pending.length, 1);
+  assert.equal((await h.bridge.maintenance('clear', 'clear-1')).cleared, MAX_DEAD);
+  assert.equal((await h.bridge.maintenance('clear', 'clear-1')).cleared, 0);
+  assert.equal(h.state().links.length, 1);
+});
+
+test('dead letters can be replayed after restart without resetting on repeated saves', async () => {
+  const h = harness();
+  const bridge = h.make();
+  h.offline(true);
+  await bridge.enqueue(message());
+  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+    await assert.rejects(bridge.pump());
+    h.tick();
+  }
+  const restored = h.make();
+  assert.equal((await restored.maintenance('replay', 'retry-1')).replayed, 1);
+  assert.equal((await restored.maintenance('replay', 'retry-1')).replayed, 0);
+  h.offline(false);
+  await restored.pump();
+  assert.equal(h.posts.length, 1);
+});
+
+test('LRU eviction removes inactive mappings but protects pending contacts', async () => {
+  const h = await seeded();
+  const state = h.state();
+  state.links = Array.from({ length: MAX_CHATS }, (_, i) => ({
+    chatId: `${15550000000 + i}@c.us`,
+    token: `token-${i}`,
+    lastUsedAt: i,
+  }));
+  state.pending = [
+    { id: 'protected', chatId: state.links[0].chatId, text: 'pending', name: 'test', attempts: 0, nextAt: 0 },
+  ];
+  h.rows.set(stateKey(config), state);
+  await h.bridge.enqueue(message('new-contact'));
+  assert.equal(h.state().links.length, MAX_CHATS);
+  assert.ok(h.state().links.some((l) => l.chatId === state.links[0].chatId));
+  assert.ok(!h.state().links.some((l) => l.chatId === state.links[1].chatId));
+});
+
+test('a burst is drained without a ten-second gap between lines', async () => {
+  const h = harness();
+  const bridge = h.make();
+  for (let i = 0; i < 3; i++) await bridge.enqueue(message(`burst-${i}`));
+  await bridge.pump();
+  assert.equal(h.posts.length, 3);
+});
+
+test('old dead letters expire without discarding pending work', async () => {
+  const h = await seeded();
+  const state = h.state();
+  state.dead = [
+    {
+      id: 'expired',
+      chatId: message().chatId,
+      text: 'old',
+      name: 'test',
+      attempts: 5,
+      nextAt: 0,
+      failedAt: -DEAD_RETENTION_MS,
+    },
+  ];
+  h.rows.set(stateKey(config), state);
+  await h.bridge.enqueue(message('new'));
+  assert.equal(h.state().dead.length, 0);
+  assert.equal(h.state().pending.length, 1);
+});
+
+test('slow Rocket.Chat I/O cannot block an agent reply or a storage enqueue', async () => {
+  const h = await seeded();
+  const original = h.ctx.net.fetch;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  h.ctx.net.fetch = async (url, init) => {
+    await held;
+    return original(url, init);
+  };
+  await h.bridge.enqueue(message('blocked'));
+  const pumping = h.bridge.pump();
+  await new Promise((resolve) => setImmediate(resolve));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      Promise.all([h.bridge.webhook(h.req()), h.bridge.enqueue(message('another'))]),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('global state lock held by network')), 500);
+      }),
+    ]);
+    assert.equal(h.sends.length, 1);
+  } finally {
+    clearTimeout(timer);
+    release();
+    await pumping;
+  }
+});
+
+test('one failing chat does not hold back another customer', async () => {
+  const h = harness();
+  const original = h.ctx.net.fetch;
+  h.ctx.net.fetch = async (url, init) => {
+    if (typeof init?.body === 'string' && JSON.parse(init.body).visitor?.name === 'blocked')
+      throw new Error('no agent');
+    return original(url, init);
+  };
+  const bridge = h.make();
+  await bridge.enqueue({ ...message('bad'), contact: { pushName: 'blocked' } });
+  await bridge.enqueue({ ...message('good'), chatId: '15550002222@c.us' });
+  await assert.rejects(bridge.pump());
+  assert.equal(h.posts.length, 1);
+  assert.equal(h.state().pending.length, 1);
+});
+
+test('phone extraction never turns a privacy id into a telephone number', async () => {
+  const { phoneFromChat } = await import('./bridge.ts');
+  assert.equal(phoneFromChat('15550001111:2@s.whatsapp.net'), '+15550001111');
+  assert.equal(phoneFromChat('15550001111@c.us'), '+15550001111');
+  assert.equal(phoneFromChat('15550001111@lid'), undefined);
+  assert.equal(phoneFromChat('15550001111@g.us'), undefined);
+});
+
+test('dead-letter count retention is bounded independently of live slots', async () => {
+  const h = await seeded();
+  const state = h.state();
+  state.dead = Array.from({ length: MAX_DEAD + 20 }, (_, i) => ({
+    id: `old-${i}`,
+    chatId: message().chatId,
+    text: 'old',
+    name: 'test',
+    attempts: 5,
+    nextAt: 0,
+    failedAt: 1,
+  }));
+  h.rows.set(stateKey(config), state);
+  await h.bridge.enqueue(message('fresh'));
+  assert.equal(h.state().dead.length, MAX_DEAD);
+  assert.equal(h.state().pending.length, 1);
 });

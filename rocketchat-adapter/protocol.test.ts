@@ -57,12 +57,9 @@ test('configuration validates origin and required session and never permits arbi
     readConfig({ baseUrl: 'https://rocket.example', sessionId: 'session' }).baseUrl,
     'https://rocket.example',
   );
-  assert.equal(
-    readConfig({ baseUrl: 'http://rocketchat:3000', sessionId: 'session' }).baseUrl,
-    'http://rocketchat:3000',
-  );
   for (const baseUrl of [
     'http://localhost:3000',
+    'http://rocketchat:3000',
     'https://user:secret@rocket.example',
     'https://rocket.example/admin',
     'https://rocket.example?secret=x',
@@ -90,4 +87,11 @@ test('empty attachment arrays on plain text do not hide an agent reply', () => {
     messages: [{ _id: 'reply', agentId: 'agent', msg: 'text', files: [], attachments: [] }],
   });
   assert.deepEqual(parseAgentEvent(body)?.messages, [{ id: 'reply', text: 'text' }]);
+});
+
+test('maintenance requires a fresh syntactically valid action id', () => {
+  const base = { baseUrl: 'https://rocket.example', sessionId: 's1' };
+  assert.throws(() => readConfig({ ...base, deadLetterAction: 'clear' }));
+  assert.throws(() => readConfig({ ...base, deadLetterAction: 'other' }));
+  assert.doesNotThrow(() => readConfig({ ...base, deadLetterAction: 'replay', deadLetterActionId: 'retry-1' }));
 });

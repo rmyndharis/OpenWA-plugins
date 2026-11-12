@@ -115,3 +115,31 @@ test('invalid config changes retire existing jobs and cannot report healthy', as
     await plugin.onDisable();
   }
 });
+
+test('a widget room webhook is ignored without degrading plugin health', async () => {
+  const h = harness();
+  const plugin = new Adapter();
+  await plugin.onEnable(h.ctx);
+  try {
+    await h.routes.get('omnichannel')!({
+      verified: true,
+      sessionId: 'session-a',
+      instanceId: 'support',
+      method: 'POST',
+      headers: {},
+      query: {},
+      deliveryId: 'widget',
+      rawBody: '',
+      body: JSON.stringify({
+        type: 'Message',
+        _id: 'widget-room',
+        visitor: { token: 'widget-token' },
+        messages: [{ _id: 'reply', agentId: 'agent', msg: 'widget reply' }],
+      }),
+    });
+    assert.equal((await plugin.healthCheck()).healthy, true);
+    assert.equal(h.writes(), 0);
+  } finally {
+    await plugin.onDisable();
+  }
+});

@@ -24,3 +24,13 @@ test('uses serialized capability responses and validates successful provider bod
     await assert.rejects(client.visitor('token', 'name'));
   }
 });
+
+test('visitor registration includes an explicitly supplied phone', async () => {
+  let payload = '';
+  const client = new RocketClient(async (_url, init) => {
+    payload = String(init?.body);
+    return { ok: true, status: 200, statusText: 'OK', headers: {}, body: '{"success":true}' };
+  }, config);
+  await client.visitor('token', 'Visitor', '+15550001111');
+  assert.equal(JSON.parse(payload).visitor.phone, '+15550001111');
+});

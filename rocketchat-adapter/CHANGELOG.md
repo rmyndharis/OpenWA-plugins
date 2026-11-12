@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Separate bounded dead-letter retention from live capacity; add idempotent clear/replay controls.
+- Ignore unrelated workspace rooms and reclaim inactive visitor mappings with LRU eviction.
+- Drain due messages per chat with bounded concurrency and no provider I/O under the storage lock.
+- Include phone numbers only for telephone JIDs; complete all supported translations.
+- Require configured HTTPS origins instead of shipping a hard-coded laboratory grant.
+
 ## [0.1.0] - 2026-11-02
 
 ### Added

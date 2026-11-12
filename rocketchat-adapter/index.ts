@@ -1,5 +1,5 @@
 import type { IPlugin, PluginContext, IncomingMessage } from '../types/openwa';
-import { readConfig, stateKey } from './config.ts';
+import { readConfig, stateKey, type Config } from './config.ts';
 import { inboundText } from './protocol.ts';
 import { Bridge } from './bridge.ts';
 
@@ -17,6 +17,10 @@ export default class RocketChatAdapter implements IPlugin {
     readConfig(ctx.config);
     this.active = true;
     this.failures = 0;
+    const initialConfig = readConfig(ctx.config);
+    if (initialConfig.deadLetterAction !== 'none' && initialConfig.deadLetterAction) {
+      await this.maintain(ctx, this.bridge(ctx), initialConfig);
+    }
     ctx.registerHook(
       'message:received',
       async (hook) => {
@@ -27,8 +31,8 @@ export default class RocketChatAdapter implements IPlugin {
           if (hook.sessionId !== config.sessionId) return { continue: true };
           const bridge = this.bridge(ctx);
           // Off the ~5-second hook path. The bounded persistent queue owns retries after enqueue.
-          void bridge
-            .enqueue(message)
+          void this.maintain(ctx, bridge, config)
+            .then(() => bridge.enqueue(message))
             .then(() => bridge.pump())
             .catch(() => this.failure(ctx));
         } catch {
@@ -69,6 +73,15 @@ export default class RocketChatAdapter implements IPlugin {
     this.jobs.set(key, bridge);
     return bridge;
   }
+  private async maintain(ctx: PluginContext, bridge: Bridge, config: Config): Promise<void> {
+    if (!config.deadLetterAction || config.deadLetterAction === 'none') return;
+    const result = await bridge.maintenance(config.deadLetterAction, config.deadLetterActionId!);
+    if (result.replayed || result.cleared) {
+      ctx.logger.log(
+        `Rocket.Chat maintenance: ${result.replayed} replayed, ${result.cleared} cleared, ${result.remaining} retained`,
+      );
+    }
+  }
   private failure(ctx: PluginContext): void {
     this.failures++;
     ctx.logger.error(
@@ -86,8 +99,11 @@ export default class RocketChatAdapter implements IPlugin {
     this.active = false;
     this.generation++;
     this.jobs.clear(); // retire old destinations even when the replacement config is invalid
-    readConfig(ctx.config);
+    const config = readConfig(ctx.config);
     this.active = true;
+    this.failures = 0;
+    if (config.deadLetterAction && config.deadLetterAction !== 'none')
+      await this.maintain(ctx, this.bridge(ctx), config);
   }
   async onDisable(): Promise<void> {
     this.stop();
@@ -96,12 +112,15 @@ export default class RocketChatAdapter implements IPlugin {
     this.stop();
   }
   async healthCheck(): Promise<{ healthy: boolean; message: string }> {
+    const queues = await Promise.all([...this.jobs.values()].map((bridge) => bridge.status()));
+    const dead = queues.reduce((count, queue) => count + queue.dead, 0);
+    const pending = queues.reduce((count, queue) => count + queue.pending, 0);
     return {
-      healthy: this.active && this.failures === 0,
+      healthy: this.active && this.failures === 0 && dead === 0,
       message: this.failures
         ? `${this.failures} relay failure(s) since enable; inspect retained queues; re-enable after resolving`
         : this.active
-          ? 'Enabled; provider connectivity and WhatsApp delivery require a live test'
+          ? `Enabled; ${pending} pending, ${dead} dead letter(s); provider connectivity requires a live test`
           : 'Disabled or invalid configuration',
     };
   }
