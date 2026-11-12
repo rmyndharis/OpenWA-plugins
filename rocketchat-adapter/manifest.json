@@ -1,0 +1,406 @@
+{
+  "id": "rocketchat-adapter",
+  "name": "Rocket.Chat Adapter",
+  "version": "0.1.0",
+  "type": "extension",
+  "main": "dist/index.js",
+  "description": "Development preview: relay direct WhatsApp text messages to Rocket.Chat Omnichannel and agent text replies back to WhatsApp.",
+  "author": "yederlv",
+  "license": "MIT",
+  "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/rocketchat-adapter",
+  "repository": "https://github.com/rmyndharis/OpenWA-plugins",
+  "keywords": [
+    "rocketchat",
+    "omnichannel",
+    "whatsapp",
+    "helpdesk"
+  ],
+  "status": "development",
+  "minOpenWAVersion": "0.30.0",
+  "testedOpenWAVersion": "0.30.0",
+  "sdkVersion": "1",
+  "permissions": [
+    "net:fetch",
+    "conversation:send",
+    "webhook:ingress",
+    "storage:use",
+    "engine:read"
+  ],
+  "net": {
+    "allow": [],
+    "allowConfigHosts": [
+      "baseUrl"
+    ]
+  },
+  "sessionScoped": true,
+  "sessions": [
+    "*"
+  ],
+  "hooks": [
+    "message:received"
+  ],
+  "ingress": [
+    {
+      "route": "omnichannel",
+      "mode": "async",
+      "verify": "core",
+      "maxBodyBytes": 262144,
+      "signature": {
+        "scheme": "shared-secret",
+        "header": "X-RocketChat-Livechat-Token"
+      },
+      "dedupOn": "body",
+      "conversationId": {
+        "jsonPointer": "/_id"
+      },
+      "response": {
+        "preflight": [
+          {
+            "type": "session-alive"
+          }
+        ],
+        "ack": {
+          "status": 200,
+          "body": "ok",
+          "headers": {
+            "Content-Type": "text/plain"
+          }
+        }
+      }
+    }
+  ],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "title": "Rocket.Chat origin",
+        "required": true,
+        "description": "Rocket.Chat HTTPS origin only, without paths or embedded credentials."
+      },
+      "sessionId": {
+        "type": "string",
+        "title": "WhatsApp session ID",
+        "required": true,
+        "description": "Exact OpenWA session UUID. Bind the ingress instance to this same session."
+      },
+      "department": {
+        "type": "string",
+        "title": "Omnichannel department",
+        "description": "Optional Rocket.Chat department name or ID used when registering visitors. Changing it creates a new mapping namespace."
+      },
+      "deadLetterAction": {
+        "type": "string",
+        "title": "Dead-letter action",
+        "enum": [
+          "none",
+          "replay",
+          "clear"
+        ],
+        "default": "none",
+        "description": "Operator maintenance: replay retained failures or clear them without deleting chat mappings. Requires a fresh action ID."
+      },
+      "deadLetterActionId": {
+        "type": "string",
+        "title": "Dead-letter action ID",
+        "description": "Unique request ID (1-100 letters, digits, hyphens or underscores). Reusing an ID does not repeat the operation."
+      }
+    }
+  },
+  "i18n": {
+    "es": {
+      "name": "Conector Rocket.Chat",
+      "description": "Conecta WhatsApp con la atención Omnichannel de Rocket.Chat.",
+      "config": {
+        "baseUrl": {
+          "title": "Origen de Rocket.Chat"
+        },
+        "sessionId": {
+          "title": "ID de sesión de WhatsApp"
+        },
+        "department": {
+          "title": "Departamento Omnichannel"
+        },
+        "deadLetterAction": {
+          "title": "Acción para mensajes fallidos"
+        },
+        "deadLetterActionId": {
+          "title": "ID de la acción"
+        }
+      }
+    },
+    "zh-CN": {
+      "name": "Rocket.Chat 连接器",
+      "description": "将 WhatsApp 与 Rocket.Chat 全渠道客服连接。",
+      "config": {
+        "baseUrl": {
+          "title": "Rocket.Chat 源地址"
+        },
+        "sessionId": {
+          "title": "WhatsApp 会话 ID"
+        },
+        "department": {
+          "title": "全渠道部门"
+        },
+        "deadLetterAction": {
+          "title": "失败消息操作"
+        },
+        "deadLetterActionId": {
+          "title": "操作 ID"
+        }
+      }
+    },
+    "de": {
+      "name": "Rocket.Chat-Adapter",
+      "description": "Verbindet WhatsApp mit Rocket.Chat Omnichannel.",
+      "config": {
+        "baseUrl": {
+          "title": "Rocket.Chat-Ursprung"
+        },
+        "sessionId": {
+          "title": "WhatsApp-Sitzungs-ID"
+        },
+        "department": {
+          "title": "Omnichannel-Abteilung"
+        },
+        "deadLetterAction": {
+          "title": "Aktion für fehlgeschlagene Nachrichten"
+        },
+        "deadLetterActionId": {
+          "title": "Aktions-ID"
+        }
+      }
+    },
+    "he": {
+      "name": "מחבר Rocket.Chat",
+      "description": "חיבור WhatsApp לשירות Omnichannel של Rocket.Chat.",
+      "config": {
+        "baseUrl": {
+          "title": "כתובת המקור של Rocket.Chat"
+        },
+        "sessionId": {
+          "title": "מזהה הפעלת WhatsApp"
+        },
+        "department": {
+          "title": "מחלקת Omnichannel"
+        },
+        "deadLetterAction": {
+          "title": "פעולה להודעות שנכשלו"
+        },
+        "deadLetterActionId": {
+          "title": "מזהה פעולה"
+        }
+      }
+    },
+    "tr": {
+      "name": "Rocket.Chat Bağlayıcısı",
+      "description": "WhatsApp ile Rocket.Chat Omnichannel bağlantısı.",
+      "config": {
+        "baseUrl": {
+          "title": "Rocket.Chat adresi"
+        },
+        "sessionId": {
+          "title": "WhatsApp oturum kimliği"
+        },
+        "department": {
+          "title": "Omnichannel departmanı"
+        },
+        "deadLetterAction": {
+          "title": "Başarısız ileti işlemi"
+        },
+        "deadLetterActionId": {
+          "title": "İşlem kimliği"
+        }
+      }
+    },
+    "zh-HK": {
+      "name": "Rocket.Chat 連接器",
+      "description": "將 WhatsApp 與 Rocket.Chat 全渠道客服連接。",
+      "config": {
+        "baseUrl": {
+          "title": "Rocket.Chat 來源網址"
+        },
+        "sessionId": {
+          "title": "WhatsApp 工作階段 ID"
+        },
+        "department": {
+          "title": "全渠道部門"
+        },
+        "deadLetterAction": {
+          "title": "失敗訊息操作"
+        },
+        "deadLetterActionId": {
+          "title": "操作 ID"
+        }
+      }
+    },
+    "ar": {
+      "name": "موصل Rocket.Chat",
+      "description": "يربط WhatsApp بخدمة العملاء متعددة القنوات في Rocket.Chat.",
+      "config": {
+        "baseUrl": {
+          "title": "عنوان Rocket.Chat"
+        },
+        "sessionId": {
+          "title": "معرف جلسة WhatsApp"
+        },
+        "department": {
+          "title": "قسم القنوات المتعددة"
+        },
+        "deadLetterAction": {
+          "title": "إجراء الرسائل الفاشلة"
+        },
+        "deadLetterActionId": {
+          "title": "معرف الإجراء"
+        }
+      }
+    },
+    "te": {
+      "name": "Rocket.Chat కనెక్టర్",
+      "description": "WhatsApp ను Rocket.Chat Omnichannel తో కలుపుతుంది.",
+      "config": {
+        "baseUrl": {
+          "title": "Rocket.Chat మూల చిరునామా"
+        },
+        "sessionId": {
+          "title": "WhatsApp సెషన్ ID"
+        },
+        "department": {
+          "title": "Omnichannel విభాగం"
+        },
+        "deadLetterAction": {
+          "title": "విఫల సందేశాల చర్య"
+        },
+        "deadLetterActionId": {
+          "title": "చర్య ID"
+        }
+      }
+    },
+    "fr": {
+      "name": "Connecteur Rocket.Chat",
+      "description": "Relie WhatsApp au service Omnichannel de Rocket.Chat.",
+      "config": {
+        "baseUrl": {
+          "title": "Origine Rocket.Chat"
+        },
+        "sessionId": {
+          "title": "Identifiant de session WhatsApp"
+        },
+        "department": {
+          "title": "Département Omnichannel"
+        },
+        "deadLetterAction": {
+          "title": "Action sur les messages en échec"
+        },
+        "deadLetterActionId": {
+          "title": "Identifiant de l’action"
+        }
+      }
+    },
+    "it": {
+      "name": "Connettore Rocket.Chat",
+      "description": "Collega WhatsApp a Rocket.Chat Omnichannel.",
+      "config": {
+        "baseUrl": {
+          "title": "Origine Rocket.Chat"
+        },
+        "sessionId": {
+          "title": "ID sessione WhatsApp"
+        },
+        "department": {
+          "title": "Reparto Omnichannel"
+        },
+        "deadLetterAction": {
+          "title": "Azione sui messaggi non riusciti"
+        },
+        "deadLetterActionId": {
+          "title": "ID azione"
+        }
+      }
+    },
+    "pt-BR": {
+      "name": "Conector Rocket.Chat",
+      "description": "Conecta o WhatsApp ao Rocket.Chat Omnichannel.",
+      "config": {
+        "baseUrl": {
+          "title": "Origem do Rocket.Chat"
+        },
+        "sessionId": {
+          "title": "ID da sessão do WhatsApp"
+        },
+        "department": {
+          "title": "Departamento Omnichannel"
+        },
+        "deadLetterAction": {
+          "title": "Ação para mensagens com falha"
+        },
+        "deadLetterActionId": {
+          "title": "ID da ação"
+        }
+      }
+    },
+    "ko": {
+      "name": "Rocket.Chat 연결기",
+      "description": "WhatsApp과 Rocket.Chat 옴니채널을 연결합니다.",
+      "config": {
+        "baseUrl": {
+          "title": "Rocket.Chat 원본 주소"
+        },
+        "sessionId": {
+          "title": "WhatsApp 세션 ID"
+        },
+        "department": {
+          "title": "옴니채널 부서"
+        },
+        "deadLetterAction": {
+          "title": "실패 메시지 작업"
+        },
+        "deadLetterActionId": {
+          "title": "작업 ID"
+        }
+      }
+    },
+    "hi": {
+      "name": "Rocket.Chat कनेक्टर",
+      "description": "WhatsApp को Rocket.Chat Omnichannel से जोड़ता है।",
+      "config": {
+        "baseUrl": {
+          "title": "Rocket.Chat मूल पता"
+        },
+        "sessionId": {
+          "title": "WhatsApp सत्र ID"
+        },
+        "department": {
+          "title": "Omnichannel विभाग"
+        },
+        "deadLetterAction": {
+          "title": "विफल संदेश कार्रवाई"
+        },
+        "deadLetterActionId": {
+          "title": "कार्रवाई ID"
+        }
+      }
+    },
+    "id": {
+      "name": "Konektor Rocket.Chat",
+      "description": "Menghubungkan WhatsApp dengan Rocket.Chat Omnichannel.",
+      "config": {
+        "baseUrl": {
+          "title": "Asal Rocket.Chat"
+        },
+        "sessionId": {
+          "title": "ID sesi WhatsApp"
+        },
+        "department": {
+          "title": "Departemen Omnichannel"
+        },
+        "deadLetterAction": {
+          "title": "Tindakan pesan gagal"
+        },
+        "deadLetterActionId": {
+          "title": "ID tindakan"
+        }
+      }
+    }
+  }
+}

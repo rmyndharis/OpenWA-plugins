@@ -188,7 +188,7 @@ Pick a priority from the band that matches what your plugin does:
 | Transformer | 40-59 | Acts on the message before any responder sees it. |
 | Responder | 70-99 | Answers the contact as "the bot". |
 
-The official plugins occupy: `gsheets-logger` 10, `chatwoot-adapter` 20, `voice-transcription` 40,
+The official plugins occupy: `gsheets-logger` 10, `chatwoot-adapter` 20, `rocketchat-adapter` 20, `voice-transcription` 40,
 `group-translate` 50, `http-action` 70, `chat-flow` 75, `faq-bot` 80, `typebot-connector` 85,
 `after-hours` 95, `ai-responder` 97.
 
