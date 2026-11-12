@@ -3265,18 +3265,19 @@
       "whatsapp",
       "helpdesk"
     ],
-    "minOpenWAVersion": "0.27.0",
-    "testedOpenWAVersion": "0.27.1",
+    "minOpenWAVersion": "0.30.0",
+    "testedOpenWAVersion": "0.30.0",
     "releasedAt": "2026-11-02",
     "repoPath": "rocketchat-adapter",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/rocketchat-adapter",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/rocketchat-adapter-v0.1.0/rocketchat-adapter.zip#sha256=0696321e49461ea4af7e59c17c9c402eef3cc6a381bf140391692cc644b28e7f",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/rocketchat-adapter-v0.1.0/rocketchat-adapter.zip#sha256=ce722892addf40e2f62696621ed1752caaf023b7f48a7c9d86698bf3a3ef39d8",
     "permissions": [
       "net:fetch",
       "conversation:send",
       "webhook:ingress",
-      "storage:use"
+      "storage:use",
+      "engine:read"
     ],
     "net": {
       "allow": [],

@@ -281,7 +281,7 @@ export class Bridge {
         await this.complete(pending);
         return;
       }
-      await this.client.visitor(link.token, pending.name, phoneFromChat(chatId));
+      await this.client.visitor(link.token, pending.name, await this.visitorPhone(chatId));
       const roomId = pending.roomId ?? (await this.client.room(link.token));
       await this.mutate((state) => {
         const current = state.pending.find((item) => messageKey(item) === messageKey(pending));
@@ -306,6 +306,30 @@ export class Bridge {
         }
       });
       throw new Error('Rocket.Chat relay failed; message retained');
+    }
+  }
+
+  private async visitorPhone(chatId: string): Promise<string | undefined> {
+    const direct = phoneFromChat(chatId);
+    if (direct || !chatId.endsWith('@lid')) return direct;
+    // Only authoritative phone JIDs are accepted. Contact.number may contain the LID digits.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        (async () => {
+          const canonical = await this.ctx.engine.canonicalChatId(this.config.sessionId, chatId);
+          const cached = phoneFromChat(canonical);
+          if (cached) return cached;
+          const contact = await this.ctx.engine.getContactById(this.config.sessionId, chatId);
+          if (!contact || typeof contact !== 'object' || !('id' in contact)) return undefined;
+          return typeof contact.id === 'string' ? phoneFromChat(contact.id) : undefined;
+        })(),
+        new Promise<undefined>((resolve) => { timer = setTimeout(() => resolve(undefined), 1500); }),
+      ]);
+    } catch {
+      return undefined; // An unavailable phone lookup must not interrupt text delivery.
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 

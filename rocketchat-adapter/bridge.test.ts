@@ -440,3 +440,48 @@ test('dead-letter count retention is bounded independently of live slots', async
   assert.equal(h.state().dead.length, MAX_DEAD);
   assert.equal(h.state().pending.length, 1);
 });
+
+test('LID visitors receive only a resolved phone JID, including on existing mappings', async () => {
+  const h = harness();
+  const visitors: Record<string, unknown>[] = [];
+  const fetch = h.ctx.net.fetch;
+  h.ctx.net.fetch = async (url, init) => {
+    if (url.endsWith('/visitor')) visitors.push(JSON.parse(init!.body as string).visitor);
+    return fetch(url, init);
+  };
+  let canonical = '991234567890@lid';
+  let contact: unknown = { id: '15550001111@c.us', number: '991234567890' };
+  h.ctx.engine = {
+    canonicalChatId: async () => canonical,
+    getContactById: async () => contact,
+  } as unknown as PluginContext['engine'];
+  const bridge = h.make();
+  const msg = (id: string) => ({ ...message(id), chatId: '991234567890@lid', from: '991234567890@lid' });
+  await bridge.enqueue(msg('first'));
+  await bridge.pump();
+  assert.equal(visitors[0].phone, '+15550001111');
+  contact = { id: '991234567890@lid', number: '991234567890' };
+  await bridge.enqueue(msg('unresolved'));
+  await bridge.pump();
+  assert.equal(visitors[1].phone, undefined);
+  canonical = '15550002222@s.whatsapp.net';
+  await bridge.enqueue(msg('cached'));
+  await bridge.pump();
+  assert.equal(visitors[2].phone, '+15550002222');
+  h.ctx.engine.canonicalChatId = async () => { throw new Error('lookup unavailable'); };
+  await bridge.enqueue(msg('lookup-failed'));
+  await bridge.pump();
+  assert.equal(visitors[3].phone, undefined);
+  assert.equal(h.posts.length, 4);
+});
+
+test('a stalled LID lookup does not block delivery indefinitely', async () => {
+  const h = harness();
+  h.ctx.engine = {
+    canonicalChatId: async () => new Promise<string>(() => {}),
+  } as unknown as PluginContext['engine'];
+  const bridge = h.make();
+  await bridge.enqueue({ ...message(), chatId: '991234567890@lid' });
+  await bridge.pump();
+  assert.equal(h.posts.length, 1);
+});

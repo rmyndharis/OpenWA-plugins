@@ -16,14 +16,15 @@
     "helpdesk"
   ],
   "status": "development",
-  "minOpenWAVersion": "0.27.0",
-  "testedOpenWAVersion": "0.27.1",
+  "minOpenWAVersion": "0.30.0",
+  "testedOpenWAVersion": "0.30.0",
   "sdkVersion": "1",
   "permissions": [
     "net:fetch",
     "conversation:send",
     "webhook:ingress",
-    "storage:use"
+    "storage:use",
+    "engine:read"
   ],
   "net": {
     "allow": [],

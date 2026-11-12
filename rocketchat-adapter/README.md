@@ -14,7 +14,7 @@ Development preview of a text-only bridge between direct WhatsApp conversations 
 | **Author** | yederlv |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.27.0 (tested 0.27.1) |
+| **Requires OpenWA** | ≥ 0.30.0 (tested 0.30.0) |
 | **Keywords** | rocketchat, omnichannel, whatsapp, helpdesk |
 | **Repository** | [OpenWA-plugins/rocketchat-adapter](https://github.com/rmyndharis/OpenWA-plugins/tree/main/rocketchat-adapter) |
 <!-- END DETAILS -->
@@ -29,7 +29,7 @@ Development preview of a text-only bridge between direct WhatsApp conversations 
 
 ## Setup
 
-1. Have OpenWA **≥ 0.27.0** and Rocket.Chat Omnichannel enabled, with an available agent and any required department configured.
+1. Have OpenWA **≥ 0.30.0** and Rocket.Chat Omnichannel enabled, with an available agent and any required department configured.
 2. Link a WhatsApp test session. Copy its OpenWA session UUID.
 3. Install this plugin, then set `baseUrl`, `sessionId` and optionally `department` in its configuration. Enable it only for that WhatsApp session.
 4. Mint a **session-bound** ingress instance. Choose a random secret locally, then configure the **same** secret in Rocket.Chat:
@@ -116,7 +116,7 @@ The plugin settings expose `deadLetterAction` (`none`, `replay`, `clear`) and `d
 
 ## Compatibility
 
-Targets OpenWA **≥ 0.27.0**. The plugin is marked **development**, not stable. Unit/contract tests and local verification are summarized below; `testedOpenWAVersion` is a host verification baseline, not a live WhatsApp guarantee.
+Targets OpenWA **≥ 0.30.0**. The plugin is marked **development**, not stable. Unit/contract tests and local verification are summarized below; `testedOpenWAVersion` is a host verification baseline, not a live WhatsApp guarantee.
 
 Rocket.Chat reference environment: 8.0.1 with Omnichannel visitor, room, message and message-history REST endpoints. A workspace without available agents may refuse room creation; the plugin retains the message for retry rather than claiming delivery. Confirm your edition's Omnichannel availability before deployment.
 
@@ -152,9 +152,9 @@ Supported by re-reading `ctx.config` for each hook/webhook. This first version e
 | Agent reply is not delivered | Match plugin and instance origin/department/session settings, select Agent Messages, confirm plain text and inspect plugin health/host logs. Unknown rooms or mismatched visitor tokens are acknowledged and ignored, without sending to WhatsApp or degrading health. |
 | Health remains degraded after recovery | Inspect retained pending/dead-letter work and fix the cause before re-enabling. Do not delete plugin state to clear the warning: it contains visitor credentials, room mappings and dedup markers. |
 
-Local verification used OpenWA 0.27.1 and Rocket.Chat 8.0.1. Automated tests cover protocol filtering, retries, persistence, destination/session isolation and lifecycle behavior; real visitor/room/message/history APIs were exercised in Docker. The tester also reported successful bidirectional WhatsApp messaging, a restart, a second contact and no duplicate messages in those checks. This is limited manual evidence, not a guarantee for every deployment or exactly-once delivery.
+Initial verification used OpenWA 0.27.1 and Rocket.Chat 8.0.1. The revised adapter requires and was installed in OpenWA 0.30.0; a real inbound LID message updated an existing Rocket.Chat visitor with the resolved telephone number, verified in Contact → Details after refreshing the page. Automated tests cover protocol filtering, retries, persistence, destination/session isolation and lifecycle behavior; real visitor/room/message/history APIs were exercised in Docker. The tester also reported successful bidirectional WhatsApp messaging, a restart, a second contact and no duplicate messages in those checks. This is limited manual evidence, not a guarantee for every deployment or exactly-once delivery.
 
-The adapter sends a phone number when the chat JID is a real telephone identity (`@c.us` or `@s.whatsapp.net`, device suffix stripped). Privacy IDs (`@lid`) are never presented as telephone numbers.
+The adapter sends a phone number when the chat JID is a real telephone identity (`@c.us` or `@s.whatsapp.net`, device suffix stripped). For privacy IDs (`@lid`), the `engine:read` capability first checks the host canonical mapping, then the contact's authoritative phone JID. The lookup is limited to 1.5 seconds and is retried on subsequent messages, including for existing visitors. If WhatsApp cannot resolve the phone, delivery continues without it. Privacy IDs and unverified `Contact.number` values are never presented as telephone numbers.
 
 ## Development
 
