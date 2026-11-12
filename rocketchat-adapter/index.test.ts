@@ -143,3 +143,127 @@ test('a widget room webhook is ignored without degrading plugin health', async (
     await plugin.onDisable();
   }
 });
+
+test('in-flight work from a retired config generation does not degrade replacement health', async () => {
+  const h = harness();
+  let releaseFetch!: () => void;
+  const heldFetch = new Promise<void>((resolve) => {
+    releaseFetch = resolve;
+  });
+  h.ctx.net.fetch = async () => {
+    await heldFetch;
+    return { ok: true, status: 200, statusText: 'OK', headers: {}, body: '{"success":true}' };
+  };
+  const plugin = new Adapter();
+  await plugin.onEnable(h.ctx);
+  try {
+    await h.fire();
+    await new Promise((resolve) => setImmediate(resolve));
+    h.ctx.config = { baseUrl: 'https://other.example', sessionId: 'session-b' };
+    await plugin.onConfigChange(h.ctx);
+    releaseFetch();
+    for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));
+    assert.equal((await plugin.healthCheck()).healthy, true);
+  } finally {
+    await plugin.onDisable();
+  }
+});
+
+test('a slow successful WhatsApp send does not trip a premature worker deadline or degrade health', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const h = harness();
+  h.ctx.net.fetch = async (url) => {
+    const body = new URL(url).pathname.endsWith('/room')
+      ? '{"success":true,"room":{"_id":"room-1"}}'
+      : '{"success":true}';
+    return { ok: true, status: 200, statusText: 'OK', headers: {}, body };
+  };
+  let sent = 0;
+  h.ctx.conversations = {
+    send: () =>
+      new Promise((resolve) => {
+        setTimeout(() => {
+          sent++;
+          resolve({ messageId: 'out-1' });
+        }, 4500);
+      }),
+  } as unknown as PluginContext['conversations'];
+  const { stateKey, readConfig } = await import('./config.ts');
+  const key = stateKey(readConfig(h.ctx.config));
+  const plugin = new Adapter();
+  await plugin.onEnable(h.ctx);
+  try {
+    await h.fire();
+    for (let i = 0; i < 10; i++) await new Promise((resolve) => setImmediate(resolve));
+    const state = (await h.ctx.storage.get(key)) as { links: Array<{ token: string; roomId?: string }> };
+    assert.equal(state.links[0]?.roomId, 'room-1');
+    let sendStarted!: () => void;
+    const reachedSend = new Promise<void>((resolve) => {
+      sendStarted = resolve;
+    });
+    h.ctx.conversations = {
+      send: () => {
+        sendStarted();
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            sent++;
+            resolve({ messageId: 'out-1' });
+          }, 4500);
+        });
+      },
+    } as unknown as PluginContext['conversations'];
+    const webhookPromise = Promise.resolve(
+      h.routes.get('omnichannel')!({
+        verified: true,
+        sessionId: 'session-a',
+        instanceId: 'support',
+        method: 'POST',
+        headers: {},
+        query: {},
+        deliveryId: 'slow-send',
+        rawBody: '',
+        body: JSON.stringify({
+          type: 'Message',
+          _id: 'room-1',
+          visitor: { token: state.links[0].token },
+          messages: [{ _id: 'reply-slow', agentId: 'agent-1', msg: 'hello back' }],
+        }),
+      }),
+    );
+    await reachedSend;
+    t.mock.timers.tick(4500);
+    await assert.doesNotReject(webhookPromise);
+    assert.equal(sent, 1);
+    assert.equal((await plugin.healthCheck()).healthy, true);
+
+    h.ctx.conversations = {
+      send: async () => {
+        throw new Error('WhatsApp offline');
+      },
+    } as unknown as PluginContext['conversations'];
+    await assert.rejects(
+      Promise.resolve(
+        h.routes.get('omnichannel')!({
+          verified: true,
+          sessionId: 'session-a',
+          instanceId: 'support',
+          method: 'POST',
+          headers: {},
+          query: {},
+          deliveryId: 'failed-send',
+          rawBody: '',
+          body: JSON.stringify({
+            type: 'Message',
+            _id: 'room-1',
+            visitor: { token: state.links[0].token },
+            messages: [{ _id: 'reply-fail', agentId: 'agent-1', msg: 'retry me' }],
+          }),
+        }),
+      ),
+      /ingress may retry/,
+    );
+    assert.equal((await plugin.healthCheck()).healthy, false);
+  } finally {
+    await plugin.onDisable();
+  }
+});

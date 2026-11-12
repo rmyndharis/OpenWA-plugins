@@ -58,7 +58,8 @@ export class Bridge {
   private readonly lock = new KeyedAsyncLock();
   private readonly key: string;
   private readonly client: RocketClient;
-  private pumping: Promise<void> | undefined;
+  private activeWorkers = 0;
+  private readonly workers = new Set<Promise<void>>();
   private readonly busyChats = new Set<string>();
   private readonly pins = new Map<string, number>();
   constructor(
@@ -219,33 +220,42 @@ export class Bridge {
   }
 
   /** Drain due work with bounded concurrency; FIFO within each chat, never across unrelated chats. */
-  pump(): Promise<void> {
-    if (!this.pumping)
-      this.pumping = this.drain().finally(() => {
-        this.pumping = undefined;
-      });
-    return this.pumping;
-  }
-
-  private async drain(): Promise<void> {
+  async pump(): Promise<void> {
+    while (this.activeWorkers >= RELAY_CONCURRENCY) {
+      this.assertCurrent();
+      if (!this.workers.size) break;
+      await Promise.race(this.workers).catch(() => {});
+    }
+    const slots = RELAY_CONCURRENCY - this.activeWorkers;
+    if (slots <= 0) return;
+    this.activeWorkers += slots;
     const attempted = new Set<string>();
     let failed = false;
     const next = () =>
       this.lock.run('state', async () => {
-        this.assertCurrent();
-        if (attempted.size >= MAX_PENDING) return undefined;
-        const state = await this.read();
-        const firstChats = new Set<string>();
-        for (const item of state.pending) {
-          if (firstChats.has(item.chatId)) continue;
-          firstChats.add(item.chatId);
-          if (this.busyChats.has(item.chatId) || attempted.has(messageKey(item)) || item.nextAt > this.now()) continue;
-          attempted.add(messageKey(item));
-          this.busyChats.add(item.chatId);
-          this.pin(item.chatId);
-          return item.chatId;
+        try {
+          this.assertCurrent();
+          if (attempted.size >= MAX_PENDING) {
+            this.activeWorkers--;
+            return undefined;
+          }
+          const state = await this.read();
+          const firstChats = new Set<string>();
+          for (const item of state.pending) {
+            if (firstChats.has(item.chatId)) continue;
+            firstChats.add(item.chatId);
+            if (this.busyChats.has(item.chatId) || attempted.has(messageKey(item)) || item.nextAt > this.now()) continue;
+            attempted.add(messageKey(item));
+            this.busyChats.add(item.chatId);
+            this.pin(item.chatId);
+            return item.chatId;
+          }
+          this.activeWorkers--;
+          return undefined;
+        } catch (err) {
+          this.activeWorkers--;
+          throw err;
         }
-        return undefined;
       });
     const worker = async () => {
       for (;;) {
@@ -261,7 +271,14 @@ export class Bridge {
         }
       }
     };
-    const results = await Promise.allSettled(Array.from({ length: RELAY_CONCURRENCY }, worker));
+    const batch = Array.from({ length: slots }, () => {
+      const promise = worker();
+      this.workers.add(promise);
+      return promise.finally(() => {
+        this.workers.delete(promise);
+      });
+    });
+    const results = await Promise.allSettled(batch);
     if (failed || results.some((result) => result.status === 'rejected'))
       throw new Error('Rocket.Chat relay failed; message retained in pending/dead-letter storage');
   }

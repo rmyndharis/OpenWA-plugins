@@ -71,8 +71,8 @@ Per-session config** for details and caveats.
 | [`faq-bot`](./faq-bot) | ✅ Supported | All fields per session (different rule sets per number). |
 | [`group-translate`](./group-translate) | ⚠️ Supported, with caveat | Config-signature caching; multi-backend isolation needs one instance per session. |
 | [`gsheets-logger`](./gsheets-logger) | ❌ Not supported | Single-buffer single-sink design; use one instance per session. |
-| [`rocketchat-adapter`](./rocketchat-adapter) | ✅ Supported | Explicit session binding; one matching ingress instance per session/destination. |
 | [`http-action`](./http-action) | ✅ Supported | All fields per session (different endpoints/action sets). |
+| [`rocketchat-adapter`](./rocketchat-adapter) | ⚠️ Supported, with caveat | Explicit session binding with one matching ingress instance per session/destination; pending retries resume draining once that session dispatches an event. |
 | [`supabase-otp-hook`](./supabase-otp-hook) | ✅ Supported | All fields per session; applies to the instance's bound session. |
 | [`typebot-connector`](./typebot-connector) | ✅ Supported | All fields per session; flow state is per `(session, chat)`. |
 | [`voice-transcription`](./voice-transcription) | ⚠️ Supported, with caveat | Config-signature caching; multi-backend isolation needs one instance per session. |
@@ -292,9 +292,7 @@ OpenWA-plugins/
 
 ## Compatibility
 
-The 11 previously released plugins are checked against OpenWA **v0.30.0** using its package parser, manifest validators and worker runtime with isolated service doubles. Verification covers lifecycle calls, declared hooks, representative capability calls and per-session configuration where supported. Live WhatsApp sessions, provider credentials and dashboard rendering are outside that check.
-
-The new `rocketchat-adapter` is a development preview verified separately against OpenWA 0.27.1; see its README for scope and live-test requirements.
+The plugins in this repository are checked against OpenWA **v0.30.0** using its package parser, manifest validators and worker runtime with isolated service doubles (`rocketchat-adapter` ships as a development preview; see its README for scope and live-test notes). Verification covers lifecycle calls, declared hooks, representative capability calls and per-session configuration where supported. Live WhatsApp sessions, provider credentials and dashboard rendering are outside that check.
 
 Each plugin declares its `minOpenWAVersion`, which remains its supported lower bound. OpenWA enforces this floor at install and boot load since v0.24.0; `testedOpenWAVersion` records the worker verification baseline and does not promise compatibility with every host configuration.
 

@@ -1,22 +1,19 @@
 # Changelog
 
+All notable changes to the **Rocket.Chat Adapter** plugin are documented here.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this plugin adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [Unreleased]
 
-### Fixed
-
-- Separate bounded dead-letter retention from live capacity; add idempotent clear/replay controls.
-- Ignore unrelated workspace rooms and reclaim inactive visitor mappings with LRU eviction.
-- Drain due messages per chat with bounded concurrency and no provider I/O under the storage lock.
-- Include phone numbers only for telephone JIDs; complete all supported translations.
-- Resolve LID visitor phones through authoritative engine contact IDs/canonical mappings, with a bounded best-effort lookup that also enriches existing visitors (requires OpenWA 0.30.0 and engine:read).
-- Require configured HTTPS origins instead of shipping a hard-coded laboratory grant.
-
-## [0.1.0] - 2026-11-02
+## [0.1.0] - 2026-11-12
 
 ### Added
 
-- Development preview of a text-only, one-to-one WhatsApp ↔ Rocket.Chat Omnichannel adapter.
-- Session/destination-scoped visitor mappings, bounded persistent retries and deduplication.
-- Host-verified shared-secret webhook ingress and filtering of visitor echoes/internal notes.
-
-This version is a local development preview, not a published GitHub release.
+- Development preview of a text-only, one-to-one WhatsApp and Rocket.Chat Omnichannel adapter (`baseUrl` HTTPS origin, `sessionId`, optional `department`).
+- Session and destination scoped visitor credentials and room mappings with LRU eviction of inactive contacts (`MAX_CHATS = 500`).
+- Visitor phone enrichment from telephone JIDs and best-effort `@lid` canonical/contact resolution (`engine:read`, OpenWA 0.30.0+).
+- Bounded persistent inbound retry queue drained per chat with up to 4 concurrent workers, deterministic Rocket.Chat message IDs, ambiguous-send history reconciliation, and independent dead-letter retention (100 entries, 7 days) with idempotent `replay` and `clear` controls.
+- Host-verified shared-secret webhook ingress (`omnichannel`) with outbound reply deduplication and filtering of unrelated rooms, visitor echoes, transcripts, attachments, edits, and internal notes.
+- Dashboard translations across all 14 supported non-English locales.

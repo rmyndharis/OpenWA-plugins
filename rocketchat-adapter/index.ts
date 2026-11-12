@@ -14,10 +14,9 @@ export default class RocketChatAdapter implements IPlugin {
 
   async onEnable(ctx: PluginContext): Promise<void> {
     this.stop();
-    readConfig(ctx.config);
+    const initialConfig = readConfig(ctx.config);
     this.active = true;
     this.failures = 0;
-    const initialConfig = readConfig(ctx.config);
     if (initialConfig.deadLetterAction !== 'none' && initialConfig.deadLetterAction) {
       await this.maintain(ctx, this.bridge(ctx), initialConfig);
     }
@@ -26,6 +25,7 @@ export default class RocketChatAdapter implements IPlugin {
       async (hook) => {
         const message = hook.data as IncomingMessage;
         if (hook.source !== 'Engine' || !inboundText(message)) return { continue: true };
+        const generation = this.generation;
         try {
           const config = readConfig(ctx.config); // resolved for THIS dispatch, never cached as base config
           if (hook.sessionId !== config.sessionId) return { continue: true };
@@ -34,27 +34,26 @@ export default class RocketChatAdapter implements IPlugin {
           void this.maintain(ctx, bridge, config)
             .then(() => bridge.enqueue(message))
             .then(() => bridge.pump())
-            .catch(() => this.failure(ctx));
+            .catch(() => this.failure(ctx, generation));
         } catch {
-          this.failure(ctx);
+          this.failure(ctx, generation);
         }
         return { continue: true }; // observer; do not claim messages against sibling responders
       },
       HOOK_PRIORITY,
     );
     ctx.registerWebhook('omnichannel', async (req) => {
+      const generation = this.generation;
       try {
-        const work = this.bridge(ctx).webhook(req);
-        // Host ingress retries must see a failure within the worker's hook budget. The underlying
-        // serialized operation keeps running, so a later retry waits for its dedup marker.
-        await deadline(work);
+        await this.bridge(ctx).webhook(req);
       } catch {
-        this.failure(ctx);
+        this.failure(ctx, generation);
         throw new Error('Rocket.Chat agent relay failed; ingress may retry');
       }
     });
     this.timer = setInterval(() => {
-      for (const bridge of this.jobs.values()) void bridge.pump().catch(() => this.failure(ctx));
+      const generation = this.generation;
+      for (const bridge of this.jobs.values()) void bridge.pump().catch(() => this.failure(ctx, generation));
     }, 10_000);
     this.timer.unref();
   }
@@ -82,7 +81,8 @@ export default class RocketChatAdapter implements IPlugin {
       );
     }
   }
-  private failure(ctx: PluginContext): void {
+  private failure(ctx: PluginContext, generation = this.generation): void {
+    if (!this.active || generation !== this.generation) return;
     this.failures++;
     ctx.logger.error(
       'Rocket.Chat relay failed; inspect plugin health and retained pending work (no message content logged)',
@@ -124,20 +124,4 @@ export default class RocketChatAdapter implements IPlugin {
           : 'Disabled or invalid configuration',
     };
   }
-}
-
-function deadline(work: Promise<void>): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Agent relay exceeded worker deadline')), 4000);
-    work.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
 }

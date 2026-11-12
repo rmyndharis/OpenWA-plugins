@@ -485,3 +485,45 @@ test('a stalled LID lookup does not block delivery indefinitely', async () => {
   await bridge.pump();
   assert.equal(h.posts.length, 1);
 });
+
+test('staggered live arrivals across chats do not block behind a slow chat', async () => {
+  const h = harness();
+  const original = h.ctx.net.fetch;
+  let releaseSlow!: () => void;
+  const slowGate = new Promise<void>((resolve) => {
+    releaseSlow = resolve;
+  });
+  h.ctx.net.fetch = async (url, init) => {
+    if (typeof init?.body === 'string') {
+      const parsed = JSON.parse(init.body) as { visitor?: { name?: string } };
+      if (parsed.visitor?.name === 'slow-customer') await slowGate;
+    }
+    return original(url, init);
+  };
+  const bridge = h.make();
+  await bridge.enqueue({ ...message('slow-1'), contact: { pushName: 'slow-customer' } });
+  const firstPump = bridge.pump();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  await bridge.enqueue({
+    ...message('fast-1'),
+    chatId: '15550002222@c.us',
+    from: '15550002222@c.us',
+    contact: { pushName: 'fast-customer' },
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      bridge.pump(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('live arrival blocked behind slow chat')), 500);
+      }),
+    ]);
+    assert.equal(h.posts.length, 1);
+  } finally {
+    clearTimeout(timer);
+    releaseSlow();
+    await firstPump;
+  }
+  assert.equal(h.posts.length, 2);
+});
