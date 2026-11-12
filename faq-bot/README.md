@@ -131,6 +131,11 @@ adjacent-overlapping, and repeated-variable-width quantifiers (e.g. `(a+)+`, `.*
 ambiguous repeated alternations (`(a|a)*`, `(a|ab)+`, `^([a-z]|[a-z0-9])+$`, `^(\w|\d)+$`). An unsafe
 pattern is skipped with a warning.
 
+Bounded quantifiers are also held to a combined budget of ways to split the input, so nested or
+chained shapes such as `((a?){9}){9}` and `(a?){9}(a?){9}(a?){9}` are skipped. A bounded run followed
+by a separator it cannot match, like `\w{3,20}@` or `\d{1,3}\.`, counts once, so length-limited email,
+phone and address patterns stay supported.
+
 The screen is conservative and heuristic. It examines nested alternatives with the surrounding atoms:
 `^((a|aa)a)+$` remains ambiguous, while a separator such as the space in `^((no|nope) )+$` can make
 iterations distinct. Keyword sets such as `(one|two|three)+` and `^(ya|tidak)$` remain supported.

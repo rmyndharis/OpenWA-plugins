@@ -175,12 +175,16 @@ async function handleLocked(deps: HandleDeps, sessionId: string, msg: IncomingMe
   let text = '';
   let uncertain = false;
   let out: Awaited<ReturnType<HttpActionClient['runPrepared']>> | undefined;
+  // A POST the upstream accepted has happened even when its reply cannot be shown. errorTemplate usually
+  // says "try again later", and a retry repeats the write, so that case gets the confirm-first notice.
+  const completedPostFallback = (status: number): string =>
+    post && status >= 200 && status < 300 ? UNKNOWN_NOTICE : renderErrorFallback();
   try {
     out = await client.runPrepared(prepared);
   } catch (e) {
     if (e instanceof HttpResponseBodyError) {
       deps.logger.error(`${PLUGIN}: request failed`, e);
-      text = renderErrorFallback();
+      text = completedPostFallback(e.status);
     } else {
       deps.logger.error(`${PLUGIN}: ${post ? 'POST outcome is unknown; request will not be repeated' : 'request failed'}`, e);
       uncertain = post;
@@ -198,7 +202,7 @@ async function handleLocked(deps: HandleDeps, sessionId: string, msg: IncomingMe
       }
     } catch (e) {
       deps.logger.error(`${PLUGIN}: reply template failed`, e);
-      text = renderErrorFallback();
+      text = completedPostFallback(out.status);
     }
   }
 

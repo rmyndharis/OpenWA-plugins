@@ -37,7 +37,8 @@
 - **Bring your own STT.** Any OpenAI-compatible `/v1/audio/transcriptions` endpoint: self-hosted
   [Speaches](https://github.com/speaches-ai/speaches)/faster-whisper (free, local, decodes WhatsApp
   OGG/Opus natively — no transcoding), or hosted Groq / OpenAI by changing one URL.
-- **Status events.** Delivers `completed` (with the transcript), `failed` (STT errored), or `skipped`
+- **Status events.** Delivers `completed` (with the transcript), `failed` (STT errored, or the plugin could not
+  record the note's dedup or hourly-cap entry, in which case STT is never called), or `skipped`
   (too large / rate-limited / empty) — a consumer always knows a voice note arrived, even when it can't be read.
 - **Optional in-chat delivery.** `chatDelivery` can also post the transcript into WhatsApp (`self` notes it to
   your own number; `reply` quote-replies to the sender). Off by default; webhook delivery is optional too
@@ -45,7 +46,8 @@
 - **Signed webhooks.** When a delivery secret is set, the body is HMAC-SHA256 signed in `X-OpenWA-Signature`
   (same scheme as OpenWA's core webhooks), so existing verification reuses the same check.
 - **Cost & abuse guards.** Exact `maxSizeBytes` skip, a best-effort per-session hourly cap, a message-type
-  filter (voice only by default), a best-effort idempotency guard against engine re-fires, and an STT
+  filter (voice only by default), a best-effort idempotency guard against engine re-fires (keyed on the
+  message id, so a note that arrives without one is not deduplicated), and an STT
   circuit breaker that backs off a degraded backend.
 - **Fail-open & guarded HTTP.** Any error is logged and skipped. All outbound calls go through the host's
   SSRF-guarded `ctx.net.fetch`; the STT and delivery hosts must be allow-listed (see **Security**). The STT

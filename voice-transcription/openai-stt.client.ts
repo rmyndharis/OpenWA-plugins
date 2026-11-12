@@ -53,11 +53,12 @@ export function isHostBackpressure(err: unknown): boolean {
   return /too many concurrent/i.test(message);
 }
 
-/** Strip URL userinfo and query/fragment tokens before surfacing fetch errors to logs or webhooks. */
+/** Strip URL userinfo and query/fragment tokens before surfacing fetch errors to logs or webhooks.
+ *  Idempotent, because an error can pass through it more than once on its way to the webhook. */
 export function redactUrlSecrets(text: string): string {
   return text
     .replace(/(https?:\/\/)[^/\s?#]+@/gi, '$1***@')
-    .replace(/(https?:\/\/[^\s?#]+)[?#][^\s'")\]]*/gi, '$1?[redacted]');
+    .replace(/(https?:\/\/[^\s?#]+)[?#](?!\[redacted\])[^\s'")\]]*/gi, '$1?[redacted]');
 }
 
 export class OpenAiSttClient implements SttProvider {

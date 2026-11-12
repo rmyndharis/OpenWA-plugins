@@ -756,10 +756,11 @@ test('a pre-flight POST template/body error sends errorTemplate without saving a
   }
 });
 
-test('a POST that receives HTTP 200 with invalid JSON or a throwing replyTemplate sends errorTemplate and records completion instead of UNKNOWN_NOTICE', async () => {
+test('a POST accepted with HTTP 2xx whose reply cannot be shown records completion and asks the contact to confirm before retrying', async () => {
+  const notice = /could not be confirmed\. Please contact the operator before trying again\./;
   const { d, fetched, sendCalls } = postDeps({ ok: true, status: 200, body: 'not-json' });
   d.cfg.cooldownSeconds = 0;
-  d.cfg.actions[0].errorTemplate = 'Upstream format error.';
+  d.cfg.actions[0].errorTemplate = 'Service unavailable, please try again later.';
   const realSend = d.conversations.send;
   let failFirstSend = true;
   d.conversations.send = async (env) => {
@@ -772,12 +773,18 @@ test('a POST that receives HTTP 200 with invalid JSON or a throwing replyTemplat
   await assert.rejects(handleMessage(d, 's1', msg('buat X', 'm-nonjson')), /WA offline/);
   await handleMessage(d, 's1', msg('buat X', 'm-nonjson'));
   assert.equal(fetched.length, 1, 'completed HTTP 200 POST must not re-fire on redelivery');
-  assert.equal((sendCalls[0].env as { text: string }).text, 'Upstream format error.');
+  assert.match((sendCalls[0].env as { text: string }).text, notice, 'a write that happened must not invite a retry');
 
   const tpl = postDeps({ ok: true, status: 201, body: JSON.stringify({ id: 'T-9' }) });
   tpl.d.cfg.actions[0].replyTemplate = '{{response.__proto__.x}}';
   tpl.d.cfg.actions[0].errorTemplate = 'Template failed.';
   await handleMessage(tpl.d, 's1', msg('buat X', 'm-tpl'));
   assert.equal(tpl.fetched.length, 1);
-  assert.equal((tpl.sendCalls[0].env as { text: string }).text, 'Template failed.');
+  assert.match((tpl.sendCalls[0].env as { text: string }).text, notice);
+
+  // A non-2xx answer is the upstream refusing the write, so errorTemplate stays the right reply.
+  const refused = postDeps({ ok: false, status: 500, body: 'x'.repeat(300 * 1024) });
+  refused.d.cfg.actions[0].errorTemplate = 'Upstream refused.';
+  await handleMessage(refused.d, 's1', msg('buat X', 'm-500'));
+  assert.equal((refused.sendCalls[0].env as { text: string }).text, 'Upstream refused.');
 });

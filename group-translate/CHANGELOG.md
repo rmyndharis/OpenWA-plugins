@@ -12,7 +12,7 @@ The version here always matches `manifest.json`'s `version`.
 
 ### Fixed
 
-- Run non-command group translation off-dispatch so slow backend responses do not hold up later message hooks.
+- Run non-command group translation off-dispatch so slow backend responses do not hold up later message hooks. A translation can now arrive after a lower-priority responder's reply.
 - Cap concurrent translation requests per message to 4 so multi-language groups do not exhaust the host outbound fetch pool.
 - Persist group announcement state before sending the introduction and roll back only when delivery fails.
 

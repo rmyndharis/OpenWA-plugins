@@ -33,7 +33,7 @@ export async function handleTurn(deps: TurnDeps, sessionId: string, source: stri
   await deps.lock.run(key, async () => {
     let state = await deps.store.get(key);
     const botKey = `${deps.cfg.apiHost}|${deps.cfg.publicId}`;
-    if (state && ((state.botKey && state.botKey !== botKey) || state.awaiting.kind === 'unsupported')) {
+    if (state && ((state.botKey && state.botKey !== botKey) || state.awaiting?.kind === 'unsupported')) {
       state = null;
     }
     // When the contact wrote. `timestamp` is unix seconds; a missing, zero, negative, unrepresentable or

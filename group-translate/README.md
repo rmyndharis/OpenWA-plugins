@@ -101,7 +101,7 @@ Then, in the group, an admin runs `/tr on`. Or install the packaged `.zip` from
 | --- | -------- | ------- | ----------- |
 | `libretranslateUrl` | yes | `http://localhost:7001` | Base URL of your LibreTranslate instance. Loopback on any port works as shipped; any other host is admitted over **https** only. A loopback/private address **also** requires `SSRF_ALLOWED_HOSTS` on the gateway (see [Security](#security)) |
 | `libretranslateApiKey` | no | — | Secret API key, if your instance requires one (redacted on read) |
-| `timeoutMs` | no | `4000` | Per-call timeout; keep ≤ the host hook budget (5000 ms) |
+| `timeoutMs` | no | `4000` | Per-request timeout for each detect or translate call. Translation runs outside the host hook budget, so this bounds how long a slow backend delays the reply |
 | `commandPrefix` | no | `/tr` | The in-chat command prefix |
 | `minLength` | no | `2` | Minimum message length to translate |
 | `maxLength` | no | `2000` | Maximum message length to translate |

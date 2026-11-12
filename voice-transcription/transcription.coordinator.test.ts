@@ -481,6 +481,8 @@ test('redacts credentials and query tokens in STT and webhook error logs and out
   assert.ok(!combinedLogs.includes('mySecretPass'), `leaked password in logs: ${combinedLogs}`);
   assert.ok(!combinedLogs.includes('secretKey123'), `leaked STT query key in logs: ${combinedLogs}`);
   assert.ok(!combinedLogs.includes('hookToken999'), `leaked webhook token in logs: ${combinedLogs}`);
+  // The reason passes through the redaction more than once; it must come out the same as a single pass.
+  assert.equal(deliveries[0].reason, 'refused https://***@stt.local/v1/audio/transcriptions?[redacted]');
 });
 
 test('bounds seen and rate storage keys to <= 184 UTF-8 bytes', async () => {

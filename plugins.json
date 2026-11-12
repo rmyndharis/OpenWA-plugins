@@ -1222,7 +1222,7 @@
     "repoPath": "chatwoot-adapter",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chatwoot-adapter-v0.9.18/chatwoot-adapter.zip#sha256=099b01cb3ae70f0a936651f7aa829c0a27081adda573ffcc12307f8c89057d14",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/chatwoot-adapter-v0.9.18/chatwoot-adapter.zip#sha256=10fed93b3e1740371dfed3fb325ded91f0589900873cbb853938840fca93c09f",
     "permissions": [
       "net:fetch",
       "conversation:send",
@@ -1731,7 +1731,7 @@
     "repoPath": "faq-bot",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.2.21/faq-bot.zip#sha256=c748fc433065b6fec1b4abbcdaf797b36f26facbb6d2e053f66221d392af8ab0",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/faq-bot-v0.2.21/faq-bot.zip#sha256=2792f475a34cec150b43e5ffaa0b8f5f12dc6e2a5ba6830798a1dad16a0aad3a",
     "permissions": [
       "messages:send"
     ],
@@ -2480,7 +2480,7 @@
     "repoPath": "gsheets-logger",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/gsheets-logger-v0.3.19/gsheets-logger.zip#sha256=59d190060a8ff717a39ba7547ff25f6aef053f2ec3b49ca904e075c500bf817e",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/gsheets-logger-v0.3.19/gsheets-logger.zip#sha256=4222d45f6bbf5e1b2b2bb72fb5fe85205f7f2ba7c7e1a33dab024210a27596aa",
     "permissions": [
       "net:fetch",
       "storage:use"
@@ -2813,7 +2813,7 @@
     "repoPath": "http-action",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/http-action-v0.2.19/http-action.zip#sha256=af3b9f17a04b2aa3f47e055621d1a7d40cff41d86b6dda2d46b791e23f45b49f",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/http-action-v0.2.19/http-action.zip#sha256=4aff4f860c61735562bb3475cf8deaefbd07bc63e6ded3767e4280e44fe0dc00",
     "permissions": [
       "net:fetch",
       "conversation:send",
@@ -3907,7 +3907,7 @@
     "repoPath": "typebot-connector",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/typebot-connector",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/typebot-connector-v0.3.10/typebot-connector.zip#sha256=f6b55e6ed16b4de24c00a9b141cbbc23a64a1748d39b93a790bd40d2e8ef89c6",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/typebot-connector-v0.3.10/typebot-connector.zip#sha256=080e69934b16f8bdd669d2bfc62e44d427f71beb470dfc634eea5e53bb373eee",
     "permissions": [
       "net:fetch",
       "conversation:send",
@@ -4328,7 +4328,7 @@
     "repoPath": "voice-transcription",
     "repoUrl": "https://github.com/rmyndharis/OpenWA-plugins",
     "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/voice-transcription",
-    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/voice-transcription-v1.3.8/voice-transcription.zip#sha256=15b819c3bccb9922d19a687c97bd92739d2e2015f7a270f6ceb9275c843061ef",
+    "download": "https://github.com/rmyndharis/OpenWA-plugins/releases/download/voice-transcription-v1.3.8/voice-transcription.zip#sha256=b4f100198c6b8d9a96f5485450f475b778b3ff3d04535bc6824aaa62a324189e",
     "permissions": [
       "net:fetch",
       "messages:send",

@@ -338,11 +338,18 @@ test('the bulk sweep skips channel and broadcast chats', async () => {
   assert.equal(posts.length, 1);
 });
 
-test('backfillHistory replays id-less history entries without poisoning the empty-string seen key', async () => {
-  const history = [hist('', 10, false, 'first no-id'), hist('', 20, false, 'second no-id')];
-  const { deps, posts, seen } = makeDeps({ engine: { getChatHistory: async () => history } });
-  const result = await backfillHistory(deps, 'sess', 'c@c.us', 55, '');
-  assert.equal(result, true);
-  assert.deepEqual(posts.map(p => p.body), ['first no-id', 'second no-id']);
-  assert.equal(seen.has(''), false);
+test('id-less history never posts an id-less live message twice and never marks the empty id seen', async () => {
+  const history = [hist('', 10, false, 'older no-id'), hist('h1', 15, false, 'older with id'), hist('', 20, false, 'live no-id')];
+  // Lazy path: the live message has no id, so every id-less entry is skipped; relayInbound posts it.
+  const lazy = makeDeps({ engine: { getChatHistory: async () => history } });
+  assert.equal(await backfillHistory(lazy.deps, 'sess', 'c@c.us', 55, ''), true);
+  assert.deepEqual(lazy.posts.map(p => p.body), ['older with id']);
+  assert.equal(lazy.seen.has(''), false);
+  // Bulk sweep: no live message to exclude, so id-less history is replayed, still without an '' marker.
+  const bulk = makeDeps({
+    engine: { getChats: async () => [{ id: 'c@c.us', name: 'C', isGroup: false }], getChatHistory: async () => history },
+  });
+  await backfillAllChats(bulk.deps, 'sess-bulk');
+  assert.deepEqual(bulk.posts.map(p => p.body), ['older no-id', 'older with id', 'live no-id']);
+  assert.equal(bulk.seen.has(''), false);
 });

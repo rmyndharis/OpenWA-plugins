@@ -286,6 +286,7 @@ test("a shared contact card is never translated; a poll question still is", asyn
     "BEGIN:VCARD\nVERSION:3.0\nFN:Budi Santoso\nORG:Toko Berkah\nTEL;TYPE=CELL:+628123456789\nEND:VCARD";
   const card = await getHook()!(engineCtx({ body: vcard, type: "contact" }));
   assert.equal(card.continue, true, "a contact card is passed on untouched");
+  await settle(); // translation runs off-dispatch, so let any detached work land before asserting
   assert.deepEqual(urls, [], "no vCard may reach the translation backend");
   assert.deepEqual(replies, [], "and no translated card may be posted into the group");
 
@@ -348,6 +349,7 @@ for (const [type, body] of [
 
     const result = await getHook()!(engineCtx({ body, type }));
     assert.equal(result.continue, true, "passed on untouched");
+    await settle();
     assert.deepEqual(urls, [], "no translation request is made");
     assert.deepEqual(replies, [], "and no reply is posted into the group");
   });

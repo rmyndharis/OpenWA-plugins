@@ -16,7 +16,8 @@ The version here always matches `manifest.json`'s `version`.
 
 ### Fixed
 
-- Reject bounded variable-width regex patterns whose combined state count exceeds the repeat budget and ambiguous repeated alternations with optional leading atoms.
+- Skip regex rules whose bounded quantifiers multiply past a fixed state budget through nesting or a sequence, such as `((a?){9}){9}`, while still accepting length-limited runs pinned by a separator like `\w{3,20}@`.
+- Skip repeated alternations whose branches overlap behind a skipped atom or a leading group, such as `^(a{0}b|b)+$` and `^((a)b|ab)+$`.
 - Throttle retries for 60 seconds after a failed rule or fallback send instead of retrying on every inbound message.
 
 ## [0.2.20] - 2026-11-10

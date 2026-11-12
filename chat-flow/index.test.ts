@@ -380,4 +380,3 @@ test('missing hook payload data returns continue: true without throwing', async 
     await plugin.onDisable();
   }
 });
-

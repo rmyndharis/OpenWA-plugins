@@ -109,6 +109,7 @@ export default class TypebotConnector implements IPlugin {
             const oldest = this.lastSweepAt.keys().next().value;
             if (oldest !== undefined) this.lastSweepAt.delete(oldest);
           }
+          this.lastSweepAt.delete(sessionId); // re-insert so eviction drops the least recently swept
           this.lastSweepAt.set(sessionId, now);
           void store
             .pruneIdle(now, cfg.sessionTimeoutMinutes * 60_000, sessionId)

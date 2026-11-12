@@ -44,13 +44,11 @@ async function replayHistory(
 ): Promise<boolean> {
   let allPosted = true;
   for (const msg of ordered) {
+    // An id-less live message cannot be told apart from id-less history, so excluding `''` skips them
+    // all rather than posting the live one twice. An empty id is never a dedup key.
     const identifiable = Boolean(msg.id);
-    if (
-      (identifiable && msg.id === excludeMessageId) ||
-      (identifiable && (await deps.store.hasSeen('wa', msg.id, historyScope(sessionId, conversationId))))
-    ) {
-      continue;
-    }
+    if (msg.id === excludeMessageId) continue;
+    if (identifiable && (await deps.store.hasSeen('wa', msg.id, historyScope(sessionId, conversationId)))) continue;
     try {
       await relayMessage(deps, sessionId, conversationId, msg, msg.fromMe ? 'outgoing' : 'incoming');
       if (identifiable) await deps.store.markSeen('wa', msg.id, sessionId);

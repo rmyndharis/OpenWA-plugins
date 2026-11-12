@@ -420,3 +420,11 @@ test('changing publicId or apiHost invalidates stored session from the previous 
   assert.equal(starts, 2, 'starts a fresh session on the new bot');
   assert.equal((await first.store.get('sess:c@c.us'))?.sessionId, 'S-2');
 });
+
+test('a stale stored row with no awaiting field is idle-reset instead of throwing', async () => {
+  let starts = 0;
+  const { d, store } = deps({ startChat: () => (starts++, undefined) });
+  await store.set('sess:c@c.us', { sessionId: 'OLD', lastActivity: -10_000_000 } as never);
+  await handleTurn(d, 'sess', 'Engine', msg({ body: 'hello' }));
+  assert.equal(starts, 1, 'the corrupt idle row is discarded and the flow starts from the top');
+});

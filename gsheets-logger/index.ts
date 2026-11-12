@@ -77,20 +77,25 @@ export function parseConfig(raw: Record<string, unknown>): { config: LoggerConfi
   };
 }
 
-// Take ownership of the current rows BEFORE awaiting so a concurrent enqueue/cap-drop on `buffer`
-// cannot shift the front out from under us. On failure, restore the batch ahead of rows that
-// arrived during the append, preserving order (retain-on-failure).
-function takeFlushChunk(pending: string[][], maxRows: number, maxChars: number): string[][] {
+// Take ownership of the batch BEFORE awaiting so a concurrent enqueue/cap-drop on `buffer` cannot shift
+// the front out from under us. On failure, restore the batch ahead of rows that arrived during the
+// append, preserving order (retain-on-failure).
+//
+// One call sends one bounded chunk and leaves the rest buffered for the next tick. That keeps each flush
+// to a single request, as it always was, so onDisable and a config change still wait on at most one
+// append, and an outage backlog of megabytes is never posted as one payload. It also keeps the stored
+// checkpoint honest: a flush either sent its whole chunk or nothing.
+function takeFlushChunk(buffer: string[][], maxRows: number, maxChars: number): string[][] {
   let count = 0;
   let chars = 0;
-  while (count < pending.length && count < maxRows) {
+  while (count < buffer.length && count < maxRows) {
     let rowChars = 0;
-    for (const cell of pending[count]) rowChars += cell.length;
+    for (const cell of buffer[count]) rowChars += cell.length;
     if (count > 0 && chars + rowChars > maxChars) break;
     chars += rowChars;
     count++;
   }
-  return pending.splice(0, count);
+  return buffer.splice(0, count);
 }
 
 export async function flushBuffer(
@@ -100,15 +105,12 @@ export async function flushBuffer(
   maxChars = MAX_FLUSH_CHARS,
 ): Promise<void> {
   if (buffer.length === 0) return;
-  const pending = buffer.splice(0, buffer.length);
-  while (pending.length > 0) {
-    const chunk = takeFlushChunk(pending, maxRows, maxChars);
-    try {
-      await append(chunk);
-    } catch (err) {
-      buffer.unshift(...chunk, ...pending);
-      throw err;
-    }
+  const batch = takeFlushChunk(buffer, maxRows, maxChars);
+  try {
+    await append(batch);
+  } catch (err) {
+    buffer.unshift(...batch);
+    throw err;
   }
 }
 
