@@ -8,6 +8,18 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.21] - 2026-11-12
+
+### Changed
+
+- Raise `minOpenWAVersion` to `0.7.0` to match the per-session configuration capability floor.
+
+### Fixed
+
+- Skip regex rules whose bounded quantifiers multiply past a fixed state budget through nesting or a sequence, such as `((a?){9}){9}`, while still accepting length-limited runs pinned by a separator like `\w{3,20}@`.
+- Skip repeated alternations whose branches overlap behind a skipped atom or a leading group, such as `^(a{0}b|b)+$` and `^((a)b|ab)+$`.
+- Throttle retries for 60 seconds after a failed rule or fallback send instead of retrying on every inbound message.
+
 ## [0.2.20] - 2026-11-10
 
 ### Changed

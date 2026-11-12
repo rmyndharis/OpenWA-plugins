@@ -1,6 +1,23 @@
 import type { IncomingMessage } from '../types/openwa';
-import type { SttProvider, SttResult } from './openai-stt.client.ts';
+import { redactUrlSecrets, type SttProvider, type SttResult } from './openai-stt.client.ts';
 import type { TranscriptDelivery, TranscriptionPayload } from './webhook.delivery.ts';
+
+function boundStorageKey(raw: string): string {
+  if (Buffer.byteLength(raw, 'utf8') <= 184) return raw;
+  let h1 = 0x811c9dc5;
+  let h2 = 0xdeadbeef;
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193);
+    h2 = Math.imul(h2 ^ c, 0x85ebca6b);
+  }
+  const suffix = `:${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}`;
+  let prefix = raw.slice(0, 184 - suffix.length).replace(/[\ud800-\udbff]$/, '');
+  while (Buffer.byteLength(prefix, 'utf8') > 184 - suffix.length) {
+    prefix = prefix.slice(0, -1).replace(/[\ud800-\udbff]$/, '');
+  }
+  return `${prefix}${suffix}`;
+}
 
 /** Minimal KV surface the coordinator needs (adapted from `ctx.storage` by the plugin). */
 export interface KvStore {
@@ -144,13 +161,24 @@ export class TranscriptionCoordinator {
       // writer overwrote the others' ids. Each lost id is a second paid STT call AND, with
       // chatDelivery 'reply', a duplicate transcript the CONTACT sees. The pre-1.1.0 one-key-per-note
       // scheme had no read-modify-write and so no such window; this restores that guarantee.
-      const claimed = await this.serialize(sessionId, async () => {
-        const seenKey = `seen:${sessionId}`;
-        const seen = (await store.get<string[]>(seenKey)) ?? [];
-        if (seen.includes(msg.id)) return false;
-        await store.set(seenKey, [msg.id, ...seen].slice(0, SEEN_HISTORY));
-        return true;
-      });
+      let claimed = true;
+      if (msg.id) {
+        try {
+          claimed = await this.serialize(sessionId, async () => {
+            const seenKey = boundStorageKey(`seen:${sessionId}`);
+            const seen = (await store.get<string[]>(seenKey)) ?? [];
+            if (seen.includes(msg.id)) return false;
+            await store.set(seenKey, [msg.id, ...seen].slice(0, SEEN_HISTORY));
+            return true;
+          });
+        } catch (err) {
+          await this.emit(sessionId, msg, {
+            status: 'failed',
+            reason: redactUrlSecrets(err instanceof Error ? err.message : String(err)),
+          });
+          return;
+        }
+      }
       if (!claimed) return;
       await this.sweepLegacySeen(sessionId);
 
@@ -185,15 +213,24 @@ export class TranscriptionCoordinator {
       // hour boundary wrote different keys before, but now the pre-boundary write can land last and
       // restore the previous bucket, restarting the new hour's count at zero and doubling a cap whose
       // stated job is bounding paid-API spend.
-      const withinCap = await this.serialize(sessionId, async () => {
-        const rateKey = `rate:${sessionId}`;
-        const bucket = Math.floor(this.now() / 3_600_000);
-        const rate = await store.get<{ bucket: number; count: number }>(rateKey);
-        const count = rate?.bucket === bucket ? rate.count : 0;
-        if (count >= config.maxPerHour) return false;
-        await store.set(rateKey, { bucket, count: count + 1 });
-        return true;
-      });
+      let withinCap: boolean;
+      try {
+        withinCap = await this.serialize(sessionId, async () => {
+          const rateKey = boundStorageKey(`rate:${sessionId}`);
+          const bucket = Math.floor(this.now() / 3_600_000);
+          const rate = await store.get<{ bucket: number; count: number }>(rateKey);
+          const count = rate?.bucket === bucket ? rate.count : 0;
+          if (count >= config.maxPerHour) return false;
+          await store.set(rateKey, { bucket, count: count + 1 });
+          return true;
+        });
+      } catch (err) {
+        await this.emit(sessionId, msg, {
+          status: 'failed',
+          reason: redactUrlSecrets(err instanceof Error ? err.message : String(err)),
+        });
+        return;
+      }
       if (!withinCap) {
         await this.emit(sessionId, msg, { status: 'skipped', reason: 'rate_limited' });
         return;
@@ -203,7 +240,10 @@ export class TranscriptionCoordinator {
       try {
         result = await this.deps.provider.transcribe(audio, media.mimetype);
       } catch (err) {
-        await this.emit(sessionId, msg, { status: 'failed', reason: err instanceof Error ? err.message : String(err) });
+        await this.emit(sessionId, msg, {
+          status: 'failed',
+          reason: redactUrlSecrets(err instanceof Error ? err.message : String(err)),
+        });
         return;
       }
       if (!result.text.trim()) {
@@ -226,7 +266,7 @@ export class TranscriptionCoordinator {
       // Fail-open: a transcription/delivery failure must never disrupt message delivery.
       logger.warn('Transcription failed (skipped)', {
         messageId: msg.id,
-        error: err instanceof Error ? err.message : String(err),
+        error: redactUrlSecrets(err instanceof Error ? err.message : String(err)),
       });
     }
   }
@@ -273,8 +313,9 @@ export class TranscriptionCoordinator {
       transcription?: NonNullable<TranscriptionPayload['transcription']>;
     },
   ): Promise<void> {
+    const reason = o.reason ? redactUrlSecrets(o.reason) : undefined;
     if (o.status !== 'completed') {
-      this.deps.logger.warn(`Transcription ${o.status}: ${o.reason}`, { messageId: msg.id });
+      this.deps.logger.warn(`Transcription ${o.status}: ${reason}`, { messageId: msg.id });
     }
     const sent = new Date((msg.timestamp ?? 0) * 1000);
     const payload: TranscriptionPayload = {
@@ -286,24 +327,35 @@ export class TranscriptionCoordinator {
       source: 'speech-to-text',
       untrusted: true,
       ...(sent.getTime() > 0 ? { timestamp: msg.timestamp } : {}),
-      ...(o.reason ? { reason: o.reason } : {}),
+      ...(reason ? { reason } : {}),
       ...(o.transcription ? { transcription: o.transcription } : {}),
     };
-    // The webhook and in-chat deliveries are independent sinks — isolate the webhook so a failing
-    // delivery endpoint can't swallow the in-chat transcript (and vice versa is unaffected: chat is last).
     if (this.deps.delivery) {
       try {
         await this.deps.delivery.deliver(payload);
       } catch (err) {
         this.deps.logger.warn('Transcript webhook delivery failed', {
           messageId: msg.id,
-          error: err instanceof Error ? err.message : String(err),
+          error: redactUrlSecrets(err instanceof Error ? err.message : String(err)),
         });
       }
     }
     if (o.status === 'completed' && o.text && this.deps.chat && this.deps.chatDelivery !== 'off') {
-      if (this.deps.chatDelivery === 'self') await this.deps.chat.sendText(sessionId, msg.to, o.text);
-      else if (!o.late) await this.deps.chat.reply(sessionId, msg.chatId, msg.id, o.text);
+      if (this.deps.chatDelivery === 'self') {
+        const selfJid = (msg.to ?? '').trim();
+        const selfLower = selfJid.toLowerCase();
+        if (
+          selfJid &&
+          !selfLower.endsWith('@g.us') &&
+          !selfLower.endsWith('@newsletter') &&
+          !selfLower.endsWith('@broadcast')
+        ) {
+          await this.deps.chat.sendText(sessionId, selfJid, o.text);
+        }
+      } else if (!o.late) {
+        if (msg.id) await this.deps.chat.reply(sessionId, msg.chatId, msg.id, o.text);
+        else if (msg.chatId) await this.deps.chat.sendText(sessionId, msg.chatId, o.text);
+      }
     }
   }
 }

@@ -10,6 +10,8 @@ const BUFFER_KEY = 'buffer';
 // same caps as the buffer itself.
 const UNDELIVERED_KEY = 'buffer:undelivered';
 const MAX_BUFFER = 5000;
+const MAX_FLUSH_ROWS = 500;
+const MAX_FLUSH_CHARS = 500_000;
 // The row cap alone does not bound memory: row.ts allows 50,000 characters per cell across 14 columns,
 // so 5,000 rows can reach hundreds of millions of characters against a 256 MB worker heap — and the
 // message body a sender controls is one of those cells. ~4M characters is ~8 MB of UTF-16.
@@ -35,8 +37,11 @@ export interface LoggerConfig {
 
 export function parseConfig(raw: Record<string, unknown>): { config: LoggerConfig; sa: ServiceAccount } {
   const serviceAccountJson = String(raw.serviceAccountJson ?? '');
-  const spreadsheetId = String(raw.spreadsheetId ?? '');
+  const spreadsheetId = String(raw.spreadsheetId ?? '').trim();
   if (!spreadsheetId) throw new Error('gsheets-logger: spreadsheetId is required');
+  if (!/^[A-Za-z0-9-_]+$/.test(spreadsheetId)) {
+    throw new Error('gsheets-logger: spreadsheetId must contain only letters, digits, hyphens, or underscores');
+  }
 
   let sa: ServiceAccount;
   try {
@@ -61,7 +66,7 @@ export function parseConfig(raw: Record<string, unknown>): { config: LoggerConfi
     config: {
       serviceAccountJson,
       spreadsheetId,
-      sheetTab: String(raw.sheetTab ?? 'Logs'),
+      sheetTab: String(raw.sheetTab ?? '').trim() || 'Logs',
       flushIntervalSec:
         Number.isFinite(flushIntervalSec) && flushIntervalSec > 0
           ? Math.min(2_147_483, Math.max(1, flushIntervalSec))
@@ -72,12 +77,35 @@ export function parseConfig(raw: Record<string, unknown>): { config: LoggerConfi
   };
 }
 
-// Take ownership of the current rows BEFORE awaiting so a concurrent enqueue/cap-drop on `buffer`
-// cannot shift the front out from under us. On failure, restore the batch ahead of rows that
-// arrived during the append, preserving order (retain-on-failure).
-export async function flushBuffer(buffer: string[][], append: (rows: string[][]) => Promise<void>): Promise<void> {
+// Take ownership of the batch BEFORE awaiting so a concurrent enqueue/cap-drop on `buffer` cannot shift
+// the front out from under us. On failure, restore the batch ahead of rows that arrived during the
+// append, preserving order (retain-on-failure).
+//
+// One call sends one bounded chunk and leaves the rest buffered for the next tick. That keeps each flush
+// to a single request, as it always was, so onDisable and a config change still wait on at most one
+// append, and an outage backlog of megabytes is never posted as one payload. It also keeps the stored
+// checkpoint honest: a flush either sent its whole chunk or nothing.
+function takeFlushChunk(buffer: string[][], maxRows: number, maxChars: number): string[][] {
+  let count = 0;
+  let chars = 0;
+  while (count < buffer.length && count < maxRows) {
+    let rowChars = 0;
+    for (const cell of buffer[count]) rowChars += cell.length;
+    if (count > 0 && chars + rowChars > maxChars) break;
+    chars += rowChars;
+    count++;
+  }
+  return buffer.splice(0, count);
+}
+
+export async function flushBuffer(
+  buffer: string[][],
+  append: (rows: string[][]) => Promise<void>,
+  maxRows = MAX_FLUSH_ROWS,
+  maxChars = MAX_FLUSH_CHARS,
+): Promise<void> {
   if (buffer.length === 0) return;
-  const batch = buffer.splice(0, buffer.length);
+  const batch = takeFlushChunk(buffer, maxRows, maxChars);
   try {
     await append(batch);
   } catch (err) {
@@ -228,7 +256,7 @@ export default class GSheetsLogger implements IPlugin {
               `credential change; parked under "${UNDELIVERED_KEY}" rather than sent to the new sheet` +
               (evicted > 0 ? `, dropping the ${evicted} oldest to stay inside the buffer cap` : ''),
           );
-        });
+        }, Infinity, Infinity);
       } catch (err) {
         ctx.logger.error(`gsheets-logger: ${undeliveredCount} undelivered row(s) could not be parked`, err);
         throw err;
@@ -241,7 +269,11 @@ export default class GSheetsLogger implements IPlugin {
     this.stopTimer();
     await this.flush();
     try {
-      await this.ctx?.storage.set(BUFFER_KEY, { target: this.target, rows: this.buffer });
+      if (this.buffer.length === 0 && this.ctx?.storage.delete) {
+        await this.ctx.storage.delete(BUFFER_KEY);
+      } else {
+        await this.ctx?.storage.set(BUFFER_KEY, { target: this.target, rows: this.buffer });
+      }
     } catch (err) {
       // `set` rejects once the plugin directory would exceed its 50 MiB quota. Nothing here can rescue
       // the rows, but an unhandled rejection would both lose them silently and escape onDisable itself.
@@ -300,12 +332,25 @@ export default class GSheetsLogger implements IPlugin {
     const client = this.client;
     this.flushingPromise = (async () => {
       try {
-        await flushBuffer(this.buffer, (rows) => client.appendRows(rows));
-        this.lastFlushError = null;
-        await this.ctx?.storage.set(BUFFER_KEY, { target: this.target, rows: this.buffer });
-      } catch (err) {
-        this.lastFlushError = err instanceof Error ? err.message : String(err);
-        this.ctx?.logger.error('gsheets-logger: flush failed, will retry next tick', err);
+        try {
+          await flushBuffer(this.buffer, (rows) => client.appendRows(rows));
+          this.lastFlushError = null;
+        } catch (err) {
+          this.lastFlushError = err instanceof Error ? err.message : String(err);
+          this.ctx?.logger.error('gsheets-logger: flush failed, will retry next tick', err);
+          return;
+        }
+        try {
+          if (this.buffer.length === 0 && this.ctx?.storage.delete) {
+            await this.ctx.storage.delete(BUFFER_KEY);
+          } else {
+            await this.ctx?.storage.set(BUFFER_KEY, { target: this.target, rows: this.buffer });
+          }
+        } catch (err) {
+          this.ctx?.logger.warn(
+            `gsheets-logger: rows flushed to Sheets, but buffer checkpoint failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       } finally {
         this.flushingPromise = null;
       }

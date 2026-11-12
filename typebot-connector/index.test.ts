@@ -204,3 +204,29 @@ test('an invalid per-session config logs a warning and passes the message on, an
   assert.deepEqual(badRes, { continue: true });
   assert.ok(warnings.some(w => /config invalid/.test(w)));
 });
+
+test('orphan sweep runs once per interval globally instead of once per active WhatsApp session', async () => {
+  let handler!: HookHandler;
+  const listPrefixes: Array<string | undefined> = [];
+  const ctx = makeCtx({ registerHook: (_e, h) => { handler = h; } });
+  ctx.storage.list = async (prefix?: string) => {
+    listPrefixes.push(prefix);
+    return [];
+  };
+  await new Plugin().onEnable(ctx as never);
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  for (const sid of ['s1', 's2', 's3', 's4']) {
+    await handler({
+      event: 'message:received',
+      source: 'Engine',
+      sessionId: sid,
+      timestamp: new Date(),
+      data: { id: `m-${sid}`, from: 'x@c.us', to: 'y', chatId: 'c@c.us', body: 'hi', type: 'chat', timestamp: nowSec, fromMe: false, isGroup: false },
+    });
+  }
+  await new Promise(r => setImmediate(r));
+  const unscopedOrphanScans = listPrefixes.filter(p => p === 'sess:').length;
+  assert.equal(unscopedOrphanScans, 1, `expected 1 global orphan scan across 4 sessions, got ${unscopedOrphanScans}`);
+  assert.equal(listPrefixes.filter(p => p?.startsWith('sess:s')).length, 4, 'each session still runs its own scoped idle sweep');
+});

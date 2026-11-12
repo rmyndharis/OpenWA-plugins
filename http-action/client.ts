@@ -36,26 +36,40 @@ export interface ActionResult {
   data: unknown; // parsed JSON, or undefined when a non-ok body wasn't JSON
 }
 
+export class HttpResponseBodyError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 export class HttpActionClient {
   constructor(private readonly fetch: FetchLike, private readonly cfg: HttpActionConfig) {}
 
   async run(action: HttpAction, ctx: TemplateContext): Promise<ActionResult> {
-    const { url, init } = this.buildRequest(action, ctx);
-    const res = await this.fetch(url, init);
+    return this.runPrepared(this.buildRequest(action, ctx));
+  }
+
+  async runPrepared(prepared: { url: string; init: FetchInit }): Promise<ActionResult> {
+    const res = await this.fetch(prepared.url, prepared.init);
     if (res.body.length > MAX_RESPONSE_BYTES) {
-      throw new Error('http-action: upstream response too large (RESPONSE_TOO_LARGE)');
+      throw new HttpResponseBodyError('http-action: upstream response too large (RESPONSE_TOO_LARGE)', res.status);
     }
     let data: unknown;
     try {
       data = res.body.length ? JSON.parse(res.body) : undefined;
     } catch {
-      if (res.ok) throw new Error('http-action: upstream returned invalid JSON (UPSTREAM_INVALID_JSON)');
+      if (res.ok) {
+        throw new HttpResponseBodyError('http-action: upstream returned invalid JSON (UPSTREAM_INVALID_JSON)', res.status);
+      }
       data = undefined; // non-ok body may be a plaintext error; the handler maps via status template
     }
     return { status: res.status, data };
   }
 
-  private buildRequest(action: HttpAction, ctx: TemplateContext): { url: string; init: FetchInit } {
+  buildRequest(action: HttpAction, ctx: TemplateContext): { url: string; init: FetchInit } {
     const path = renderPath(action.request.path, ctx);
     let url = this.cfg.baseUrl + path;
 

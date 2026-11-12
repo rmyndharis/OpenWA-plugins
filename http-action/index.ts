@@ -6,7 +6,7 @@ import { readConfig, type HttpActionConfig } from './config.ts';
 import { phoneFromJid, isBroadcastJid } from './jid.ts';
 import { matchAction } from './matcher.ts';
 import { renderText, type TemplateContext } from './url-template.ts';
-import { HttpActionClient, type FetchLike } from './client.ts';
+import { HttpActionClient, HttpResponseBodyError, type FetchLike } from './client.ts';
 import { hasSeen, markSeen, getPostCompletion, savePostCompletion, prune, allowCooldown, type StorageLike, DEDUP_TTL_MS, PRUNE_INTERVAL_MS } from './reliability.ts';
 import { KeyedAsyncLock } from './chat-lock.ts';
 
@@ -138,7 +138,30 @@ async function handleLocked(deps: HandleDeps, sessionId: string, msg: IncomingMe
 
   const client = new HttpActionClient(deps.fetch, deps.cfg);
   const ctxWith = (response?: unknown): TemplateContext => buildCtx(msg, sessionId, args, response);
+  const renderErrorFallback = (): string => {
+    try {
+      return truncate(sanitize(renderText(action.errorTemplate ?? DEFAULT_ERROR, ctxWith()))).trim() || DEFAULT_ERROR;
+    } catch (tplErr) {
+      deps.logger.warn(`${PLUGIN}: action '${action.id}' errorTemplate failed to render`,
+        { error: tplErr instanceof Error ? tplErr.message : String(tplErr) });
+      return DEFAULT_ERROR;
+    }
+  };
   const post = action.request.method === 'POST';
+
+  let prepared: ReturnType<HttpActionClient['buildRequest']>;
+  try {
+    prepared = client.buildRequest(action, ctxWith());
+  } catch (e) {
+    deps.logger.error(`${PLUGIN}: request failed`, e);
+    const errReply = renderErrorFallback();
+    await deps.conversations.send({
+      sessionId, chatId: msg.chatId, type: 'text', text: errReply, replyTo: msg.id,
+    });
+    await markSeen(deps.storage, sessionId, msg.id, deps.now());
+    return;
+  }
+
   const intent = { t: deps.now(), fingerprint, chatId: msg.chatId };
   if (post) {
     try {
@@ -149,28 +172,37 @@ async function handleLocked(deps: HandleDeps, sessionId: string, msg: IncomingMe
     }
   }
 
-  let text: string;
+  let text = '';
   let uncertain = false;
+  let out: Awaited<ReturnType<HttpActionClient['runPrepared']>> | undefined;
+  // A POST the upstream accepted has happened even when its reply cannot be shown. errorTemplate usually
+  // says "try again later", and a retry repeats the write, so that case gets the confirm-first notice.
+  const completedPostFallback = (status: number): string =>
+    post && status >= 200 && status < 300 ? UNKNOWN_NOTICE : renderErrorFallback();
   try {
-    const out = await client.run(action, ctxWith());
-    if (out.status === 404) {
-      text = renderText(action.notFoundTemplate ?? DEFAULT_NOT_FOUND, ctxWith(out.data));
-    } else if (out.status >= 200 && out.status < 300) {
-      text = renderText(action.replyTemplate, ctxWith(out.data));
-    } else {
-      text = renderText(action.errorTemplate ?? DEFAULT_ERROR, ctxWith(out.data));
-    }
+    out = await client.runPrepared(prepared);
   } catch (e) {
-    deps.logger.error(`${PLUGIN}: ${post ? 'POST outcome is unknown; request will not be repeated' : 'request failed'}`, e);
-    uncertain = post;
-    // Same hazard as the empty-reply fallback below: renderText can throw on a bad template, and an
-    // unguarded throw here would replace an upstream failure the operator can see with silence.
+    if (e instanceof HttpResponseBodyError) {
+      deps.logger.error(`${PLUGIN}: request failed`, e);
+      text = completedPostFallback(e.status);
+    } else {
+      deps.logger.error(`${PLUGIN}: ${post ? 'POST outcome is unknown; request will not be repeated' : 'request failed'}`, e);
+      uncertain = post;
+      text = post ? UNKNOWN_NOTICE : renderErrorFallback();
+    }
+  }
+  if (out !== undefined) {
     try {
-      text = post ? UNKNOWN_NOTICE : renderText(action.errorTemplate ?? DEFAULT_ERROR, ctxWith());
-    } catch (tplErr) {
-      deps.logger.warn(`${PLUGIN}: action '${action.id}' errorTemplate failed to render`,
-        { error: tplErr instanceof Error ? tplErr.message : String(tplErr) });
-      text = DEFAULT_ERROR;
+      if (out.status === 404) {
+        text = renderText(action.notFoundTemplate ?? DEFAULT_NOT_FOUND, ctxWith(out.data));
+      } else if (out.status >= 200 && out.status < 300) {
+        text = renderText(action.replyTemplate, ctxWith(out.data));
+      } else {
+        text = renderText(action.errorTemplate ?? DEFAULT_ERROR, ctxWith(out.data));
+      }
+    } catch (e) {
+      deps.logger.error(`${PLUGIN}: reply template failed`, e);
+      text = completedPostFallback(out.status);
     }
   }
 
@@ -180,16 +212,7 @@ async function handleLocked(deps: HandleDeps, sessionId: string, msg: IncomingMe
   let reply = truncate(sanitize(text));
   if (!reply.trim()) {
     deps.logger.warn(`${PLUGIN}: action '${action.id}' rendered an empty reply; sent the error template instead`);
-    // renderText can THROW (a too-deep path, a prototype key, too many placeholders). Before this
-    // fallback existed an empty bubble was still sent and the message was marked seen; letting the
-    // fallback throw would instead reject out of handleMessage, sending nothing at all.
-    try {
-      reply = truncate(sanitize(renderText(action.errorTemplate ?? DEFAULT_ERROR, ctxWith()))).trim() || DEFAULT_ERROR;
-    } catch (e) {
-      deps.logger.warn(`${PLUGIN}: action '${action.id}' errorTemplate failed to render`,
-        { error: e instanceof Error ? e.message : String(e) });
-      reply = DEFAULT_ERROR;
-    }
+    reply = renderErrorFallback();
   }
 
   if (post && !uncertain) {

@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import ChatwootAdapter from './index.ts';
-import { destinationIdentity } from './mapping-store.ts';
+import { MappingStore, destinationIdentity } from './mapping-store.ts';
 import { MAX_PENDING_RETRIES, RETRY_INTERVAL_MS } from './retry.ts';
-import type { PluginContext } from '../types/openwa';
+import type { PluginContext, WebhookHandler } from '../types/openwa';
 
 function fakeCtx(config: Record<string, unknown>) {
   const hooks: string[] = [];
@@ -302,5 +302,51 @@ test('an invalid per-session config in message:received or message:sent warns an
   assert.deepEqual(r1, { continue: true });
   assert.deepEqual(r2, { continue: true });
   assert.equal(warnings.length, 2);
+  await plugin.onDisable();
+});
+
+test('wildcard sessionId="*" on chatwoot ingress routes outbound reply without polluting sessionConfigs', async () => {
+  let webhookCb: WebhookHandler | undefined;
+  const sent: unknown[] = [];
+  const { ctx } = fakeCtx(goodConfig);
+  ctx.registerWebhook = (_route, cb) => {
+    webhookCb = cb;
+  };
+  ctx.conversations.send = async (env) => {
+    sent.push(env);
+    return { messageId: 'WA_1', timestamp: 0 };
+  };
+  const plugin = new ChatwootAdapter();
+  await plugin.onEnable(ctx);
+
+  await new MappingStore(ctx.storage, ctx.mappings)
+    .forDestination(goodConfig)
+    .link('sess', '628123@c.us', 'sess', { conversationId: 55, contactId: 1, sourceId: 'src' });
+
+  const rawBody = JSON.stringify({
+    event: 'message_created',
+    message_type: 'outgoing',
+    private: false,
+    id: 91,
+    content: 'hello from wildcard',
+    account: { id: 3 },
+    inbox: { id: 7 },
+    conversation: { id: 55 },
+  });
+  const res = await webhookCb!({
+    instanceId: 'inst',
+    method: 'POST',
+    sessionId: '*',
+    body: rawBody,
+    rawBody,
+    verified: true,
+    deliveryId: 'd1',
+    headers: {},
+    query: {},
+  });
+  assert.deepEqual(res, { status: 200 });
+  assert.deepEqual(sent, [{ sessionId: 'sess', chatId: '628123@c.us', type: 'text', text: 'hello from wildcard' }]);
+  const sessionConfigs = (plugin as unknown as { sessionConfigs: Map<string, unknown> }).sessionConfigs;
+  assert.equal(sessionConfigs.has('*'), false, 'must not store wildcard literal in sessionConfigs');
   await plugin.onDisable();
 });

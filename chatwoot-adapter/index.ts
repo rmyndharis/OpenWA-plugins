@@ -212,8 +212,9 @@ export default class ChatwootAdapter implements IPlugin {
 
     ctx.registerWebhook('chatwoot', async (req: WebhookRequest) => {
       const cfg = readConfig(ctx.config);
-      if (req.sessionId) this.sessionConfigs.set(req.sessionId, cfg);
-      const assertCurrent = guard(cfg, req.sessionId);
+      const scope = req.sessionId && req.sessionId !== '*' ? req.sessionId : undefined;
+      if (scope) this.sessionConfigs.set(scope, cfg);
+      const assertCurrent = guard(cfg, scope);
       return handleOutbound(
         {
           lock,

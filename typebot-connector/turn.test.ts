@@ -356,3 +356,75 @@ test('at an optional file step a late skip word is ignored and a live one skips'
   await handleTurn(d, 'sess', 'Engine', msg({ body: 'Lewati', timestamp: ago(0) }));
   assert.deepEqual(calls.answers, [undefined]);
 });
+
+test('unsupported input delivers its notice and clears stored session so subsequent turns start fresh', async () => {
+  let starts = 0;
+  let continues = 0;
+  const { d, sent, store } = deps({
+    startChat: () => {
+      starts++;
+      return starts === 1
+        ? {
+            sessionId: 'S-UNSUP',
+            bubbles: [{ kind: 'text', markdown: 'Checkout' }],
+            input: { kind: 'unsupported', blockId: 'pay1', typeLabel: 'payment input' },
+          }
+        : {
+            sessionId: 'S-FRESH',
+            bubbles: [{ kind: 'text', markdown: 'Welcome back' }],
+            input: { kind: 'text', blockId: 'b2', attachmentsEnabled: false },
+          };
+    },
+    continueChat: () => {
+      continues++;
+      return { bubbles: [], input: undefined };
+    },
+  });
+
+  await handleTurn(d, 'sess', 'Engine', msg({ body: 'buy' }));
+  assert.equal(sent.length, 2);
+  assert.match(sent[1].text ?? '', /can't be shown on WhatsApp/);
+  assert.equal(await store.get('sess:c@c.us'), null, 'unsupported input must not remain persisted as awaiting');
+
+  await handleTurn(d, 'sess', 'Engine', msg({ body: 'hi again' }));
+  assert.equal(continues, 0, 'next message must not call continueChat on the unsupported block');
+  assert.equal(starts, 2, 'next message starts a fresh flow');
+});
+
+test('changing publicId or apiHost invalidates stored session from the previous bot', async () => {
+  let starts = 0;
+  let continues = 0;
+  const storage = fakeStorage();
+  const first = deps({
+    startChat: () => {
+      starts++;
+      return {
+        sessionId: `S-${starts}`,
+        bubbles: [{ kind: 'text', markdown: `Bot ${starts}` }],
+        input: { kind: 'text', blockId: 'b', attachmentsEnabled: false },
+      };
+    },
+    continueChat: () => {
+      continues++;
+      return { bubbles: [], input: undefined };
+    },
+  }, storage);
+
+  await handleTurn(first.d, 'sess', 'Engine', msg({ body: 'hello' }));
+  assert.equal(starts, 1);
+  assert.equal((await first.store.get('sess:c@c.us'))?.sessionId, 'S-1');
+
+  const secondCfg: TypebotConfig = { ...cfg, publicId: 'other-bot' };
+  await handleTurn({ ...first.d, cfg: secondCfg }, 'sess', 'Engine', msg({ body: 'next' }));
+  assert.equal(continues, 0, 'must not continue S-1 against a newly configured publicId');
+  assert.equal(starts, 2, 'starts a fresh session on the new bot');
+  assert.equal((await first.store.get('sess:c@c.us'))?.sessionId, 'S-2');
+});
+
+test('a stale stored row with no awaiting field is idle-reset instead of throwing', async () => {
+  let starts = 0;
+  const { d, store } = deps({ startChat: () => (starts++, undefined) });
+  await store.set('sess:c@c.us', { sessionId: 'OLD', lastActivity: -10_000_000 } as never);
+  await handleTurn(d, 'sess', 'Engine', msg({ body: 'hello' }));
+  assert.equal(starts, 1, 'the corrupt idle row is discarded and the flow starts from the top');
+});

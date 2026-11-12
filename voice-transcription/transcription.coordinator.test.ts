@@ -449,3 +449,91 @@ test('a late note still reaches the self note, and a fresh one is still quote-re
     assert.equal(fresh.chatSends[0].kind, 'reply');
   }
 });
+
+test('redacts credentials and query tokens in STT and webhook error logs and outbound failure reasons', async () => {
+  const deliveries: TranscriptionPayload[] = [];
+  const warns: string[] = [];
+  const co = new TranscriptionCoordinator({
+    provider: {
+      async transcribe() {
+        throw new Error('refused https://user:mySecretPass@stt.local/v1/audio/transcriptions?key=secretKey123');
+      },
+    },
+    delivery: {
+      async deliver(p) {
+        deliveries.push(p);
+        throw new Error('webhook failed at https://hooks.example.com/ingest?token=hookToken999#sec');
+      },
+    },
+    chatDelivery: 'off',
+    store: makeStore(),
+    config: { enabledMessageTypes: ['voice'], maxSizeBytes: 1000, maxPerHour: 10 },
+    providerLabel: 'faster-whisper',
+    model: 'small',
+    logger: { warn: (m, meta) => warns.push(`${m} ${JSON.stringify(meta ?? {})}`) },
+  });
+
+  await co.handle('s1', voiceMsg());
+  assert.equal(deliveries.length, 1);
+  assert.ok(!deliveries[0].reason?.includes('mySecretPass'), `leaked password in reason: ${deliveries[0].reason}`);
+  assert.ok(!deliveries[0].reason?.includes('secretKey123'), `leaked query key in reason: ${deliveries[0].reason}`);
+  const combinedLogs = warns.join('\n');
+  assert.ok(!combinedLogs.includes('mySecretPass'), `leaked password in logs: ${combinedLogs}`);
+  assert.ok(!combinedLogs.includes('secretKey123'), `leaked STT query key in logs: ${combinedLogs}`);
+  assert.ok(!combinedLogs.includes('hookToken999'), `leaked webhook token in logs: ${combinedLogs}`);
+  // The reason passes through the redaction more than once; it must come out the same as a single pass.
+  assert.equal(deliveries[0].reason, 'refused https://***@stt.local/v1/audio/transcriptions?[redacted]');
+});
+
+test('bounds seen and rate storage keys to <= 184 UTF-8 bytes', async () => {
+  const keysWritten: string[] = [];
+  const base = makeStore();
+  const checkedStore: KvStore = {
+    get: (k) => {
+      assert.ok(Buffer.byteLength(k, 'utf8') <= 184, `get key > 184 bytes: ${Buffer.byteLength(k, 'utf8')}`);
+      return base.get(k);
+    },
+    set: (k, v) => {
+      assert.ok(Buffer.byteLength(k, 'utf8') <= 184, `set key > 184 bytes: ${Buffer.byteLength(k, 'utf8')}`);
+      keysWritten.push(k);
+      return base.set(k, v);
+    },
+    delete: (k) => base.delete(k),
+    list: (p) => base.list(p),
+  };
+  const { co, deliveries } = setup({ store: checkedStore });
+  const longUtf8Session = 'sesi-' + 'あ'.repeat(80);
+  await co.handle(longUtf8Session, voiceMsg({ id: 'm-utf8' }));
+  assert.equal(deliveries[0]?.status, 'completed');
+  assert.equal(keysWritten.length, 2);
+});
+
+test('handles empty msg.id without poisoning seen or quoting empty id, and blocks group JIDs on chatDelivery=self', async () => {
+  const { co, provider, chatSends } = setup({ chatDelivery: 'reply', noDelivery: true });
+  await co.handle('s1', voiceMsg({ id: '' }));
+  await co.handle('s1', voiceMsg({ id: '' }));
+  assert.equal(provider.calls.length, 2, 'empty id must not poison seen for subsequent id-less notes');
+  assert.equal(chatSends.length, 2);
+  assert.ok(chatSends.every((s) => s.kind === 'sendText'), 'empty id falls back to sendText instead of reply with empty messageId');
+
+  const selfGroup = setup({ chatDelivery: 'self', noDelivery: true });
+  await selfGroup.co.handle('s1', voiceMsg({ id: 'g1', to: '1203630111@g.us', isGroup: true }));
+  await selfGroup.co.handle('s1', voiceMsg({ id: 'g2', to: '' }));
+  assert.equal(selfGroup.chatSends.length, 0, 'chatDelivery=self must never post into a group or empty recipient');
+});
+
+test('emits a failed webhook event instead of dropping silently when storage quota rejects seen or rate writes', async () => {
+  const quotaStore: KvStore = {
+    get: async () => null,
+    set: async () => {
+      throw new Error('Plugin storage quota exceeded (50 MiB)');
+    },
+    delete: async () => {},
+    list: async () => [],
+  };
+  const { co, provider, deliveries } = setup({ store: quotaStore });
+  await co.handle('s1', voiceMsg({ id: 'm-quota' }));
+  assert.equal(provider.calls.length, 0, 'must fail closed before paid STT call when storage write fails');
+  assert.equal(deliveries.length, 1, 'webhook must still receive a failed event');
+  assert.equal(deliveries[0].status, 'failed');
+});

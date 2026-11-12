@@ -32,6 +32,10 @@ export async function handleTurn(deps: TurnDeps, sessionId: string, source: stri
 
   await deps.lock.run(key, async () => {
     let state = await deps.store.get(key);
+    const botKey = `${deps.cfg.apiHost}|${deps.cfg.publicId}`;
+    if (state && ((state.botKey && state.botKey !== botKey) || state.awaiting?.kind === 'unsupported')) {
+      state = null;
+    }
     // When the contact wrote. `timestamp` is unix seconds; a missing, zero, negative, unrepresentable or
     // future one counts as now.
     const now = deps.now();
@@ -98,10 +102,10 @@ export async function handleTurn(deps: TurnDeps, sessionId: string, source: stri
     // mapped against a stale input.
     const sid = resp.sessionId ?? state?.sessionId;
     try {
-      if (resp.input && sid) {
-        await deps.store.set(key, { sessionId: sid, awaiting: resp.input, lastActivity: deps.now() });
+      if (resp.input && resp.input.kind !== 'unsupported' && sid) {
+        await deps.store.set(key, { sessionId: sid, awaiting: resp.input, lastActivity: deps.now(), botKey });
       } else {
-        await deps.store.clear(key); // flow ended
+        await deps.store.clear(key); // flow ended or hit an unanswerable step
       }
     } catch (e) {
       // A rejected write (the host rejects every `set` once the plugin is at its storage quota) must not

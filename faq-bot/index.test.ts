@@ -253,32 +253,60 @@ test('a message with no text is left alone', async () => {
   assert.equal(res.continue, true, 'and must not be claimed');
 });
 
-test('a failed fallback send releases the cooldown slot instead of silencing the chat', async () => {
-  // The slot is claimed before the send. When the send throws, the window was spent anyway, so the chat
-  // stayed silent for the whole cooldown over a reply that never arrived.
+test('a failed fallback or rule send backs off briefly instead of retrying on every message or silencing the full cooldown', async () => {
   const { default: FaqBot } = await import('./index.ts');
   let failNext = true;
+  let attempts = 0;
   let delivered = 0;
   let handler: ((h: unknown) => Promise<{ continue: boolean }>) | undefined;
   const ctx = makeCtx({
     config: { rules: JSON.stringify([{ mode: 'contains', pattern: 'hi', reply: 'hello' }]), fallbackReply: 'tidak paham', fallbackCooldownSec: 600 },
     registerHook: (_e, h) => { handler = h as (h2: unknown) => Promise<{ continue: boolean }>; },
     reply: async () => {
+      attempts++;
       if (failNext) throw new Error('send failed');
       delivered++;
       return { messageId: 'x', timestamp: 0 };
     },
   });
   await new FaqBot().onEnable(ctx as never);
-  const fire = (id: string) => handler!({
+  const fire = (id: string, body = 'apa kabar') => handler!({
     source: 'Engine', sessionId: 's1', timestamp: new Date(),
-    data: { id, chatId: 'c@x', body: 'apa kabar', fromMe: false, isGroup: false },
+    data: { id, chatId: 'c@x', body, fromMe: false, isGroup: false },
   });
 
-  await fire('m1');           // send throws; the slot must not stay burnt
-  failNext = false;
-  await fire('m2');
-  assert.equal(delivered, 1, 'the next message must be able to retry the fallback');
+  mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  try {
+    await fire('m1');
+    assert.equal(attempts, 1);
+
+    failNext = false;
+    const suppressed = await fire('m2');
+    assert.equal(suppressed.continue, true, 'suppressed fallback passes down the chain');
+    assert.equal(attempts, 1, 'a failing fallback must not retry at full rate');
+
+    mock.timers.tick(61_000);
+    await fire('m3');
+    assert.equal(delivered, 1, 'after the 60s backoff the fallback retries well inside the 600s cooldown');
+
+    failNext = true;
+    await fire('m4', 'hi there');
+    assert.equal(attempts, 3);
+    const matchedSuppressed = await fire('m5', 'hi there');
+    assert.equal(matchedSuppressed.continue, false, 'a matched rule remains claimed during failure backoff');
+    assert.equal(attempts, 3, 'a failing rule reply must not retry inside the failure backoff');
+
+    mock.timers.tick(15_000);
+    await fire('m6', 'hi there');
+    assert.equal(attempts, 3, 'still inside the 60s failure backoff past the 10s matched cooldown');
+
+    failNext = false;
+    mock.timers.tick(46_000);
+    await fire('m7', 'hi there');
+    assert.equal(delivered, 2, 'after the 60s backoff the matched rule replies again');
+  } finally {
+    mock.timers.reset();
+  }
 });
 
 test('the same repeated text is answered once, but different questions are all answered', async () => {

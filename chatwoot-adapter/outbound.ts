@@ -45,7 +45,7 @@ export async function handleOutbound(deps: OutboundDeps, req: WebhookRequest): P
       inboxes.some(id => id !== undefined && id !== deps.inboxId)) return { status: 200 };
   // The delivery's WA session scope. Present → the reverse lookup + dedup are tenant-scoped (isolating two
   // Chatwoot accounts that share a conversation id); absent → unscoped, same as a single-tenant install.
-  const sessionId = req.sessionId;
+  const sessionId = req.sessionId && req.sessionId !== '*' ? req.sessionId : undefined;
   try {
     if (evt.event === 'conversation_updated' || evt.event === 'conversation_status_changed') {
       await applyHandover(deps, sessionId, evt);

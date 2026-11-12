@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import type { PluginNetCapability } from '../types/openwa';
+import { redactUrlSecrets } from './openai-stt.client.ts';
 
 /** The out-of-band event the plugin POSTs to an integrator's URL for an inbound voice note. */
 export interface TranscriptionPayload {
@@ -43,12 +44,21 @@ export class WebhookDelivery implements TranscriptDelivery {
     if (this.opts.secret) {
       headers['X-OpenWA-Signature'] = `sha256=${createHmac('sha256', this.opts.secret).update(body).digest('hex')}`;
     }
-    const response = await this.opts.net.fetch(this.opts.url, {
-      method: 'POST',
-      headers,
-      body,
-      timeoutMs: this.opts.timeoutMs,
-    });
+    let response;
+    try {
+      response = await this.opts.net.fetch(this.opts.url, {
+        method: 'POST',
+        headers,
+        body,
+        timeoutMs: this.opts.timeoutMs,
+      });
+    } catch (err) {
+      if (err instanceof Error) {
+        const redacted = redactUrlSecrets(err.message);
+        if (redacted !== err.message) throw new Error(redacted);
+      }
+      throw err;
+    }
     if (!response.ok) {
       throw new Error(`transcription delivery failed: HTTP ${response.status}`);
     }

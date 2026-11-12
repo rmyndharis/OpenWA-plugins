@@ -497,3 +497,84 @@ test('a credential rotation parks the rows, but re-pasting the same key reformat
   const rotated = JSON.stringify({ client_email: 'other@b.iam.gserviceaccount.com', private_key: 'KEY2' });
   assert.deepEqual(await run(rotated), { parked: true, buffered: 0 }, 'a rotation must park');
 });
+
+test('parseConfig validates and trims spreadsheetId and falls back blank sheetTab to Logs', () => {
+  const { config } = parseConfig({
+    spreadsheetId: '  1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms  ',
+    sheetTab: '   ',
+    serviceAccountJson: validSa,
+  });
+  assert.equal(config.spreadsheetId, '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms');
+  assert.equal(config.sheetTab, 'Logs');
+
+  for (const bad of ['   ', '../other', 'id?alt=media', 'id#frag', 'https://docs.google.com/spreadsheets/d/abc/edit', 'has space']) {
+    assert.throws(() => parseConfig({ spreadsheetId: bad, serviceAccountJson: validSa }), /spreadsheetId/);
+  }
+});
+
+test('flushBuffer sends one bounded chunk per call and restores only that chunk on failure', async () => {
+  const rows = Array.from({ length: 1_200 }, (_, i) => [`r-${i}`]);
+  const sent: number[] = [];
+  await flushBuffer(rows, async (chunk) => {
+    sent.push(chunk.length);
+  });
+  assert.deepEqual(sent, [500], 'one request per flush, capped at 500 rows');
+  assert.equal(rows.length, 700);
+  assert.equal(rows[0][0], 'r-500', 'the rest stays buffered, oldest first');
+
+  await assert.rejects(
+    flushBuffer(rows, async () => {
+      rows.push(['arrived-live']);
+      throw new Error('transient 503');
+    }),
+    /transient 503/,
+  );
+  assert.equal(rows.length, 701, 'the failed chunk is restored ahead of the row that arrived meanwhile');
+  assert.equal(rows[0][0], 'r-500');
+  assert.equal(rows.at(-1)?.[0], 'arrived-live');
+
+  const wide = [['x'.repeat(300_000)], ['y'.repeat(300_000)], ['z']];
+  const widths: number[] = [];
+  await flushBuffer(wide, async (chunk) => {
+    widths.push(chunk.length);
+  });
+  assert.deepEqual(widths, [1], 'the character cap splits before the second wide row');
+  assert.equal(wide.length, 2);
+});
+
+test('post-append storage checkpoint failure does not mark healthCheck unhealthy or block deletion of drained buffer', async () => {
+  const logger = new GSheetsLogger();
+  let deleted = 0;
+  const warns: string[] = [];
+  const harness = logger as unknown as {
+    client: unknown;
+    ctx: unknown;
+    buffer: string[][];
+    lastFlushError: string | null;
+    flush(): Promise<void>;
+  };
+  harness.client = { appendRows: async () => {} };
+  harness.lastFlushError = 'previous network error';
+  harness.buffer = [['row-1']];
+  harness.ctx = {
+    storage: {
+      delete: async () => {
+        deleted++;
+        throw new Error('disk error after append');
+      },
+      set: async () => {
+        throw new Error('quota exceeded');
+      },
+    },
+    logger: {
+      warn: (m: string) => warns.push(m),
+      error: () => {},
+    },
+  };
+
+  await harness.flush();
+  assert.equal(deleted, 1, 'drained buffer attempts storage.delete to release quota');
+  assert.equal(harness.lastFlushError, null, 'successful Sheets append clears lastFlushError even when checkpoint fails');
+  assert.equal((await logger.healthCheck()).healthy, true);
+  assert.equal(warns.length, 1);
+});

@@ -229,9 +229,10 @@ test("does NOT claim a translated conversational message — a co-installed resp
   await plugin.onEnable(ctx);
 
   const result = await getHook()!(engineCtx({ body: "hello world" }));
+  assert.equal(result.continue, true, "conversational content is passed on, translated or not");
+  await settle();
   assert.equal(replies.length, 1, "the message really was translated (not skipped into a trivial pass)");
   assert.match(replies[0], /halo dunia/);
-  assert.equal(result.continue, true, "conversational content is passed on, translated or not");
 });
 
 // From host 0.23.2 a shared contact card carries its full vCard as the body. Translating one would POST
@@ -285,11 +286,13 @@ test("a shared contact card is never translated; a poll question still is", asyn
     "BEGIN:VCARD\nVERSION:3.0\nFN:Budi Santoso\nORG:Toko Berkah\nTEL;TYPE=CELL:+628123456789\nEND:VCARD";
   const card = await getHook()!(engineCtx({ body: vcard, type: "contact" }));
   assert.equal(card.continue, true, "a contact card is passed on untouched");
+  await settle(); // translation runs off-dispatch, so let any detached work land before asserting
   assert.deepEqual(urls, [], "no vCard may reach the translation backend");
   assert.deepEqual(replies, [], "and no translated card may be posted into the group");
 
   const poll = await getHook()!(engineCtx({ body: "hello world", type: "poll" }));
   assert.equal(poll.continue, true);
+  await settle();
   assert.ok(urls.length > 0, "a poll question is prose and is still translated");
   assert.equal(replies.length, 1);
 });
@@ -346,6 +349,7 @@ for (const [type, body] of [
 
     const result = await getHook()!(engineCtx({ body, type }));
     assert.equal(result.continue, true, "passed on untouched");
+    await settle();
     assert.deepEqual(urls, [], "no translation request is made");
     assert.deepEqual(replies, [], "and no reply is posted into the group");
   });
@@ -451,6 +455,7 @@ test("a message sent more than 5 minutes before it arrives is not translated; a 
     const { hook, replies } = await translatingHook();
     const result = await hook(engineCtx({ body: "hello world", timestamp: timestamp as number }));
     assert.equal(result.continue, true, `${label}: conversation is passed on`);
+    await settle();
     assert.equal(replies.length, late ? 0 : 1, `${label}: ${late ? "late, not" : "fresh, so"} translated`);
   }
 });
@@ -607,6 +612,7 @@ test("forwarded messages pass through without running /tr commands or teaching t
 
   const cmdRes = await getHook()!(engineCtx({ body: "/tr off", isForwarded: true }));
   assert.equal(cmdRes.continue, true, "forwarded text starting with /tr is not claimed as a command");
+  await settle();
   const afterCmd = (await ctx.storage.get<{
     active: boolean;
     participants: Record<string, { lang: string | null; samples: number }>;
@@ -614,4 +620,43 @@ test("forwarded messages pass through without running /tr commands or teaching t
   assert.equal(afterCmd.active, true, "forwarded /tr off does not deactivate group translation");
   assert.equal(afterCmd.participants[AUTHOR], undefined, "forwarded message does not teach the forwarder's language");
   assert.equal(replies.length, 1, "forwarded message is still translated for the group");
+});
+
+test("non-command group translation runs off-dispatch so a slow backend never stalls the hook chain", async () => {
+  let fetchCalled = false;
+  const { ctx, getHook } = fakeContext(
+    {},
+    {
+      seed: {
+        [GROUP_KEY]: {
+          sessionId: "s1",
+          chatId: "group@g.us",
+          active: true,
+          participants: {
+            [AUTHOR]: { lang: "en", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+            "z@s.whatsapp.net": { lang: "id", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+          },
+          delegatedControllers: [],
+          announced: true,
+        },
+      },
+      net: {
+        fetch: () => {
+          fetchCalled = true;
+          return new Promise(() => {});
+        },
+      },
+    },
+  );
+  await new TranslationPlugin().onEnable(ctx);
+
+  let timer: NodeJS.Timeout | undefined;
+  const timedOut = new Promise<"timeout">((resolve) => {
+    timer = setTimeout(() => resolve("timeout"), 80);
+  });
+  const outcome = await Promise.race([getHook()!(engineCtx({ body: "hello world" })), timedOut]);
+  clearTimeout(timer);
+  assert.deepEqual(outcome, { continue: true });
+  await settle();
+  assert.equal(fetchCalled, true);
 });

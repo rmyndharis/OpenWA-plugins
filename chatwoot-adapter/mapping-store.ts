@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { PluginStorage, PluginMappingsCapability, IncomingMessage } from '../types/openwa';
 import { KeyedAsyncLock } from './chat-lock.ts';
 
@@ -401,8 +402,9 @@ export class MappingStore {
   // Return their message ids so the caller can log the loss. `attempts` starts at 0.
   async enqueueRetry(entry: Omit<RetryEntry, 'attempts'>, maxPending: number): Promise<string | null> {
     return this.bucketLock.run('retry-queue', async () => {
-      const key = this.retryKey(entry.sessionId, entry.msg.id);
-      if (await this.storage.get(key)) return null;
+      const retryId = entry.msg.id || `${entry.chatId}:${entry.enqueuedAt}:${randomBytes(4).toString('hex')}`;
+      const key = this.retryKey(entry.sessionId, retryId);
+      if (entry.msg.id && await this.storage.get(key)) return null;
       const keys = await this.retryKeys();
       const evicted = keys.length < maxPending ? [] : (await this.readRetries(keys))
         .sort((a, b) => a.enqueuedAt - b.enqueuedAt)
@@ -416,7 +418,7 @@ export class MappingStore {
         await this.storage.delete(key);
         throw err;
       }
-      return evicted.length ? evicted.map(e => e.msg.id).join(', ') : null;
+      return evicted.length ? evicted.map(e => e.msg.id || e.chatId).join(', ') : null;
     });
   }
 

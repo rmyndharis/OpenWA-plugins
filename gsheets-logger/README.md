@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `gsheets-logger` |
-| **Version** | 0.3.18 |
-| **Released** | 2026-11-10 |
+| **Version** | 0.3.19 |
+| **Released** | 2026-11-12 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -34,6 +34,7 @@ The installed version is also visible in the OpenWA dashboard Plugins list, via
 - **Logs all four message events** — `message:received`, `message:sent`, `message:failed`, `message:ack` —
   one row per event with a fixed 14-column schema.
 - **Buffered batch writes** with retain-on-failure (rows are kept and retried on a Sheets error),
+  at most 500 rows or ~500K characters per append (a larger backlog drains over successive flushes),
   a 5000-row and ~4M-character cap (oldest dropped first, reported in the log), and persistence to
   plugin storage so the buffer survives restarts.
 - **Destination-safe restarts:** persisted rows carry a destination fingerprint without credentials. Rows for a previous spreadsheet or service account are parked under `buffer:undelivered` before the new destination starts. A failed parking write preserves the backlog and blocks activation; legacy array buffers are read under the configured destination.

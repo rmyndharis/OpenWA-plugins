@@ -14,8 +14,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `http-action` |
-| **Version** | 0.2.18 |
-| **Released** | 2026-11-10 |
+| **Version** | 0.2.19 |
+| **Released** | 2026-11-12 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -154,9 +154,10 @@ logs the invalid config.
   values. Response bodies are capped at 256 KiB.
 - **Reliability.** Same-message processing is serialized within the worker. A POST requires a stored
   intent before dispatch; its rendered reply is saved separately from WhatsApp delivery. A failed send
-  retries that saved reply without another POST or cooldown delay. An unknown backend outcome, or a
-  changed backend, credential, action or chat, produces an operator-confirmation notice instead of
-  repeating the write or exposing a saved response. Pending records expire after three days; completed
+  retries that saved reply without another POST or cooldown delay. An unknown backend outcome, a 2xx
+  POST response whose body or reply template cannot be rendered, or a changed backend, credential,
+  action or chat, produces an operator-confirmation notice instead of repeating the write or exposing
+  a saved response. Pending records expire after three days; completed
   markers age out on subsequent bucket writes. GET send retries perform a fresh lookup after cooldown.
   The in-memory per-chat cooldown fails open. The handler returns synchronously and floats the
   fetch/render/send, so a slow upstream never stalls the inbound hook. It returns `{ continue: false }`

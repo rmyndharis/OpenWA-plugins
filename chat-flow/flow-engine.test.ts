@@ -486,3 +486,20 @@ test('sweepExpired and non-trigger messages do not rewrite an already-compacted 
   assert.equal(writes, 0, 'already-compacted state with unexpired consumed ids should not be rewritten');
   assert.equal(storage.has(key), true);
 });
+
+test('malformed stored state row with non-array path recovers cleanly without TypeError', async () => {
+  const { ctx, storage, replies } = makeCtx();
+  storage.set(key, { path: null, lastActive: Date.now() });
+  const handled = await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'hi', 'm-corrupt');
+  assert.equal(handled, true);
+  assert.deepEqual(replies.map(r => r.text), [abc.greeting]);
+  assert.deepEqual((storage.get(key) as { path: string[] }).path, []);
+
+  storage.set('state__s__bad-ts', { path: null, lastActive: Number.NaN });
+  assert.equal(await FlowEngine.sweepExpired(ctx), 1);
+  assert.equal(storage.has('state__s__bad-ts'), false);
+
+  storage.set(key, { path: [], lastActive: Date.now(), misses: -100 });
+  await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'invalid-choice', 'm-neg-miss');
+  assert.equal((storage.get(key) as { misses: number }).misses, 1);
+});

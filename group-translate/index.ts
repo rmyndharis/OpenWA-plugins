@@ -204,9 +204,7 @@ export class TranslationPlugin implements IPlugin {
     ctx: HookContext<IncomingMessage>,
   ): Promise<HookResult> {
     const msg = ctx.data;
-    // Only act on engine-originated inbound messages for a known session. The bot's own sends are
-    // `fromMe` and route through `message:sent`, so they never reach here (no translation loop).
-    if (ctx.source !== "Engine" || !ctx.sessionId) {
+    if (!msg || ctx.source !== "Engine" || !ctx.sessionId) {
       return { continue: true };
     }
     // Since host 0.23.2 a shared contact card arrives with its full vCard as the body. Translating one
@@ -247,23 +245,21 @@ export class TranslationPlugin implements IPlugin {
         pushName: msg.contact?.pushName,
         late: sent.getTime() > 0 && Date.now() - sent.getTime() > LATE_AFTER_MS,
       };
-      // A command is claimed on the parse and run off-dispatch, so a failed or slow admin lookup can
-      // never pass "/tr on" to the next responder: past the 5 s hook budget the host passes it on itself.
-      if (this.coordinator.isCommand(inbound)) {
+      const claimed = this.coordinator.isCommand(inbound);
+      if (claimed || (inbound.isGroup && !inbound.fromMe && Boolean(inbound.author))) {
         const sessionId = ctx.sessionId;
         void this.coordinator.handleMessage(sessionId, inbound).catch((error) =>
-          context.logger.error("Translation command failed", error, {
-            sessionId,
-            action: "translation_command_error",
-          }),
+          context.logger.error(
+            claimed ? "Translation command failed" : "Translation hook failed",
+            error,
+            {
+              sessionId,
+              action: claimed ? "translation_command_error" : "translation_hook_error",
+            },
+          ),
         );
-        return { continue: false };
       }
-      const { swallow } = await this.coordinator.handleMessage(
-        ctx.sessionId,
-        inbound,
-      );
-      return { continue: !swallow };
+      return { continue: !claimed };
     } catch (error) {
       context.logger.error("Translation hook failed", error, {
         sessionId: ctx.sessionId,

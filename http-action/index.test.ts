@@ -732,3 +732,59 @@ test('forwarded messages and shared locations never trigger an action or claim t
   assert.deepEqual(locRes, { continue: true });
   assert.deepEqual(fetched, []);
 });
+
+test('a pre-flight POST template/body error sends errorTemplate without saving an uncertain POST intent', async () => {
+  const { d, fetched, sendCalls } = postDeps();
+  d.cfg = cfgWith({
+    actions: JSON.stringify([{
+      id: 'create',
+      match: { type: 'prefix', value: 'buat ' },
+      request: { method: 'POST', path: '/tickets', headers: { 'X-Note': '{{message.id}}' }, bodyTemplate: '{"d":"{{args.0}}"}' },
+      replyTemplate: 'Ticket {{response.id}}',
+      errorTemplate: 'Bad command input.',
+    }]),
+  });
+  await handleMessage(d, 's1', msg('buat X', 'bad\nid'));
+  assert.deepEqual(fetched, [], 'fetch must never run when request building fails locally');
+  assert.equal((sendCalls[0].env as { text: string }).text, 'Bad command input.');
+  const keys = await d.storage.list('dedupb:');
+  for (const k of keys) {
+    const b = await d.storage.get<Record<string, unknown>>(k);
+    for (const v of Object.values(b ?? {})) {
+      assert.equal(typeof v, 'number', 'must mark seen as a plain timestamp, not an uncertain PostCompletion');
+    }
+  }
+});
+
+test('a POST accepted with HTTP 2xx whose reply cannot be shown records completion and asks the contact to confirm before retrying', async () => {
+  const notice = /could not be confirmed\. Please contact the operator before trying again\./;
+  const { d, fetched, sendCalls } = postDeps({ ok: true, status: 200, body: 'not-json' });
+  d.cfg.cooldownSeconds = 0;
+  d.cfg.actions[0].errorTemplate = 'Service unavailable, please try again later.';
+  const realSend = d.conversations.send;
+  let failFirstSend = true;
+  d.conversations.send = async (env) => {
+    if (failFirstSend) {
+      failFirstSend = false;
+      throw new Error('WA offline');
+    }
+    return realSend(env);
+  };
+  await assert.rejects(handleMessage(d, 's1', msg('buat X', 'm-nonjson')), /WA offline/);
+  await handleMessage(d, 's1', msg('buat X', 'm-nonjson'));
+  assert.equal(fetched.length, 1, 'completed HTTP 200 POST must not re-fire on redelivery');
+  assert.match((sendCalls[0].env as { text: string }).text, notice, 'a write that happened must not invite a retry');
+
+  const tpl = postDeps({ ok: true, status: 201, body: JSON.stringify({ id: 'T-9' }) });
+  tpl.d.cfg.actions[0].replyTemplate = '{{response.__proto__.x}}';
+  tpl.d.cfg.actions[0].errorTemplate = 'Template failed.';
+  await handleMessage(tpl.d, 's1', msg('buat X', 'm-tpl'));
+  assert.equal(tpl.fetched.length, 1);
+  assert.match((tpl.sendCalls[0].env as { text: string }).text, notice);
+
+  // A non-2xx answer is the upstream refusing the write, so errorTemplate stays the right reply.
+  const refused = postDeps({ ok: false, status: 500, body: 'x'.repeat(300 * 1024) });
+  refused.d.cfg.actions[0].errorTemplate = 'Upstream refused.';
+  await handleMessage(refused.d, 's1', msg('buat X', 'm-500'));
+  assert.equal((refused.sendCalls[0].env as { text: string }).text, 'Upstream refused.');
+});

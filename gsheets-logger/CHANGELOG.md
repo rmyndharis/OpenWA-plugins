@@ -8,6 +8,14 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.3.19] - 2026-11-12
+
+### Fixed
+
+- Validate and URL-encode `spreadsheetId`, trim surrounding whitespace, and fall back blank `sheetTab` values to `Logs`.
+- Send at most one bounded chunk (500 rows or 500,000 characters) per flush, so an outage backlog drains over several ticks instead of one oversized request and shutdown still waits on a single append.
+- Delete drained buffer checkpoints to release storage quota and keep post-append checkpoint errors from reporting a false Sheets flush failure.
+
 ## [0.3.18] - 2026-11-10
 
 ### Changed

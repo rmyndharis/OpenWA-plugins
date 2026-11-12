@@ -390,3 +390,78 @@ test('zero-width assertions and nullable alternations do not break adjacent unbo
     assert.equal(isSafeRegexPattern(pattern), true, `should accept: ${pattern}`);
   }
 });
+
+test('nested bounded repeats of variable-width bodies cannot multiply past the repeat budget', () => {
+  // Measured at the 150-character cap on the real engine: the first two shapes run past eight seconds,
+  // `(a?){9}(a?){9}b` takes about 270 ms, `^((a?|b?|c?|d?|e?){3}){3}$` about 580 ms and
+  // `((a?){4}){4}b`, the repeat budget line, about 90 ms.
+  for (const pattern of [
+    '^(a?){9}(a?){9}(a?){9}$',
+    '^((a?){9}(a?){9}(a?){9})$',
+    '(a?){9}(a?){9}b',
+    '^((a?|b?|c?|d?|e?){3}){3}$',
+    '((a?){4}){4}b',
+    '((a?){1,9}){1,9}$',
+    '((a?){9}){9}$',
+    '(a{0,9}){9}$',
+    '((a?){1,3}){1,4}$',
+    '^([^ ]{0,15}\\s){5}$',
+    '(\\w{1,10}\\s?){1,5}!',
+  ]) {
+    assert.equal(isSafeRegexPattern(pattern), false, `should reject: ${pattern}`);
+  }
+  // Small products stay allowed, as before, and so does a bounded run whose length a separator pins.
+  // Each of these is under 3 ms at the cap.
+  for (const pattern of [
+    '(ab?){2}',
+    '((ab?){2}){2}',
+    '(\\d{2,4}){3}',
+    '((\\d{2}){3}){5}',
+    '((a){1,9}){2}',
+    '((a?){3}){4}$',
+    '(((a?){2}){2}){3}$',
+    '((a){1,9}){4}$',
+    '^a{0,9}a{0,9}a{0,9}a{0,9}$',
+    '(a|b)*(c|d)*',
+    '^(harga|jam|lokasi|alamat|kontak|promo|diskon|cabang|member|paket|garansi)$',
+  ]) {
+    assert.equal(isSafeRegexPattern(pattern), true, `should accept: ${pattern}`);
+  }
+});
+
+test('ordinary bounded-length patterns are not mistaken for nested repeats', () => {
+  // Every one of these was accepted before the state budget existed and measures 0.1 ms or less at the
+  // input cap. A separator the run cannot match (`@`, `.`, a space) pins its length, so it adds no ways.
+  for (const pattern of [
+    '^\\w{3,20}@\\w{3,20}\\.\\w{2,10}$',
+    '^[a-z0-9._]{1,64}@[a-z0-9-]{1,63}\\.[a-z]{2,10}$',
+    '^[a-z0-9._%+-]{1,64}@[a-z0-9.-]{1,255}\\.[a-z]{2,24}$',
+    '^[\\w.+-]{1,64}@[\\w-]{1,63}\\.[\\w.]{2,20}$',
+    '^https?://[^\\s/]{1,253}(/\\S{0,200})?$',
+    '^([a-z0-9]{1,63}\\.){1,4}[a-z]{2,10}$',
+    '^[a-z]{3,10}( [a-z]{3,10}){0,2}$',
+    '^[A-Z0-9]{2,4}( ?[A-Z0-9]{2,4}){1,3}$',
+    '^(\\w{1,15}\\s){0,3}\\w{1,15}$',
+    '^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$',
+    '^(\\+62|62|0)8[1-9][0-9]{6,10}$',
+    '^.{0,2000}$',
+    '^\\w{1,20}\\w{1,20}\\w{1,20}$',
+    '(\\d{1,4}[-. ]?){2,3}x',
+    '(\\w{1,10}\\s){1,5}!',
+    '^\\w+(\\s\\w{1,20}){0,4}$',
+    '^(a|aa)(a|aa)(a|aa)(a|aa)(a|aa)(a|aa)(a|aa)(a|aa)(a|aa)(a|aa)$',
+  ]) {
+    assert.equal(isSafeRegexPattern(pattern), true, `should accept: ${pattern}`);
+  }
+});
+
+test('a skipped or group-led first atom does not hide an ambiguous repeated alternation', () => {
+  // `a{0}b` matches exactly what `b` matches, and `(a)b` exactly what `ab` matches, so each pair of
+  // branches overlaps. Recording the skipped `a`, or the atom after the group, as the first character
+  // called them disjoint, and both patterns ran for seconds against a 27-character message. The optional
+  // forms were already refused as repeats of a variable body.
+  for (const pattern of ['^(a{0}b|b)+$', '^((a)b|ab)+$', '^(a?b|b)+$', '^((a)?b|b)+$']) {
+    assert.equal(isSafeRegexPattern(pattern), false, `should reject: ${pattern}`);
+  }
+  assert.equal(isSafeRegexPattern('^(a{0}b|c)+$'), true);
+});

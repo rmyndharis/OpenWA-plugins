@@ -191,3 +191,29 @@ test('real backend failures still open the circuit breaker', async () => {
   }
   assert.equal(client.isHealthy(), false, 'a dead backend still opens the breaker');
 });
+
+test('redacts embedded URL credentials and query tokens from thrown fetch errors', async () => {
+  const client = new OpenAiSttClient({
+    baseUrl: 'https://stt.example.com',
+    model: 'small',
+    timeoutMs: 1000,
+    net: {
+      fetch: async () => {
+        throw new Error(
+          'Plugin voice-transcription may not fetch https://admin:s3cr3t@p@stt.example.com/v1/audio/transcriptions?api_key=tok123#frag',
+        );
+      },
+    } as never,
+  });
+
+  await assert.rejects(
+    () => client.transcribe(new Uint8Array([1]), 'audio/ogg'),
+    (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      assert.ok(!msg.includes('s3cr3t'), `leaked password: ${msg}`);
+      assert.ok(!msg.includes('tok123'), `leaked query token: ${msg}`);
+      assert.ok(!msg.includes('frag'), `leaked fragment: ${msg}`);
+      return true;
+    },
+  );
+});

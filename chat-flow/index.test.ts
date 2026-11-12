@@ -365,3 +365,18 @@ test('shared locations and forwarded messages never reach the flow engine, and h
   assert.equal((await plugin.healthCheck()).healthy, false);
   await plugin.onDisable();
 });
+
+test('missing hook payload data returns continue: true without throwing', async () => {
+  const ChatFlow = (await import('./index.ts')).default;
+  let handler!: (h: unknown) => Promise<{ continue: boolean }>;
+  const plugin = new ChatFlow();
+  await plugin.onEnable(makeCtx({
+    registerHook: (_e, h) => { handler = h as typeof handler; },
+  }) as never);
+  try {
+    assert.deepEqual(await handler({ source: 'Engine', sessionId: 's1', data: undefined }), { continue: true });
+    assert.deepEqual(await handler({ source: 'Engine', sessionId: 's1', data: null }), { continue: true });
+  } finally {
+    await plugin.onDisable();
+  }
+});

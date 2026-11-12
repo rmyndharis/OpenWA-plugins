@@ -61,6 +61,28 @@ const HELP_COOLDOWN_MS = 60_000;
 /** Cap on the per-group `/tr help` timestamps, mirroring MAX_CANONICAL_WIDS: one entry per group that
  *  has asked, evicted oldest-first rather than growing without limit. */
 const MAX_HELP_ENTRIES = 500;
+const MAX_TRANSLATE_CONCURRENCY = 4;
+
+async function mapSettled<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const out = new Array<PromiseSettledResult<R>>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const idx = next++;
+      try {
+        out[idx] = { status: 'fulfilled', value: await fn(items[idx]) };
+      } catch (reason) {
+        out[idx] = { status: 'rejected', reason };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+  return out;
+}
 
 /**
  * Compare two WhatsApp IDs tolerantly: exact match, or same user part ignoring
@@ -133,9 +155,15 @@ export class TranslationCoordinator {
     // and it fires per GROUP, so simply enabling the plugin used to post an introduction into every
     // group the account was in. `/tr help` gives anyone the same text on request.
     if (this.opts.announceInGroups && !state.announced) {
-      await this.gateway.sendText(sessionId, msg.chatId, buildHelpText(this.opts.prefix));
       state.announced = true;
       await this.store.save(state);
+      try {
+        await this.gateway.sendText(sessionId, msg.chatId, buildHelpText(this.opts.prefix));
+      } catch (err) {
+        state.announced = false;
+        await this.store.save(state).catch(() => {});
+        throw err;
+      }
     }
 
     const command = msg.isForwarded ? null : parseCommand(msg.body, this.opts.prefix);
@@ -224,7 +252,9 @@ export class TranslationCoordinator {
       targets = backstop;
     }
 
-    const settled = await Promise.allSettled(targets.map(t => this.translator.translate(text, source, t)));
+    const settled = await mapSettled(targets, MAX_TRANSLATE_CONCURRENCY, t =>
+      this.translator.translate(text, source, t),
+    );
     const translations: Translation[] = [];
     settled.forEach((r, i) => {
       // A blank translation is dropped HERE, not at the send: the formatter prefixes each entry with a

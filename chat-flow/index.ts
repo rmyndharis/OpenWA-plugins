@@ -111,7 +111,7 @@ export default class ChatFlow implements IPlugin {
     // reaches the menu, deliberately.) With the documented empty `trigger` an empty body STARTED the
     // flow; with a flow already open it answered "Invalid option" to a photo and claimed the event
     // from sibling auto-repliers.
-    if (m.fromMe || typeof m.body !== 'string' || !m.body.trim() || !m.chatId || !m.id) return { continue: true };
+    if (!m || m.fromMe || typeof m.body !== 'string' || !m.body.trim() || !m.chatId || !m.id) return { continue: true };
     // The type denylist drops what DOES carry text but was never typed at this menu. Since host 0.23.2
     // a shared contact card arrives with its full vCard as the body and a poll with its question, and
     // on Baileys from 0.23.5 an 'order' carries its order note and a 'product' card its product title,

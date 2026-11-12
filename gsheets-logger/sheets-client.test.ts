@@ -89,3 +89,14 @@ test('a malformed token response throws instead of caching garbage', async () =>
   const client = new SheetsClient(fn, testSa, 'SHEET1', 'Logs');
   await assert.rejects(client.appendRows([['a']]), /missing access_token\/expires_in/);
 });
+
+test('appendRows URL-encodes spreadsheetId so special characters never alter the request path', async () => {
+  const { calls, fn } = fakeFetch({
+    'https://oauth2.googleapis.com/token': TOKEN_OK,
+    'https://sheets.googleapis.com/': { body: '{}' },
+  });
+  const client = new SheetsClient(fn, testSa, 'id/with?chars#1', 'Logs');
+  await client.appendRows([['a']]);
+  const appendUrl = calls.find((c) => c.url.startsWith('https://sheets.googleapis.com'))?.url ?? '';
+  assert.match(appendUrl, /spreadsheets\/id%2Fwith%3Fchars%231\/values\//);
+});

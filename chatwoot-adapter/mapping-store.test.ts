@@ -529,3 +529,12 @@ test('retry and bulk-backfill keys stay within OpenWA 0.28.0 184-byte storage ke
   assert.equal(retries.length, 1);
   assert.equal(retries[0].msg.id, longMsgId);
 });
+
+test('enqueueRetry preserves distinct entries when msg.id is empty', async () => {
+  const store = new MappingStore(fakeStorage(), fakeMappings());
+  await store.enqueueRetry({ sessionId: 's', chatId: 'c1@c.us', msg: { ...msg(''), body: 'one' }, enqueuedAt: 10 }, 10);
+  await store.enqueueRetry({ sessionId: 's', chatId: 'c1@c.us', msg: { ...msg(''), body: 'two' }, enqueuedAt: 11 }, 10);
+  const retries = await store.listRetries();
+  assert.equal(retries.length, 2, 'two id-less failures must not collide on a single empty retry key');
+  assert.deepEqual(retries.map(r => r.msg.body).sort(), ['one', 'two']);
+});

@@ -8,6 +8,12 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.1.19] - 2026-11-12
+
+### Fixed
+
+- Guard missing hook payload data on inbound events and recover cleanly when stored flow state rows contain malformed `path`, `lastActive`, or `misses` fields.
+
 ## [1.1.18] - 2026-11-10
 
 ### Changed
