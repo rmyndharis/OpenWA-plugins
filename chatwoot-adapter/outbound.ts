@@ -75,7 +75,7 @@ async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: Cha
   const media = mediaAttachments(evt);
   // A media-only agent reply (voice note, image, …) has no `content`, so gate on either text or media —
   // the old text-only guard dropped every attachment silently (#607).
-  if (!conversationId || (!text && media.length === 0)) return;
+  if (typeof conversationId !== 'number' || !Number.isSafeInteger(conversationId) || conversationId <= 0 || (!text && media.length === 0)) return;
   const target = await resolveTarget(deps, conversationId, sessionId);
   if (!target) {
     deps.log(`no WA mapping for conversation ${conversationId}`);
@@ -159,6 +159,10 @@ async function relay(deps: OutboundDeps, sessionId: string | undefined, evt: Cha
       await claimEcho(
         replyTo
           ? await deps.conversations.send({ ...env, replyTo }).catch(err => {
+              // Capability rejections cross the worker bridge only as error message text
+              // (WorkerCapabilityClient); retry unquoted only when the quote itself failed pre-send.
+              const msg = err instanceof Error ? err.message : String(err);
+              if (!/not found|replyTo is not supported/i.test(msg)) throw err;
               deps.log('quote target unresolvable; sending the reply unquoted', err);
               return deps.conversations.send(env);
             })
@@ -209,13 +213,33 @@ function isBotAssignee(assignee: unknown): boolean {
   );
 }
 
+function eventConversation(
+  evt: ChatwootWebhookMessage,
+): NonNullable<ChatwootWebhookMessage['conversation']> | ChatwootWebhookMessage {
+  return evt.conversation != null && typeof evt.conversation === 'object' && !Array.isArray(evt.conversation)
+    ? evt.conversation
+    : evt;
+}
+
+// When Chatwoot committed the change an event reports, in epoch ms: the `updated_at` entry of
+// `changed_attributes`, captured with the change. The payload's own `updated_at` is read when the
+// webhook is built, which can be after a later change, so it cannot order two events.
+function committedAt(evt: ChatwootWebhookMessage): number | undefined {
+  const entry = (Array.isArray(evt.changed_attributes) ? evt.changed_attributes : []).find(
+    a => a != null && typeof a === 'object' && 'updated_at' in a,
+  )?.['updated_at'];
+  const value = entry != null && typeof entry === 'object' && !Array.isArray(entry) ? entry.current_value : undefined;
+  const at = typeof value === 'string' ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(at) ? at : undefined;
+}
+
 function assigneeChange(evt: ChatwootWebhookMessage): { changed: boolean; assignee: number | undefined } {
   // Guard each element: `changed_attributes` is untrusted parsed JSON, so a non-object entry (e.g. `null`)
   // would make `'assignee_id' in a` throw a TypeError → an endless retry of a signed-but-malformed event.
   const attr = (Array.isArray(evt.changed_attributes) ? evt.changed_attributes : []).find(a => a != null && typeof a === 'object' && 'assignee_id' in a)?.[
     'assignee_id'
   ];
-  const conversation = evt.id !== undefined ? evt : evt.conversation;
+  const conversation = eventConversation(evt);
   if (!attr || typeof attr !== 'object' || Array.isArray(attr)) return { changed: false, assignee: undefined };
   const metaAssignee = (conversation?.meta ?? evt.meta)?.assignee;
   const fallbackId =
@@ -248,16 +272,19 @@ function unassigned(
 }
 
 async function applyHandover(deps: OutboundDeps, sessionId: string | undefined, evt: ChatwootWebhookMessage): Promise<void> {
-  const conversation = evt.id !== undefined ? evt : evt.conversation;
+  const conversation = eventConversation(evt);
   const conversationId = conversation?.id;
-  const inboxId = evt.inbox?.id ?? conversation?.inbox_id;
-  if (!Number.isSafeInteger(conversationId) || conversationId! <= 0 || (inboxId !== undefined && inboxId !== deps.inboxId)) return;
+  const inboxId = evt.inbox?.id ?? conversation?.inbox_id ?? evt.inbox_id;
+  if (typeof conversationId !== 'number' || !Number.isSafeInteger(conversationId) || conversationId <= 0 || inboxId !== deps.inboxId) return;
   const { changed, assignee } = assigneeChange(evt);
   const releaseParked = !changed && statusChanged(evt) && unassigned(conversation, evt);
   if (!changed && !releaseParked) return; // never infer human from status alone
-  const target = await resolveTarget(deps, conversationId!, sessionId);
+  const target = await resolveTarget(deps, conversationId, sessionId);
   if (!target) return;
   const resolved: HandoverState = changed && assignee ? 'human' : 'bot';
+  // Only an assignee change is ordered. A release is decided by the stored state and the payload's own
+  // assignee, which is read when the webhook is built and so is the freshest there is.
+  const at = changed ? committedAt(evt) : undefined;
   // instanceId in the mapping mirror = sessionId (a session-scoped instance is 1:1 with its session), so
   // inbound's ctx.mappings.upsert and this handover.set address the SAME conversation-mapping row. Lock on
   // the RAW chatId (not canonicalized): a handover webhook arrives independently of WA session state, and
@@ -265,10 +292,15 @@ async function applyHandover(deps: OutboundDeps, sessionId: string | undefined, 
   // offline. Handover (a state-flag write) and relay (a message send) are independent, so they don't need
   // to serialize with each other; the raw key still serializes concurrent handover events for a chat.
   await deps.lock.run(`${target.sessionId}:${target.chatId}`, async () => {
+    const link = await deps.store.getByChat(target.sessionId, target.chatId);
     if (deps.store.destination) {
-      const link = await deps.store.getByChat(target.sessionId, target.chatId);
       if (!link) throw new Error('Chatwoot mapping is incomplete in the current destination');
       if (link.conversationId !== conversationId) return;
+    }
+    const prevAt = link?.handoverAt;
+    if (at !== undefined && typeof prevAt === 'number' && at < prevAt) {
+      deps.log(`ignoring stale handover event for conversation ${conversationId} (${at} < ${prevAt})`);
+      return;
     }
     const key = { sessionId: target.sessionId, chatId: target.chatId, instanceId: target.sessionId };
     if (releaseParked) {
@@ -276,5 +308,11 @@ async function applyHandover(deps: OutboundDeps, sessionId: string | undefined, 
       if (current?.handoverState !== 'closed') return;
     }
     await deps.handover.set(key, resolved);
+    // Record what this conversation now holds, and when. The state is already applied, so a failed
+    // write must not make the host retry (and so reorder) this event: it only leaves the next stale
+    // delivery unrecognized, as before 0.9.21. Limited to a link that still points at this conversation.
+    await deps.store
+      .patch(target.sessionId, target.chatId, { handoverState: resolved, ...(at !== undefined ? { handoverAt: at } : {}) }, conversationId)
+      .catch(err => deps.log('handover record write failed', err));
   });
 }

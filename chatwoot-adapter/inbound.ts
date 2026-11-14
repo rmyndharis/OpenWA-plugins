@@ -1,6 +1,6 @@
 import type { IncomingMessage } from '../types/openwa';
 import { shouldRelayInbound } from './filters.ts';
-import { relayMessage, ensureConversation, refreshContact, resolvePhone, type InboundDeps } from './relay.ts';
+import { relayMessage, ensureConversationWithStatus, resetRecreatedHandover, refreshContact, resolvePhone, type InboundDeps } from './relay.ts';
 import { backfillHistory } from './backfill.ts';
 import { MAX_PENDING_RETRIES, slimForRetry } from './retry.ts';
 
@@ -32,7 +32,7 @@ export async function relayInbound(
   } catch {
     /* session down / unresolvable — fall back to the raw id; dedup is best-effort */
   }
-  const { conversationId, key, backfill } = await resolveConversation(deps, sessionId, msg, canonical);
+  const { conversationId, key, backfill, held } = await resolveConversation(deps, sessionId, msg, canonical);
   // Lazy backfill: replay this chat's recent history (older messages, both directions, deduped) BEFORE
   // posting this one, so the thread reads chronologically and this message's quote resolves against a
   // just-posted source_id. Its id is excluded explicitly from this history window.
@@ -67,9 +67,22 @@ export async function relayInbound(
       // A migrated contact's mapping is often keyed under the canonical @c.us while msg.chatId is @lid —
       // unlinking the raw key would miss entirely, resolveConversation would re-find the stale row via its
       // canonical fallback, the second relay would 404 again, and the message would dead-letter.
-      await deps.store.unlinkByChatId(sessionId, key);
+      await deps.store.unlinkByChatId(sessionId, key, conversationId);
       await deps.store.unlinkByConversationId(sessionId, conversationId);
-      const re = await resolveConversation(deps, sessionId, msg, canonical);
+      let re = await resolveConversation(deps, sessionId, msg, canonical);
+      let wasHeld = held;
+      if (re.conversationId === conversationId) {
+        // The contact's other id form was linked to the same deleted conversation: drop that link too,
+        // or this message 404s again and waits in the retry queue for the next one to clear it.
+        wasHeld ||= re.held;
+        await deps.store.unlinkByChatId(sessionId, re.key, conversationId);
+        re = await resolveConversation(deps, sessionId, msg, canonical);
+      }
+      // The deleted conversation held the chat and a new one, with no agent on it, replaces it: the hold
+      // is gone with it. Any other case keeps the chat's handover. A replacement found open has an
+      // assignee this code does not know, and a hold this link never recorded may belong to another
+      // conversation of the same contact (a lid and a phone thread), which resetting would release.
+      if (wasHeld && re.created) await resetRecreatedHandover(deps, sessionId, re.key, msg.chatId);
       // The deleted Chatwoot conversation is gone, so its history is gone too. When the rebuild mints a
       // brand-new conversation, re-import prior history under the same gate the happy path uses — a fresh
       // Chatwoot thread without context defeats the point of (lazy) backfill.
@@ -181,7 +194,7 @@ async function resolveConversation(
   sessionId: string,
   msg: IncomingMessage,
   canonicalChatId: string,
-): Promise<{ conversationId: number; key: string; backfill: { done?: boolean; attempts?: number } }> {
+): Promise<{ conversationId: number; key: string; created: boolean; held: boolean; backfill: { done?: boolean; attempts?: number } }> {
   // Dual lookup (re-read inside the lock): the raw chatId finds a mapping keyed by @lid, the canonical
   // chatId finds one keyed by @c.us (a contact that has since migrated to @lid, when the lid resolves) —
   // so a migrated contact's inbound lands in its EXISTING conversation instead of splitting a duplicate.
@@ -199,13 +212,15 @@ async function resolveConversation(
     return {
       conversationId: existing.conversationId,
       key: foundKey,
+      created: false,
+      held: existing.handoverState === 'human',
       backfill: { done: existing.backfillDone, attempts: existing.backfillAttempts },
     };
   }
   const name = msg.isGroup
     ? `Group ${msg.chatId}`
     : msg.contact?.pushName || msg.contact?.name || msg.senderPhone || msg.chatId;
-  const conversationId = await ensureConversation(deps, sessionId, msg.chatId, {
+  const { conversationId, created } = await ensureConversationWithStatus(deps, sessionId, msg.chatId, {
     // Phone from the host-resolved sender (RESOLVE_LID_TO_PHONE), or the canonical chat id (warm lid→pn
     // cache / every plain @c.us chat); undefined when genuinely unknown so the contact still creates.
     name,
@@ -213,5 +228,5 @@ async function resolveConversation(
   });
   // ensureConversation wrote the mapping under msg.chatId, stamped `backfillDone: false`. Mirroring that
   // value here rather than reading the document back saves a storage round trip on every new chat.
-  return { conversationId, key: msg.chatId, backfill: { done: false } };
+  return { conversationId, key: msg.chatId, created, held: false, backfill: { done: false } };
 }

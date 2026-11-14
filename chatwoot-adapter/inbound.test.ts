@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { handleInbound, type InboundDeps } from './inbound.ts';
 import { KeyedAsyncLock } from './chat-lock.ts';
-import type { IncomingMessage } from '../types/openwa';
+import { MappingStore } from './mapping-store.ts';
+import type { IncomingMessage, PluginHandoverCapability, HandoverState, PluginMappingsCapability, PluginStorage } from '../types/openwa';
+type HandoverKey = Parameters<PluginHandoverCapability['set']>[0];
 
 const msg = {
   id: 'm1', from: '621@c.us', to: 'y', chatId: '621@c.us', body: 'hello', type: 'chat',
@@ -14,6 +16,7 @@ function makeDeps(
     client?: Record<string, unknown>;
     store?: Record<string, unknown>;
     engine?: Record<string, unknown>;
+    handover?: Record<string, unknown>;
     backfillLimit?: number;
     onBackfillExhausted?: (chatId: string) => void;
     log?: (m: string, e?: unknown) => void;
@@ -26,6 +29,7 @@ function makeDeps(
   // regression tests need to tell a replayed history line (body 'earlier') from the live message.
   const posts: Array<{ conversationId: number; type: string; body: string }> = [];
   const lost: string[] = [];
+  const handovers: Array<[HandoverKey, HandoverState]> = [];
   const store = new Map<string, unknown>();
   const client = {
     searchContact: async () => null,
@@ -61,11 +65,15 @@ function makeDeps(
   const d = {
     lock: new KeyedAsyncLock(), client, store: mapping, engine, instanceId: 'inst',
     relayGroups: true, relayMedia: true, backfillLimit: over.backfillLimit ?? 0, log: over.log ?? (() => {}),
+    handover: {
+      set: async (k: HandoverKey, s: HandoverState) => void handovers.push([k, s]),
+      ...over.handover,
+    },
     onInboundLost: (msgId: string) => void lost.push(msgId),
     onRelayError: () => {},
     onBackfillExhausted: over.onBackfillExhausted ?? (() => {}),
   } as unknown as InboundDeps;
-  return { deps: d, counts: () => ({ contacts, convs }), posted, posts, lost };
+  return { deps: d, counts: () => ({ contacts, convs }), posted, posts, lost, handovers };
 }
 
 test('a migrated contact (@lid inbound, @c.us-keyed conversation) reuses the EXISTING conversation via dual-lookup, no split', async () => {
@@ -867,4 +875,184 @@ test('inbound messages with empty msg.id both relay without poisoning seen dedup
   await handleInbound(d, 'sess', 'Engine', { ...msg, id: '', body: 'second id-less' } as IncomingMessage);
   assert.deepEqual(posted.map(p => p.c), ['first id-less', 'second id-less']);
   assert.equal(seenIds.includes(''), false, 'must not write empty seen id');
+});
+
+function fakeStorage(): PluginStorage {
+  const m = new Map<string, unknown>();
+  return {
+    get: async <T>(k: string) => (m.has(k) ? (m.get(k) as T) : null),
+    set: async (k: string, v: unknown) => void m.set(k, v),
+    delete: async (k: string) => void m.delete(k),
+    list: async () => [...m.keys()],
+  };
+}
+
+test('inbound 404 recovery hands the chat back to the bots when the deleted conversation held it', async () => {
+  const upsertKeys: HandoverKey[] = [];
+  const mappings: PluginMappingsCapability = {
+    upsert: async key => void upsertKeys.push(key),
+    get: async () => null,
+    getByProvider: async () => null,
+  };
+  const mappingStore = new MappingStore(fakeStorage(), mappings);
+  await mappingStore.link('sess', '621@c.us', 'inst', { conversationId: 55, contactId: 9, sourceId: 'oldSrc', name: 'Budi', handoverState: 'human' });
+
+  const { deps: d, handovers, posted } = makeDeps({
+    store: {
+      getByChat: (s: string, c: string) => mappingStore.getByChat(s, c),
+      getByConversation: (id: number) => mappingStore.getByConversation(id),
+      link: (s: string, c: string, i: string, l: { conversationId: number; contactId: number; sourceId: string; name?: string }) =>
+        mappingStore.link(s, c, i, l),
+      unlinkByChatId: (s: string, c: string, id?: number) => mappingStore.unlinkByChatId(s, c, id),
+      unlinkByConversationId: (s: string, id: number) => mappingStore.unlinkByConversationId(s, id),
+      patch: (s: string, c: string, p: Record<string, unknown>) => mappingStore.patch(s, c, p),
+    },
+    client: {
+      postText: async (id: number, c: string) => {
+        if (id === 55) throw Object.assign(new Error('Chatwoot POST -> 404'), { status: 404 });
+        posted.push({ id, c });
+        return { id: 1 };
+      },
+      searchContact: async () => ({ id: 9, sourceId: 'newSrc' }),
+      findOpenConversation: async () => null,
+      createConversation: async () => 88,
+    },
+  });
+  await handleInbound(d, 'sess', 'Engine', { ...msg, id: 'm-404-create' } as IncomingMessage);
+  assert.deepEqual(posted, [{ id: 88, c: 'hello' }]);
+  assert.equal(handovers.length, 1);
+  assert.equal(handovers[0][1], 'bot');
+  assert.deepEqual(handovers[0][0], upsertKeys[upsertKeys.length - 1]);
+  assert.deepEqual(handovers[0][0], { sessionId: 'sess', chatId: '621@c.us', instanceId: 'inst' });
+});
+
+test('inbound 404 recovery reusing an existing open conversation does not reset handover', async () => {
+  const { deps: d, handovers, posted } = makeDeps({
+    client: {
+      postText: async (id: number, c: string) => {
+        if (id === 55) throw Object.assign(new Error('Chatwoot POST -> 404'), { status: 404 });
+        posted.push({ id, c });
+        return { id: 1 };
+      },
+      searchContact: async () => ({ id: 9, sourceId: 'newSrc' }),
+      findOpenConversation: async () => 88,
+    },
+  });
+  await d.store.link('sess', '621@c.us', 'inst', { conversationId: 55, contactId: 9, sourceId: 'oldSrc', name: 'Budi', handoverState: 'human' });
+  await handleInbound(d, 'sess', 'Engine', { ...msg, id: 'm-404-reuse' } as IncomingMessage);
+  assert.deepEqual(posted, [{ id: 88, c: 'hello' }]);
+  assert.deepEqual(handovers, []);
+});
+
+test('inbound 404 recovery keeps the handover when the deleted conversation recorded no hold', async () => {
+  // The chat can be held through another conversation of the same contact (a lid thread and a phone
+  // thread); a hold this link never recorded is not this conversation's to release.
+  for (const recorded of [undefined, 'bot', 'closed'] as const) {
+    const { deps: d, handovers, posted } = makeDeps({
+      client: {
+        postText: async (id: number, c: string) => {
+          if (id === 55) throw Object.assign(new Error('Chatwoot POST -> 404'), { status: 404 });
+          posted.push({ id, c });
+          return { id: 1 };
+        },
+        searchContact: async () => ({ id: 9, sourceId: 'newSrc' }),
+        findOpenConversation: async () => null,
+        createConversation: async () => 88,
+      },
+    });
+    await d.store.link('sess', '621@c.us', 'inst', { conversationId: 55, contactId: 9, sourceId: 'oldSrc', name: 'Budi', handoverState: recorded });
+    await handleInbound(d, 'sess', 'Engine', { ...msg, id: `m-404-${recorded}` } as IncomingMessage);
+    assert.deepEqual(posted, [{ id: 88, c: 'hello' }]);
+    assert.deepEqual(handovers, []);
+  }
+});
+
+// The real store behind the fake's shape, for the recoveries whose outcome depends on what it guards.
+const realStore = (mappingStore: MappingStore) => ({
+  getByChat: (s: string, c: string) => mappingStore.getByChat(s, c),
+  getByConversation: (id: number) => mappingStore.getByConversation(id),
+  link: (s: string, c: string, i: string, l: { conversationId: number; contactId: number; sourceId: string }) => mappingStore.link(s, c, i, l),
+  unlinkByChatId: (s: string, c: string, id?: number) => mappingStore.unlinkByChatId(s, c, id),
+  unlinkByConversationId: (s: string, id: number) => mappingStore.unlinkByConversationId(s, id),
+  patch: (s: string, c: string, p: Record<string, unknown>) => mappingStore.patch(s, c, p),
+});
+const noMappings: PluginMappingsCapability = { upsert: async () => {}, get: async () => null, getByProvider: async () => null };
+
+test('inbound 404 recovery drops both id forms linked to the deleted conversation and relays at once', async () => {
+  // A migrated contact whose lid was adopted onto its phone thread: two links, one conversation.
+  const mappingStore = new MappingStore(fakeStorage(), noMappings);
+  await mappingStore.link('sess', '621@c.us', 'inst', { conversationId: 55, contactId: 9, sourceId: 'src', name: 'Budi', handoverState: 'human' });
+  await mappingStore.link('sess', '123@lid', 'inst', { conversationId: 55, contactId: 9, sourceId: 'src', name: 'Budi' });
+  const { deps: d, handovers, posted, lost } = makeDeps({
+    engine: { canonicalChatId: async (_s: string, c: string) => (c === '123@lid' ? '621@c.us' : c) },
+    store: realStore(mappingStore),
+    client: {
+      postText: async (id: number, c: string) => {
+        if (id === 55) throw Object.assign(new Error('Chatwoot POST -> 404'), { status: 404 });
+        posted.push({ id, c });
+        return { id: 1 };
+      },
+      searchContact: async () => ({ id: 9, sourceId: 'src' }),
+      findOpenConversation: async () => null,
+      createConversation: async () => 88,
+    },
+  });
+  await handleInbound(d, 'sess', 'Engine', { ...msg, id: 'm-404-both', chatId: '123@lid', from: '123@lid' } as IncomingMessage);
+  assert.deepEqual(posted, [{ id: 88, c: 'hello' }]);
+  assert.deepEqual(lost, []);
+  assert.equal(await mappingStore.getByChat('sess', '621@c.us'), null);
+  assert.equal((await mappingStore.getByChat('sess', '123@lid'))?.conversationId, 88);
+  assert.deepEqual(handovers.map(h => h[1]), ['bot']);
+});
+
+test('inbound 404 recovery leaves a link another recovery already moved to a live conversation', async () => {
+  const mappingStore = new MappingStore(fakeStorage(), noMappings);
+  await mappingStore.link('sess', '621@c.us', 'inst', { conversationId: 55, contactId: 9, sourceId: 'src', name: 'Budi', handoverState: 'human' });
+  let created = 0;
+  const { deps: d, handovers, posted } = makeDeps({
+    store: realStore(mappingStore),
+    client: {
+      postText: async (id: number, c: string) => {
+        if (id !== 55) {
+          posted.push({ id, c });
+          return { id: 1 };
+        }
+        // While this request was out, an own-send recovery relinked the chat and an agent took the result.
+        await mappingStore.link('sess', '621@c.us', 'inst', { conversationId: 88, contactId: 9, sourceId: 'new', name: 'Budi', handoverState: 'human', handoverAt: 2000 });
+        throw Object.assign(new Error('Chatwoot POST -> 404'), { status: 404 });
+      },
+      searchContact: async () => ({ id: 9, sourceId: 'new' }),
+      findOpenConversation: async () => null,
+      createConversation: async () => { created++; return 99; },
+    },
+  });
+  await handleInbound(d, 'sess', 'Engine', { ...msg, id: 'm-404-moved' } as IncomingMessage);
+  assert.deepEqual(posted, [{ id: 88, c: 'hello' }]);
+  assert.equal(created, 0);
+  assert.deepEqual(handovers, []);
+  const link = await mappingStore.getByChat('sess', '621@c.us');
+  assert.deepEqual([link?.conversationId, link?.handoverState, link?.handoverAt], [88, 'human', 2000]);
+});
+
+test('inbound 404 recovery still relays the message when the handover reset fails', async () => {
+  const logs: string[] = [];
+  const { deps: d, posted, lost } = makeDeps({
+    log: m => void logs.push(m),
+    handover: { set: async () => { throw new Error('capability call rejected'); } },
+    client: {
+      postText: async (id: number, c: string) => {
+        if (id === 55) throw Object.assign(new Error('Chatwoot POST -> 404'), { status: 404 });
+        posted.push({ id, c });
+        return { id: 1 };
+      },
+      searchContact: async () => ({ id: 9, sourceId: 'newSrc' }),
+      findOpenConversation: async () => null,
+      createConversation: async () => 88,
+    },
+  });
+  await d.store.link('sess', '621@c.us', 'inst', { conversationId: 55, contactId: 9, sourceId: 'oldSrc', name: 'Budi', handoverState: 'human' });
+  await handleInbound(d, 'sess', 'Engine', { ...msg, id: 'm-404-reset-fails' } as IncomingMessage);
+  assert.deepEqual(posted, [{ id: 88, c: 'hello' }]);
+  assert.deepEqual(lost, []);
+  assert.deepEqual(logs, ['handover reset after conversation rebuild failed']);
 });

@@ -17,7 +17,12 @@ export interface ChatLink {
   conversationId: number;
   contactId: number;
   sourceId: string;
+  // The handover last applied through THIS conversation, and when Chatwoot committed that change (epoch
+  // ms). The host keeps one handover per chat, shared by every conversation the chat was ever linked
+  // to, so this is the only record of which conversation a hold belongs to. Absent on a link no
+  // handover event has reached since 0.9.21.
   handoverState?: 'bot' | 'human' | 'closed';
+  handoverAt?: number;
   // Last name synced to the Chatwoot contact. Lets inbound skip a redundant rename and detect when a real
   // pushName has arrived for a contact first seeded with a bare JID. Absent on pre-0.2.0 rows.
   name?: string;
@@ -211,15 +216,20 @@ export class MappingStore {
   // Drop one mapping from its bucket AND the standalone key. Both: readMapped falls back to the
   // standalone key, so emptying only the bucket would leave an unlinked mapping still readable and the
   // 404 recovery would keep resolving the conversation it just dropped.
-  private async deleteMapped(key: string): Promise<void> {
+  //
+  // `only` limits the delete to a value it accepts, read inside the bucket lock, so a caller acting on
+  // an earlier read cannot drop what another caller wrote since.
+  private async deleteMapped(key: string, only?: (value: unknown) => boolean): Promise<void> {
     const bucketKey = this.mapBucketKey(shardOf(key));
-    await this.bucketLock.run(bucketKey, async () => {
+    const dropped = await this.bucketLock.run(bucketKey, async () => {
       const bucket = await this.storage.get<MapBucket>(bucketKey);
-      if (!bucket || !(key in bucket)) return;
+      if (only && !only(bucket?.[key] ?? (await this.storage.get(key)))) return false;
+      if (!bucket || !(key in bucket)) return true;
       delete bucket[key];
       await this.storage.set(bucketKey, bucket);
+      return true;
     });
-    await this.storage.delete(key);
+    if (dropped) await this.storage.delete(key);
   }
 
   async getByChat(sessionId: string, chatId: string): Promise<ChatLink | null> {
@@ -293,11 +303,24 @@ export class MappingStore {
     await this.writeMapped(this.fwdKey(sessionId, chatId), link); // commit marker, see above
   }
 
-  async patch(sessionId: string, chatId: string, patch: Partial<ChatLink>): Promise<void> {
+  // The read, the merge and the write share the bucket lock. Callers hold different chat locks for one
+  // document (an inbound under the raw chat id, a handover webhook under the mapping's own key), so a
+  // merge computed outside it dropped the other caller's fields, or wrote back a link that was unlinked
+  // in between. `conversationId` limits the patch to a link that still points at that conversation.
+  async patch(sessionId: string, chatId: string, patch: Partial<ChatLink>, conversationId?: number): Promise<void> {
     this.assertCurrent();
-    const existing = await this.getByChat(sessionId, chatId);
-    if (!existing) return;
-    await this.writeMapped(this.fwdKey(sessionId, chatId), { ...existing, ...patch });
+    const key = this.fwdKey(sessionId, chatId);
+    const bucketKey = this.mapBucketKey(shardOf(key));
+    const wrote = await this.bucketLock.run(bucketKey, async () => {
+      const bucket = (await this.storage.get<MapBucket>(bucketKey)) ?? {};
+      const existing = (bucket[key] ?? (await this.storage.get<ChatLink>(key))) as ChatLink | null | undefined;
+      if (!existing || (conversationId !== undefined && existing.conversationId !== conversationId)) return false;
+      bucket[key] = { ...existing, ...patch };
+      await this.storage.set(bucketKey, bucket);
+      return true;
+    });
+    // Retire the standalone key an earlier version wrote, as writeMapped does.
+    if (wrote) await this.storage.delete(key).catch(() => undefined);
   }
 
   // Idempotency markers, split so the caller controls WHEN the mark lands (outbound marks only AFTER a
@@ -453,8 +476,13 @@ export class MappingStore {
     return (await this.retryKeys()).length;
   }
 
-  async unlinkByChatId(sessionId: string, chatId: string) {
-    await this.deleteMapped(this.fwdKey(sessionId, chatId));
+  // `conversationId` limits the unlink to a link that still points at that conversation: a 404 recovery
+  // unlinks on what it read before its request, and by then another recovery may have relinked the chat.
+  async unlinkByChatId(sessionId: string, chatId: string, conversationId?: number) {
+    await this.deleteMapped(
+      this.fwdKey(sessionId, chatId),
+      conversationId === undefined ? undefined : link => (link as ChatLink | null)?.conversationId === conversationId,
+    );
   }
 
   async unlinkByConversationId(sessionId: string, conversationId: number) {

@@ -77,6 +77,61 @@ test('patch merges over the existing forward doc', async () => {
   assert.deepEqual(await store.getByChat('s', 'c'), { conversationId: 1, contactId: 2, sourceId: 'x', handoverState: 'human' });
 });
 
+// A storage whose reads yield to the event loop, as every real one does (each is a round trip to the
+// host), so a merge computed outside the bucket lock is stale by the time it is written.
+function yieldingStorage(): PluginStorage {
+  const storage = fakeStorage();
+  const get = storage.get.bind(storage);
+  storage.get = (async (k: string) => {
+    await new Promise(resolve => setImmediate(resolve));
+    return get(k);
+  }) as PluginStorage['get'];
+  return storage;
+}
+
+test('two patches of one link that interleave keep both of their fields', async () => {
+  const store = new MappingStore(yieldingStorage(), fakeMappings());
+  await store.link('s', 'c', 'i', { conversationId: 1, contactId: 2, sourceId: 'x' });
+  await Promise.all([store.patch('s', 'c', { name: 'Budi' }), store.patch('s', 'c', { handoverAt: 200 })]);
+  const link = await store.getByChat('s', 'c');
+  assert.equal(link?.name, 'Budi');
+  assert.equal(link?.handoverAt, 200);
+});
+
+test('a patch does not write back a link that is unlinked while it runs', async () => {
+  const store = new MappingStore(yieldingStorage(), fakeMappings());
+  await store.link('s', 'c', 'i', { conversationId: 1, contactId: 2, sourceId: 'x' });
+  await Promise.all([store.patch('s', 'c', { name: 'Budi' }), store.unlinkByChatId('s', 'c')]);
+  assert.equal(await store.getByChat('s', 'c'), null);
+});
+
+test('a patch limited to a conversation leaves a link that points at another one alone', async () => {
+  const store = new MappingStore(fakeStorage(), fakeMappings());
+  await store.link('s', 'c', 'i', { conversationId: 88, contactId: 2, sourceId: 'x' });
+  await store.patch('s', 'c', { handoverAt: 900 }, 55);
+  assert.equal((await store.getByChat('s', 'c'))?.handoverAt, undefined);
+  await store.patch('s', 'c', { handoverAt: 900 }, 88);
+  assert.equal((await store.getByChat('s', 'c'))?.handoverAt, 900);
+});
+
+test('an unlink limited to a conversation leaves a link that has moved on', async () => {
+  const storage = fakeStorage();
+  const store = new MappingStore(storage, fakeMappings());
+  await store.link('s', 'c', 'i', { conversationId: 88, contactId: 2, sourceId: 'x' });
+  await store.unlinkByChatId('s', 'c', 55);
+  assert.equal((await store.getByChat('s', 'c'))?.conversationId, 88);
+  await store.unlinkByChatId('s', 'c', 88);
+  assert.equal(await store.getByChat('s', 'c'), null);
+  await store.unlinkByChatId('s', 'never-linked', 88);
+
+  // A mapping an earlier version stored under its own key is judged the same way.
+  await storage.set('conv:s:old', { conversationId: 55, contactId: 2, sourceId: 'x' });
+  await store.unlinkByChatId('s', 'old', 88);
+  assert.equal((await store.getByChat('s', 'old'))?.conversationId, 55);
+  await store.unlinkByChatId('s', 'old', 55);
+  assert.equal(await store.getByChat('s', 'old'), null);
+});
+
 test('enqueueRetry persists an entry; listRetries returns it; deleteRetry removes it; countRetries counts', async () => {
   const store = new MappingStore(fakeStorage(), fakeMappings());
   const dropped = await store.enqueueRetry({ sessionId: 'sess', chatId: 'c@wa', msg: msg('m1'), enqueuedAt: 100 }, 500);
