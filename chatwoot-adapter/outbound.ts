@@ -194,7 +194,9 @@ function mediaAttachments(
 }
 
 // Human handover is driven by the assignee_id transition, NOT by status (status:'open' is not a human
-// signal — the adapter itself opens conversations). resolved => closed; assignee set => human; cleared => bot.
+// signal — the adapter itself opens conversations). Assignee set => human; cleared => bot.
+// A status change on a conversation Chatwoot reports as unassigned (meta.assignee is null) also writes
+// bot: it releases a chat an older release left in closed, or one whose unassign delivery was lost.
 function assigneeChange(evt: ChatwootWebhookMessage): { changed: boolean; assignee: number | undefined } {
   // Guard each element: `changed_attributes` is untrusted parsed JSON, so a non-object entry (e.g. `null`)
   // would make `'assignee_id' in a` throw a TypeError → an endless retry of a signed-but-malformed event.
@@ -208,6 +210,20 @@ function assigneeChange(evt: ChatwootWebhookMessage): { changed: boolean; assign
   return { changed: assignee === null || valid, assignee: valid ? assignee as number : undefined };
 }
 
+function statusChanged(evt: ChatwootWebhookMessage): boolean {
+  if (evt.event === 'conversation_status_changed') return true;
+  if (!Array.isArray(evt.changed_attributes)) return false;
+  return evt.changed_attributes.some(a => a != null && typeof a === 'object' && !Array.isArray(a) && 'status' in a);
+}
+
+function unassigned(
+  conversation: ChatwootWebhookMessage['conversation'] | ChatwootWebhookMessage | undefined,
+  evt: ChatwootWebhookMessage,
+): boolean {
+  const meta = conversation?.meta ?? evt.meta;
+  return meta != null && typeof meta === 'object' && !Array.isArray(meta) && Object.hasOwn(meta, 'assignee') && meta.assignee === null;
+}
+
 async function applyHandover(deps: OutboundDeps, sessionId: string | undefined, evt: ChatwootWebhookMessage): Promise<void> {
   const conversation = evt.id !== undefined ? evt : evt.conversation;
   const conversationId = conversation?.id;
@@ -215,11 +231,10 @@ async function applyHandover(deps: OutboundDeps, sessionId: string | undefined, 
   if (!Number.isSafeInteger(conversationId) || conversationId! <= 0 || (inboxId !== undefined && inboxId !== deps.inboxId)) return;
   const target = await resolveTarget(deps, conversationId!, sessionId);
   if (!target) return;
-  const status = conversation?.status;
   const { changed, assignee } = assigneeChange(evt);
   let state: HandoverState | null = null;
-  if (status === 'resolved') state = 'closed';
-  else if (changed) state = assignee ? 'human' : 'bot';
+  if (changed) state = assignee ? 'human' : 'bot';
+  else if (statusChanged(evt) && unassigned(conversation, evt)) state = 'bot';
   if (!state) return; // never infer human from status alone
   const resolved = state; // const so the closure keeps the non-null narrowing
   // instanceId in the mapping mirror = sessionId (a session-scoped instance is 1:1 with its session), so

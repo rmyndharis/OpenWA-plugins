@@ -6,6 +6,13 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.19] - 2026-11-14
+
+### Fixed
+
+- A resolve no longer changes the handover: only an assignee change does. A resolved conversation with no assignee keeps its automation, and an unassignment made at resolve time takes effect ([OpenWA #2070](https://github.com/rmyndharis/OpenWA/issues/2070)).
+- Release a chat when Chatwoot reports a status change on a conversation with no assignee, which frees chats that 0.9.18 and earlier left held after a resolve.
+
 ## [0.9.18] - 2026-11-12
 
 ### Fixed

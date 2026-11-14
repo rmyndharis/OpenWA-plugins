@@ -15,8 +15,8 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chatwoot-adapter` |
-| **Version** | 0.9.18 |
-| **Released** | 2026-11-12 |
+| **Version** | 0.9.19 |
+| **Released** | 2026-11-14 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
@@ -33,7 +33,8 @@
 - **Chatwoot → WhatsApp** — agent replies (`outgoing`, non-private) sent back to WhatsApp. The adapter's own
   posts, foreign inboxes, and private notes are never relayed.
 - **Handover** — assigning a human agent in Chatwoot stops other OpenWA bots from auto-replying on that chat;
-  automation resumes when the conversation is unassigned.
+  automation resumes when the assignee is cleared. Resolving a conversation does not change who holds the
+  chat.
 - **JID-keyed contacts** — Chatwoot contacts are keyed on the WhatsApp JID, so matching is stable across
   WhatsApp's `@lid` migration. A group maps to one synthetic contact with sender-prefixed messages.
 - **Correct under load** — inbound and outbound are serialized by an in-worker per-chat lock, so a cold-start
@@ -45,6 +46,12 @@ Each minted instance binds one Chatwoot account (its `apiToken` + `accountId` + 
 session. Inbound WhatsApp messages are relayed on the `message:received` hook; agent replies and conversation
 status changes arrive on an account-level Chatwoot webhook that OpenWA verifies (HMAC) before the adapter
 sees it.
+
+Resolving a conversation in Chatwoot leaves its handover unchanged, so an agent who continues a resolved
+thread is not interrupted by a bot. Automation resumes when the assignee is cleared, for example by a
+Chatwoot automation rule that removes the assigned agent when a conversation is resolved. A chat that 0.9.18
+or earlier left held after a resolve is released on its next status change if it has no assignee, or by
+assigning and then unassigning an agent.
 
 ## Setup
 
