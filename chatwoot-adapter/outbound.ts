@@ -2,6 +2,7 @@ import type {
   WebhookRequest,
   PluginConversationsCapability,
   PluginHandoverCapability,
+  PluginMappingsCapability,
   PluginEngineReadCapability,
   HandoverState,
 } from '../types/openwa';
@@ -14,6 +15,7 @@ export interface OutboundDeps {
   lock: KeyedAsyncLock;
   conversations: PluginConversationsCapability;
   handover: PluginHandoverCapability;
+  mappings?: PluginMappingsCapability;
   // Resolves @lid -> @c.us so the per-chat lock key matches handleSent's for a migrated contact (the echo
   // marker + own-send handler must serialize on one canonical key).
   engine: PluginEngineReadCapability;
@@ -195,8 +197,18 @@ function mediaAttachments(
 
 // Human handover is driven by the assignee_id transition, NOT by status (status:'open' is not a human
 // signal — the adapter itself opens conversations). Assignee set => human; cleared => bot.
-// A status change on a conversation Chatwoot reports as unassigned (meta.assignee is null) also writes
-// bot: it releases a chat an older release left in closed, or one whose unassign delivery was lost.
+// A status change with no human assignee releases a chat only when its stored handover state is closed
+// (left there by 0.9.18 or earlier); bot and human states are never touched by status events.
+function isBotAssignee(assignee: unknown): boolean {
+  return (
+    assignee != null &&
+    typeof assignee === 'object' &&
+    !Array.isArray(assignee) &&
+    ((assignee as { type?: unknown }).type === 'agent_bot' ||
+      (assignee as { type?: unknown }).type === 'captain_assistant')
+  );
+}
+
 function assigneeChange(evt: ChatwootWebhookMessage): { changed: boolean; assignee: number | undefined } {
   // Guard each element: `changed_attributes` is untrusted parsed JSON, so a non-object entry (e.g. `null`)
   // would make `'assignee_id' in a` throw a TypeError → an endless retry of a signed-but-malformed event.
@@ -205,7 +217,12 @@ function assigneeChange(evt: ChatwootWebhookMessage): { changed: boolean; assign
   ];
   const conversation = evt.id !== undefined ? evt : evt.conversation;
   if (!attr || typeof attr !== 'object' || Array.isArray(attr)) return { changed: false, assignee: undefined };
-  const assignee = Object.hasOwn(attr, 'current_value') ? attr.current_value : conversation?.meta?.assignee?.id;
+  const metaAssignee = (conversation?.meta ?? evt.meta)?.assignee;
+  const fallbackId =
+    metaAssignee != null && typeof metaAssignee === 'object' && !Array.isArray(metaAssignee) && !isBotAssignee(metaAssignee)
+      ? metaAssignee.id
+      : undefined;
+  const assignee = Object.hasOwn(attr, 'current_value') ? attr.current_value : fallbackId;
   const valid = typeof assignee === 'number' && Number.isSafeInteger(assignee) && assignee > 0;
   return { changed: assignee === null || valid, assignee: valid ? assignee as number : undefined };
 }
@@ -213,7 +230,12 @@ function assigneeChange(evt: ChatwootWebhookMessage): { changed: boolean; assign
 function statusChanged(evt: ChatwootWebhookMessage): boolean {
   if (evt.event === 'conversation_status_changed') return true;
   if (!Array.isArray(evt.changed_attributes)) return false;
-  return evt.changed_attributes.some(a => a != null && typeof a === 'object' && !Array.isArray(a) && 'status' in a);
+  return evt.changed_attributes.some(a => {
+    if (a == null || typeof a !== 'object' || Array.isArray(a) || !('status' in a)) return false;
+    const s = a.status;
+    if (s == null || typeof s !== 'object' || Array.isArray(s)) return false;
+    return !Object.hasOwn(s, 'previous_value') || !Object.hasOwn(s, 'current_value') || s.previous_value !== s.current_value;
+  });
 }
 
 function unassigned(
@@ -221,7 +243,8 @@ function unassigned(
   evt: ChatwootWebhookMessage,
 ): boolean {
   const meta = conversation?.meta ?? evt.meta;
-  return meta != null && typeof meta === 'object' && !Array.isArray(meta) && Object.hasOwn(meta, 'assignee') && meta.assignee === null;
+  if (meta == null || typeof meta !== 'object' || Array.isArray(meta) || !Object.hasOwn(meta, 'assignee')) return false;
+  return meta.assignee === null || isBotAssignee(meta.assignee);
 }
 
 async function applyHandover(deps: OutboundDeps, sessionId: string | undefined, evt: ChatwootWebhookMessage): Promise<void> {
@@ -229,14 +252,12 @@ async function applyHandover(deps: OutboundDeps, sessionId: string | undefined, 
   const conversationId = conversation?.id;
   const inboxId = evt.inbox?.id ?? conversation?.inbox_id;
   if (!Number.isSafeInteger(conversationId) || conversationId! <= 0 || (inboxId !== undefined && inboxId !== deps.inboxId)) return;
+  const { changed, assignee } = assigneeChange(evt);
+  const releaseParked = !changed && statusChanged(evt) && unassigned(conversation, evt);
+  if (!changed && !releaseParked) return; // never infer human from status alone
   const target = await resolveTarget(deps, conversationId!, sessionId);
   if (!target) return;
-  const { changed, assignee } = assigneeChange(evt);
-  let state: HandoverState | null = null;
-  if (changed) state = assignee ? 'human' : 'bot';
-  else if (statusChanged(evt) && unassigned(conversation, evt)) state = 'bot';
-  if (!state) return; // never infer human from status alone
-  const resolved = state; // const so the closure keeps the non-null narrowing
+  const resolved: HandoverState = changed && assignee ? 'human' : 'bot';
   // instanceId in the mapping mirror = sessionId (a session-scoped instance is 1:1 with its session), so
   // inbound's ctx.mappings.upsert and this handover.set address the SAME conversation-mapping row. Lock on
   // the RAW chatId (not canonicalized): a handover webhook arrives independently of WA session state, and
@@ -249,6 +270,11 @@ async function applyHandover(deps: OutboundDeps, sessionId: string | undefined, 
       if (!link) throw new Error('Chatwoot mapping is incomplete in the current destination');
       if (link.conversationId !== conversationId) return;
     }
-    await deps.handover.set({ sessionId: target.sessionId, chatId: target.chatId, instanceId: target.sessionId }, resolved);
+    const key = { sessionId: target.sessionId, chatId: target.chatId, instanceId: target.sessionId };
+    if (releaseParked) {
+      const current = await deps.mappings?.get(key);
+      if (current?.handoverState !== 'closed') return;
+    }
+    await deps.handover.set(key, resolved);
   });
 }

@@ -6,6 +6,14 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.20] - 2026-11-14
+
+### Fixed
+
+- A status webhook that arrives after an assignment no longer hands the chat back to the bots. 0.9.19 released a chat on any status change whose payload showed no assignee, so a delayed one could undo an assignment made in the meantime.
+- A status change now releases a chat only while it is still in the `closed` state 0.9.18 and earlier left behind, and only when no human agent is assigned. A chat in `bot` or `human` is never moved by a status change.
+- A Chatwoot AI assistant (`agent_bot`, `captain_assistant`) in the assignee field no longer counts as a human agent.
+
 ## [0.9.19] - 2026-11-14
 
 ### Fixed
