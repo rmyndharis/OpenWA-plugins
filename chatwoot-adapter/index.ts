@@ -220,6 +220,7 @@ export default class ChatwootAdapter implements IPlugin {
           lock,
           conversations: { ...ctx.conversations, send: envelope => { assertCurrent(); return ctx.conversations.send(envelope); } },
           handover: { ...ctx.handover, set: (key, state) => { assertCurrent(); return ctx.handover.set(key, state); } },
+          mappings: ctx.mappings && { ...ctx.mappings, get: key => { assertCurrent(); return ctx.mappings.get(key); } },
           engine: ctx.engine,
           store: store.forDestination(cfg, assertCurrent),
           accountId: cfg.accountId,

@@ -59,9 +59,9 @@ export interface ChatwootWebhookMessage {
   status?: string;
   account_id?: number;
   inbox_id?: number;
-  meta?: { assignee?: { id?: number } | null };
+  meta?: { assignee?: { id?: number; type?: string } | null };
   account?: { id?: number };
-  conversation?: { id?: number; status?: string; inbox_id?: number; account_id?: number; meta?: { assignee?: { id?: number } | null } };
+  conversation?: { id?: number; status?: string; inbox_id?: number; account_id?: number; meta?: { assignee?: { id?: number; type?: string } | null } };
   inbox?: { id?: number };
   sender?: { type?: string };
   attachments?: Array<{ id?: number; file_type?: string; data_url?: string }>;
