@@ -15,7 +15,7 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chatwoot-adapter` |
-| **Version** | 0.9.20 |
+| **Version** | 0.9.21 |
 | **Released** | 2026-11-14 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
@@ -52,7 +52,10 @@ thread is not interrupted by a bot. Automation resumes when the assignee is clea
 Chatwoot automation rule that removes the assigned agent when a conversation is resolved. A Chatwoot AI
 assistant in the assignee field (`agent_bot`, `captain_assistant`) does not hold the chat. A chat that
 0.9.18 or earlier left held after a resolve is released on its next status change, provided no human agent
-is assigned to it then, or by assigning and then unassigning an agent.
+is assigned to it then, or by assigning and then unassigning an agent. Assignee changes are applied in
+the order Chatwoot committed them: one committed before the last change applied to the conversation is
+ignored, whatever order the webhooks arrive in. A chat whose conversation was deleted in Chatwoot while
+an agent held it returns to the bots when the next message creates its replacement.
 
 ## Setup
 

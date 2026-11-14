@@ -33,6 +33,7 @@ const fakeMappings: PluginMappingsCapability = { upsert: async () => {}, get: as
 function deps(
   over: {
     store?: Record<string, unknown>;
+    link?: Record<string, unknown> | null;
     rejectReplyTo?: string;
     handoverState?: HandoverState | null;
     mappings?: PluginMappingsCapability | null;
@@ -41,6 +42,8 @@ function deps(
   const sent: Array<{ sessionId?: string; chatId?: string; type: string; text?: string }> = [];
   const handovers: Array<[unknown, string]> = [];
   let currentState: HandoverState | null = over.handoverState ?? null;
+  let link: Record<string, unknown> | null =
+    over.link === null ? null : { conversationId: 55, contactId: 1, sourceId: 's', ...(over.link ?? {}) };
   const defaultMappings: PluginMappingsCapability = {
     upsert: async () => {},
     get: async () => (currentState ? { providerConversationId: '55', handoverState: currentState } : null),
@@ -56,7 +59,7 @@ function deps(
         if (e.replyTo && e.mediaUrl && e.type !== 'text') {
           throw new Error('conversation.send: replyTo is not supported for media messages');
         }
-        if (e.replyTo && e.replyTo === over.rejectReplyTo) throw new Error('MessageNotFoundError');
+        if (e.replyTo && e.replyTo === over.rejectReplyTo) throw new Error(`Message ${e.replyTo} not found`);
         sent.push(e);
       },
     },
@@ -72,12 +75,16 @@ function deps(
       hasSeen: async () => false,
       markSeen: async () => {},
       getByConversation: async () => ({ sessionId: 'sess', chatId: 'c@wa' }),
+      getByChat: async () => link,
+      patch: async (_s: string, _c: string, p: Record<string, unknown>) => {
+        if (link) link = { ...link, ...p };
+      },
       ...over.store,
     },
     inboxId: 7,
     log: () => {},
   } as unknown as OutboundDeps;
-  return { sent, handovers, getState: () => currentState, deps: d };
+  return { sent, handovers, getState: () => currentState, getLink: () => link, deps: d };
 }
 
 test('relays an outgoing agent reply with an explicit chatId', async () => {
@@ -101,7 +108,7 @@ test('a scoped webhook cannot send or change handover through another session le
   }));
   await handleOutbound(d, reqScoped('sessB', {
     event: 'conversation_updated',
-    conversation: { id: 55, meta: { assignee: { id: 3 } } },
+    conversation: { id: 55, inbox_id: 7, meta: { assignee: { id: 3 } } },
     changed_attributes: [{ assignee_id: { previous_value: null, current_value: 3 } }],
   }));
   assert.deepEqual(sent, []);
@@ -205,9 +212,9 @@ test('drops the incoming echo and private notes', async () => {
 
 test('handover: assign sets human, unassign sets bot, and resolving while assigned leaves handover unchanged', async () => {
   const { deps: d, handovers } = deps();
-  await handleOutbound(d, req({ event: 'conversation_updated', conversation: { id: 55, meta: { assignee: { id: 3 } } }, changed_attributes: [{ assignee_id: { previous_value: null, current_value: 3 } }] }));
-  await handleOutbound(d, req({ event: 'conversation_updated', conversation: { id: 55, meta: { assignee: null } }, changed_attributes: [{ assignee_id: { previous_value: 3, current_value: null } }] }));
-  await handleOutbound(d, req({ event: 'conversation_updated', conversation: { id: 55, status: 'resolved', meta: { assignee: { id: 3 } } }, changed_attributes: [{ status: { previous_value: 'open', current_value: 'resolved' } }] }));
+  await handleOutbound(d, req({ event: 'conversation_updated', conversation: { id: 55, inbox_id: 7, meta: { assignee: { id: 3 } } }, changed_attributes: [{ assignee_id: { previous_value: null, current_value: 3 } }] }));
+  await handleOutbound(d, req({ event: 'conversation_updated', conversation: { id: 55, inbox_id: 7, meta: { assignee: null } }, changed_attributes: [{ assignee_id: { previous_value: 3, current_value: null } }] }));
+  await handleOutbound(d, req({ event: 'conversation_updated', conversation: { id: 55, inbox_id: 7, status: 'resolved', meta: { assignee: { id: 3 } } }, changed_attributes: [{ status: { previous_value: 'open', current_value: 'resolved' } }] }));
   await handleOutbound(d, req({ event: 'conversation_status_changed', id: 55, inbox_id: 7, status: 'resolved', meta: { assignee: { id: 3 } }, changed_attributes: null }));
   assert.deepEqual(handovers.map(h => h[1]), ['human', 'bot']);
 });
@@ -261,7 +268,7 @@ test('malformed conversation change lists are ignored without retrying the deliv
 
 test('status→open with no assignee change is a no-op (never infer human from status)', async () => {
   const { deps: d, handovers } = deps();
-  await handleOutbound(d, req({ event: 'conversation_updated', conversation: { id: 55, status: 'open' }, changed_attributes: [{ status: { previous_value: 'pending', current_value: 'open' } }] }));
+  await handleOutbound(d, req({ event: 'conversation_updated', conversation: { id: 55, inbox_id: 7, status: 'open' }, changed_attributes: [{ status: { previous_value: 'pending', current_value: 'open' } }] }));
   assert.equal(handovers.length, 0);
 });
 
@@ -380,7 +387,7 @@ test('relay canonicalizes the WA chat id (via engine.canonicalChatId) so its loc
 
 test('handover guards a non-object changed_attributes element (no throw / retry loop)', async () => {
   const { deps: d, handovers } = deps();
-  const r = await handleOutbound(d, req({ event: 'conversation_updated', conversation: { id: 55 }, changed_attributes: [null, 'x', { assignee_id: { current_value: 3 } }] }));
+  const r = await handleOutbound(d, req({ event: 'conversation_updated', conversation: { id: 55, inbox_id: 7 }, changed_attributes: [null, 'x', { assignee_id: { current_value: 3 } }] }));
   assert.deepEqual(r, { status: 200 });
   assert.deepEqual(handovers.map(h => h[1]), ['human']); // the valid element is still read
 });
@@ -829,4 +836,272 @@ test('wildcard sessionId="*" ingress delivery resolves mapped conversation like 
   );
   assert.deepEqual(sent, [{ sessionId: 'sess', chatId: 'c@wa', type: 'text', text: 'wildcard reply' }]);
   assert.deepEqual(handovers.map(h => h[1]), ['human']);
+});
+
+// Chatwoot's `changed_attributes` carries the `updated_at` the change was committed with. The payload's
+// own `updated_at` is read when the webhook is built, so it says nothing about the order of two changes.
+const iso = (ms: number): string => new Date(ms).toISOString();
+const committed = (ms: number) => ({ updated_at: { previous_value: iso(ms - 1), current_value: iso(ms) } });
+const assignEvt = (ms: number, extra: Record<string, unknown> = {}) => ({
+  event: 'conversation_updated',
+  id: 55,
+  inbox_id: 7,
+  meta: { assignee: { id: 9, type: 'user' } },
+  changed_attributes: [{ assignee_id: { previous_value: null, current_value: 9 } }, committed(ms)],
+  ...extra,
+});
+const unassignEvt = (ms: number, extra: Record<string, unknown> = {}) => ({
+  event: 'conversation_updated',
+  id: 55,
+  inbox_id: 7,
+  meta: { assignee: null },
+  changed_attributes: [{ assignee_id: { previous_value: 9, current_value: null } }, committed(ms)],
+  ...extra,
+});
+
+test('an unassignment delivered before the assignment it followed stays in force', async () => {
+  const { deps: d, handovers, getState, getLink } = deps();
+  await handleOutbound(d, req(unassignEvt(2000)));
+  await handleOutbound(d, req(assignEvt(1000)));
+  assert.equal(getState(), 'bot');
+  assert.equal(getLink()?.handoverAt, 2000);
+  assert.deepEqual(handovers.map(h => h[1]), ['bot']);
+});
+
+test('an assignment delivered before the unassignment it followed stays in force', async () => {
+  const { deps: d, handovers, getState, getLink } = deps();
+  await handleOutbound(d, req(assignEvt(2000)));
+  await handleOutbound(d, req(unassignEvt(1000)));
+  assert.equal(getState(), 'human');
+  assert.equal(getLink()?.handoverAt, 2000);
+  assert.deepEqual(handovers.map(h => h[1]), ['human']);
+});
+
+test('events are ordered by when the change was committed, not by the payload updated_at', async () => {
+  // The unassignment was committed first but its webhook was built last, after the agent who then took
+  // the conversation touched it: its payload carries the newest updated_at and the new assignee.
+  const lateBuiltUnassign = unassignEvt(1000, { updated_at: 3, meta: { assignee: { id: 4, type: 'user' } } });
+  const assign = assignEvt(2000, { updated_at: 2 });
+
+  const inOrder = deps();
+  await handleOutbound(inOrder.deps, req(lateBuiltUnassign));
+  await handleOutbound(inOrder.deps, req(assign));
+  assert.equal(inOrder.getState(), 'human');
+
+  const reversed = deps();
+  await handleOutbound(reversed.deps, req(assign));
+  await handleOutbound(reversed.deps, req(lateBuiltUnassign));
+  assert.equal(reversed.getState(), 'human');
+  assert.deepEqual(reversed.handovers.map(h => h[1]), ['human']);
+});
+
+test('a handover event that carries no commit time applies and keeps the stored one', async () => {
+  const { deps: d, getState, getLink } = deps();
+  await handleOutbound(d, req(assignEvt(2000)));
+  await handleOutbound(d, req({
+    event: 'conversation_updated',
+    id: 55,
+    inbox_id: 7,
+    updated_at: 1,
+    meta: { assignee: null },
+    changed_attributes: [{ assignee_id: { previous_value: 9, current_value: null } }],
+  }));
+  assert.equal(getState(), 'bot');
+  assert.equal(getLink()?.handoverAt, 2000);
+  assert.equal(getLink()?.handoverState, 'bot');
+});
+
+test('a commit time that is not an ISO string is not used to order', async () => {
+  for (const bad of [1000, 'not a date', null, { current_value: iso(1000) }]) {
+    const { deps: d, getState, getLink } = deps({ link: { handoverAt: 5000 } });
+    await handleOutbound(d, req({
+      ...assignEvt(1000),
+      changed_attributes: [{ assignee_id: { previous_value: null, current_value: 9 } }, { updated_at: { current_value: bad } }],
+    }));
+    assert.equal(getState(), 'human');
+    assert.equal(getLink()?.handoverAt, 5000);
+  }
+});
+
+test('two deliveries with the same commit time both apply', async () => {
+  const { deps: d, handovers, getState, getLink } = deps();
+  await handleOutbound(d, req(assignEvt(2000)));
+  await handleOutbound(d, req(assignEvt(2000)));
+  assert.equal(getState(), 'human');
+  assert.equal(getLink()?.handoverAt, 2000);
+  assert.deepEqual(handovers.map(h => h[1]), ['human', 'human']);
+});
+
+test('the release of a parked chat is not ordered and stamps nothing', async () => {
+  const { deps: d, getState, getLink } = deps({ handoverState: 'closed', link: { handoverAt: 5000 } });
+  await handleOutbound(d, req({
+    event: 'conversation_status_changed',
+    id: 55,
+    inbox_id: 7,
+    status: 'open',
+    updated_at: 1,
+    meta: { assignee: null },
+    changed_attributes: null,
+  }));
+  assert.equal(getState(), 'bot');
+  assert.equal(getLink()?.handoverAt, 5000);
+  assert.equal(getLink()?.handoverState, 'bot');
+
+  // An assignment committed before the stored mark is still stale.
+  await handleOutbound(d, req(assignEvt(4000)));
+  assert.equal(getState(), 'bot');
+
+  // A status change reported by conversation_updated carries a commit time; a release still ignores it.
+  const parked = deps({ handoverState: 'closed', link: { handoverAt: 5000 } });
+  await handleOutbound(parked.deps, req({
+    event: 'conversation_updated',
+    id: 55,
+    inbox_id: 7,
+    status: 'open',
+    meta: { assignee: null },
+    changed_attributes: [{ status: { previous_value: 'resolved', current_value: 'open' } }, committed(1000)],
+  }));
+  assert.equal(parked.getState(), 'bot');
+  assert.equal(parked.getLink()?.handoverAt, 5000);
+});
+
+test('the applied handover is recorded on the link of the conversation it came through', async () => {
+  const patches: unknown[][] = [];
+  const { deps: d } = deps({
+    store: { patch: async (...args: unknown[]) => void patches.push(args) },
+  });
+  await handleOutbound(d, req(assignEvt(2000)));
+  await handleOutbound(d, req(unassignEvt(3000)));
+  assert.deepEqual(patches, [
+    ['sess', 'c@wa', { handoverState: 'human', handoverAt: 2000 }, 55],
+    ['sess', 'c@wa', { handoverState: 'bot', handoverAt: 3000 }, 55],
+  ]);
+});
+
+test('quoted reply resends unquoted only for quote-target errors and rethrows other errors', async () => {
+  const { deps: dNotFound, sent: sentNotFound } = deps({ rejectReplyTo: 'WA_GONE' });
+  await handleOutbound(dNotFound, req({
+    event: 'message_created',
+    message_type: 'outgoing',
+    private: false,
+    id: 601,
+    content: 'hi again',
+    content_attributes: { in_reply_to_external_id: 'WA_GONE' },
+    inbox: { id: 7 },
+    conversation: { id: 55 },
+  }));
+  assert.equal(sentNotFound.length, 1);
+  assert.equal('replyTo' in sentNotFound[0], false);
+
+  const sentUnsupported: unknown[] = [];
+  const { deps: dUnsupported } = deps();
+  let calls = 0;
+  dUnsupported.conversations = {
+    send: async (e: { replyTo?: string }) => {
+      calls++;
+      if (e.replyTo) throw new Error('conversation.send: replyTo is not supported for media messages');
+      sentUnsupported.push(e);
+    },
+  };
+  await handleOutbound(dUnsupported, req({
+    event: 'message_created',
+    message_type: 'outgoing',
+    private: false,
+    id: 602,
+    content: 'caption',
+    content_attributes: { in_reply_to_external_id: 'WA_1' },
+    inbox: { id: 7 },
+    conversation: { id: 55 },
+  }));
+  assert.equal(calls, 2);
+  assert.equal(sentUnsupported.length, 1);
+
+  const { deps: dTransient } = deps();
+  let transientCalls = 0;
+  dTransient.conversations = {
+    send: async () => {
+      transientCalls++;
+      throw new Error('WhatsApp session is not connected');
+    },
+  };
+  await assert.rejects(
+    () =>
+      handleOutbound(dTransient, req({
+        event: 'message_created',
+        message_type: 'outgoing',
+        private: false,
+        id: 603,
+        content: 'important',
+        content_attributes: { in_reply_to_external_id: 'WA_2' },
+        inbox: { id: 7 },
+        conversation: { id: 55 },
+      })),
+    /WhatsApp session is not connected/,
+  );
+  assert.equal(transientCalls, 1);
+});
+
+test('handover ignores events without inbox id and relay ignores invalid conversation ids', async () => {
+  const { deps: d, handovers, sent } = deps({ handoverState: 'closed' });
+  await handleOutbound(d, req({
+    event: 'conversation_updated',
+    id: 55,
+    updated_at: 200,
+    meta: { assignee: { id: 9, type: 'User' } },
+    changed_attributes: [{ assignee_id: { previous_value: null, current_value: 9 } }],
+  }));
+  await handleOutbound(d, req({
+    event: 'conversation_status_changed',
+    id: 55,
+    status: 'open',
+    updated_at: 200,
+    meta: { assignee: null },
+  }));
+  assert.deepEqual(handovers, []);
+
+  for (const [idx, badId] of ([0, -5, 1.5, '55', null] as unknown[]).entries()) {
+    await handleOutbound(d, req({
+      event: 'message_created',
+      message_type: 'outgoing',
+      private: false,
+      id: 700 + idx,
+      content: 'hello',
+      inbox: { id: 7 },
+      conversation: { id: badId as number },
+    }));
+  }
+  assert.deepEqual(sent, []);
+});
+
+test('nested conversation envelope takes precedence over root event id', async () => {
+  const { deps: d, handovers, getState, getLink } = deps({
+    store: {
+      getByConversation: async (id: number) => (id === 55 ? { sessionId: 'sess', chatId: 'c@wa' } : null),
+    },
+  });
+  await handleOutbound(d, req({
+    id: 99001,
+    event: 'conversation_updated',
+    conversation: {
+      id: 55,
+      inbox_id: 7,
+      meta: { assignee: { id: 9, type: 'User' } },
+    },
+    changed_attributes: [{ assignee_id: { previous_value: null, current_value: 9 } }, committed(3000)],
+  }));
+  assert.equal(getState(), 'human');
+  assert.equal(getLink()?.handoverAt, 3000);
+  assert.equal(handovers.length, 1);
+});
+
+test('a failed record write does not fail an applied handover event', async () => {
+  const logs: string[] = [];
+  const { deps: d, getState } = deps({
+    store: { patch: async () => { throw new Error('storage quota exceeded'); } },
+  });
+  d.log = m => void logs.push(m);
+  const r = await handleOutbound(d, req(assignEvt(2000)));
+  assert.deepEqual(r, { status: 200 });
+  assert.equal(getState(), 'human');
+  assert.deepEqual(logs, ['handover record write failed']);
 });

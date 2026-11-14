@@ -126,10 +126,18 @@ export default class ChatwootAdapter implements IPlugin {
     };
     const buildDeps = (cfg: ChatwootFullConfig, sessionId: string) => {
       const assertCurrent = guard(cfg, sessionId);
+      const handover: typeof ctx.handover = {
+        ...ctx.handover,
+        set: (key, state) => {
+          assertCurrent();
+          return ctx.handover.set(key, state);
+        },
+      };
       return {
         lock,
         client: new ChatwootClient((url, init) => { assertCurrent(); return ctx.net.fetch(url, init); }, cfg),
         store: store.forDestination(cfg, assertCurrent),
+        handover,
         engine: ctx.engine,
         instanceId: sessionId,
         relayGroups: cfg.relayGroups,

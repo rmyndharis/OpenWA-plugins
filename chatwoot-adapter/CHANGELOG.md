@@ -6,6 +6,18 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.21] - 2026-11-14
+
+### Fixed
+
+- Handover webhooks that arrive out of order no longer undo a newer change. An assignee change is ordered by the time Chatwoot committed it (the `updated_at` entry of the event's `changed_attributes`), so an assignment and an unassignment delivered in reverse leave the later one in force.
+- A chat whose held Chatwoot conversation was deleted returns to the bots when a new conversation replaces it. It used to keep the deleted conversation's handover, which left the bots silent on a thread no agent held. This applies to a hold recorded since this version; an older one is still released by assigning and unassigning an agent on the new conversation.
+- An own message whose conversation was deleted is relayed into the contact's other conversation when it has one (a contact split into a lid thread and a phone thread), instead of opening a third.
+- A message for a contact whose lid and phone number were both linked to a conversation that was since deleted is relayed at once. It used to fail a second time and wait in the retry queue until a later message cleared the other link.
+- Concurrent updates of one chat's mapping no longer overwrite each other, write back a mapping that was just dropped, or drop one that another recovery had just rebuilt.
+- A quoted reply is resent without the quote only when the quoted message is no longer available. Any other send failure fails the delivery so it is retried as it is, instead of triggering a second, unquoted send.
+- A handover event that names no inbox is ignored, an agent reply needs a positive integer conversation id, and a nested `conversation` object takes precedence over the event's own `id`.
+
 ## [0.9.20] - 2026-11-14
 
 ### Fixed

@@ -1,4 +1,4 @@
-import type { IncomingMessage, PluginEngineReadCapability } from '../types/openwa';
+import type { IncomingMessage, PluginEngineReadCapability, PluginHandoverCapability } from '../types/openwa';
 import type { ChatwootClient } from './chatwoot-client.ts';
 import type { MappingStore, ChatLink } from './mapping-store.ts';
 import type { KeyedAsyncLock } from './chat-lock.ts';
@@ -11,6 +11,7 @@ export interface InboundDeps {
   client: ChatwootClient;
   store: MappingStore;
   engine: PluginEngineReadCapability;
+  handover: PluginHandoverCapability;
   instanceId: string;
   relayGroups: boolean;
   relayMedia: boolean;
@@ -199,15 +200,24 @@ export async function ensureConversation(
   chatId: string,
   meta: { name: string; phone?: string },
 ): Promise<number> {
+  return (await ensureConversationWithStatus(deps, sessionId, chatId, meta)).conversationId;
+}
+
+export async function ensureConversationWithStatus(
+  deps: InboundDeps,
+  sessionId: string,
+  chatId: string,
+  meta: { name: string; phone?: string },
+): Promise<{ conversationId: number; created: boolean }> {
   const existing = await deps.store.getByChat(sessionId, chatId);
-  if (existing) return existing.conversationId;
+  if (existing) return { conversationId: existing.conversationId, created: false };
   const found = await deps.client.searchContact(chatId);
   const contact = found?.sourceId
     ? { id: found.id, sourceId: found.sourceId }
     : await deps.client.createContact(chatId, meta.name, meta.phone);
-  const conversationId =
-    (await deps.client.findOpenConversation(contact.id)) ??
-    (await deps.client.createConversation(contact.id, contact.sourceId));
+  const openConversationId = await deps.client.findOpenConversation(contact.id);
+  const created = openConversationId === null || openConversationId === undefined;
+  const conversationId = openConversationId ?? (await deps.client.createConversation(contact.id, contact.sourceId));
   await deps.store.link(sessionId, chatId, deps.instanceId, {
     conversationId,
     contactId: contact.id,
@@ -224,7 +234,31 @@ export async function ensureConversation(
     // duplicates ahead of the live message, in every open chat, on the first message after an upgrade.
     backfillDone: false,
   });
-  return conversationId;
+  return { conversationId, created };
+}
+
+// Hand a chat back to the bots after its held conversation was deleted and replaced by a new one. The
+// caller decides that (the deleted conversation's own link recorded `human`, and the replacement was
+// created, not found). Runs under the lock handover webhooks take, the mapping's own chat id, and yields
+// to an event that already reached the new conversation. Best-effort: a failed reset must not cost the
+// message, and leaves the chat held, as before 0.9.21.
+export async function resetRecreatedHandover(
+  deps: InboundDeps,
+  sessionId: string,
+  chatKey: string,
+  heldLockChatId: string,
+): Promise<void> {
+  const apply = async () => {
+    try {
+      const link = await deps.store.getByChat(sessionId, chatKey);
+      if (link?.handoverState !== undefined) return;
+      await deps.handover.set({ sessionId, chatId: chatKey, instanceId: deps.instanceId }, 'bot');
+    } catch (err) {
+      deps.log('handover reset after conversation rebuild failed', err);
+    }
+  };
+  if (chatKey === heldLockChatId) await apply();
+  else await deps.lock.run(`${sessionId}:${chatKey}`, apply);
 }
 
 // A 1:1 chat first seen from an @lid sender is seeded with the bare JID as its Chatwoot name (no pushName
