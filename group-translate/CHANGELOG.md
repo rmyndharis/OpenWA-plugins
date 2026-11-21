@@ -8,6 +8,16 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.3.19] - 2026-11-21
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.31.0.
+
+### Fixed
+
+- Post a translation unquoted when the message id could not be read, where the reply failed and the translation was dropped.
+
 ## [1.3.18] - 2026-11-12
 
 ### Fixed

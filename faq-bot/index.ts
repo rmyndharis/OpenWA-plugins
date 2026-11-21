@@ -2,6 +2,7 @@ import type { IPlugin, PluginContext, HookContext, IncomingMessage } from '../ty
 import { parseRules, matchRule, CompiledRule } from './rules.ts';
 import { allowCooldown } from './cooldown.ts';
 import { isBroadcastJid } from './jid.ts';
+import { sendOutcomeUnknown } from './send-outcome.ts';
 
 export interface FaqConfig {
   fallbackReply: string;
@@ -213,7 +214,9 @@ export default class FaqBot implements IPlugin {
     }, err => {
       if (this.replyAttempts.get(attemptKey) === attempt) {
         this.replyAttempts.delete(attemptKey);
-        cooldownMap.delete(cooldownKey);
+        // The cooldown slot stays when the send may have gone out (OpenWA 0.31.0 says so in the error), so a
+        // reply that was perhaps delivered is not sent again once the backoff ends.
+        if (!sendOutcomeUnknown(err)) cooldownMap.delete(cooldownKey);
         this.retryNotBefore.set(attemptKey, Date.now() + RETRY_BACKOFF_MS);
         if (this.retryNotBefore.size > MAX_RETRY_ENTRIES) {
           const now = Date.now();

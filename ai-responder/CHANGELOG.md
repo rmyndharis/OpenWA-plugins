@@ -8,6 +8,13 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-11-21
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.31.0.
+- Document that forwarded messages and shared locations are not answered.
+
 ## [0.1.6] - 2026-11-10
 
 ### Fixed

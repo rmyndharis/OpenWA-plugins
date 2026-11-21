@@ -1,7 +1,16 @@
 import type { IncomingMessage } from '../types/openwa';
+import { digest } from './config.ts';
 
 export const MAX_TEXT = 4096;
 export const MAX_WEBHOOK_MESSAGES = 20;
+
+// An engine that cannot read a message id reports the empty sentinel. The relay keys its queue, its
+// de-duplication and the Rocket.Chat message id on the id, so such a message is relayed under a stable one
+// derived from what identifies it: a redelivery maps to the same id, a different message does not.
+export function withReadableId(message: IncomingMessage): IncomingMessage {
+  if (!message || message.id !== '') return message;
+  return { ...message, id: `noid:${digest(JSON.stringify([message.chatId, message.timestamp, message.body])).slice(0, 32)}` };
+}
 
 export function inboundText(message: IncomingMessage): boolean {
   return Boolean(

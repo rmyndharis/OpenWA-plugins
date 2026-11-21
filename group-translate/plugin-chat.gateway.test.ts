@@ -27,6 +27,17 @@ test('sendCombinedReply routes through ctx.messages.reply', async () => {
   assert.deepEqual(messages.calls.reply[0], ['s', 'c@g.us', 'M1', 'Hola']);
 });
 
+// A message whose id the engine could not read arrives with id '' and the host rejects an empty quoted id
+// outright ("argument 2 must be a non-empty string"). The translation is still worth posting, unquoted.
+test('sendCombinedReply sends unquoted when the message id is empty', async () => {
+  const messages = makeMessages();
+  const engine = { getGroupInfo: async () => null };
+  const gw = new PluginChatGateway(messages as never, engine as never);
+  await gw.sendCombinedReply('s', 'c@g.us', '', 'Hola');
+  assert.deepEqual(messages.calls.reply, []);
+  assert.deepEqual(messages.calls.sendText[0], ['s', 'c@g.us', 'Hola']);
+});
+
 test('getGroupAdmins includes phone-scheme admins + the LID owner, deduped', async () => {
   const messages = makeMessages();
   const engine = {

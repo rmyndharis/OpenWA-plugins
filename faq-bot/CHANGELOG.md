@@ -8,6 +8,17 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.22] - 2026-11-21
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.31.0.
+- Document that forwarded messages and shared locations are not answered.
+
+### Fixed
+
+- Keep the fallback cooldown after a send the host reports as possibly delivered, so the fallback is not sent twice.
+
 ## [0.2.21] - 2026-11-12
 
 ### Changed

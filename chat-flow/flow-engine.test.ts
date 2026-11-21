@@ -56,6 +56,22 @@ test('does not trigger if input does not match a non-empty trigger', async () =>
   assert.equal(storage.has(key), false);
 });
 
+// Since OpenWA 0.31.0 the worker admits 198 log lines per 10 s whatever their level. A message that merely is not
+// the trigger is the commonest event this plugin sees, so it must not spend that budget: a backlog of them
+// (a reconnect) would crowd out the error line of a reply that really failed.
+test('a message that is not the trigger writes no log line at all', async () => {
+  const lines: string[] = [];
+  const { ctx, replies } = makeCtx();
+  const record = (level: string) => () => void lines.push(level);
+  (ctx as unknown as { logger: Record<string, unknown> }).logger = {
+    log: record('log'), debug: record('debug'), warn: record('warn'), error: record('error'),
+  };
+  const r = await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'something else', 'm1');
+  assert.equal(r, false);
+  assert.equal(replies.length, 0);
+  assert.deepEqual(lines, []);
+});
+
 test('empty trigger: any message starts the flow', async () => {
   const { ctx, replies } = makeCtx();
   const r = await FlowEngine.processMessage(ctx, xyz, 'xyz', 'user1', 'anything', 'm1');

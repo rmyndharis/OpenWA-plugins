@@ -14,6 +14,9 @@
 // not a security problem. That is why there is no per-delivery dedup store here: it would add an
 // unbounded key-per-delivery to the OTP critical path to suppress a duplicate of an identical message.
 //
+// With the queue off the host runs one inline attempt instead of those retries; a throw files a dead letter
+// and the host's reconciler replays the delivery after about a minute.
+//
 // Failure handling:
 // - Missing/malformed phone/otp → return (permanent client error; a retry won't fix a bad payload).
 // - No session to send from     → return (operator config error; won't self-heal in the retry window).

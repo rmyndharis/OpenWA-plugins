@@ -25,7 +25,10 @@ export class PluginChatGateway implements ChatGateway {
 
   async sendCombinedReply(sessionId: string, chatId: string, quotedMessageId: string, text: string): Promise<void> {
     if (!text.trim()) return;
-    await this.messages.reply(sessionId, chatId, quotedMessageId, text);
+    // A message whose id the engine could not read arrives with id '' and has nothing to quote; the host
+    // rejects an empty quoted id, which dropped the translation and the state save behind it.
+    if (!quotedMessageId) await this.messages.sendText(sessionId, chatId, text);
+    else await this.messages.reply(sessionId, chatId, quotedMessageId, text);
   }
 
   async getGroupAdmins(sessionId: string, chatId: string): Promise<string[]> {

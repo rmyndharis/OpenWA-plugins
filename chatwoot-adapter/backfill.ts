@@ -117,8 +117,10 @@ export async function backfillAllChats(deps: InboundDeps, sessionId: string): Pr
           // chat.id is already the neutral JID on this path (anti-corruption layer), so the phone can be
           // resolved from it without an engine call. Groups skip (no MSISDN); a cold @lid stays no-phone.
           const conversationId = await ensureConversation(deps, sessionId, chat.id, {
-            name: chat.name || chat.id,
-            phone: resolvePhone(chat, chat.id),
+            // OpenWA 0.31.0: a Baileys privacy-id chat with no name of its own lists name '' and, when the
+            // session can map the id, its phone digits. Title it by the phone, else by the id.
+            name: chat.name || chat.phone || chat.id,
+            phone: resolvePhone({ isGroup: chat.isGroup, senderPhone: chat.phone }, chat.id),
           });
           const allPosted = await replayHistory(deps, sessionId, conversationId, ordered);
           // Share the lazy path's marker — but only when every message actually posted. A sweep that hit a

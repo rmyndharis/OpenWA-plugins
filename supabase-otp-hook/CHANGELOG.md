@@ -7,6 +7,13 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.17] - 2026-11-21
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.31.0.
+- Document the retry behavior with the host queue off and during a whatsapp-web.js page reload.
+
 ## [0.3.16] - 2026-11-10
 
 ### Fixed

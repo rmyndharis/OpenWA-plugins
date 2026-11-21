@@ -8,6 +8,18 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.1.20] - 2026-11-21
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.31.0.
+- Correct the README: an unmatched reply is answered twice, and the third miss in a row ends the flow quietly.
+- Document that forwarded messages and shared locations are ignored.
+
+### Fixed
+
+- Stop logging a line for every message that is not the trigger, which spent the worker log budget of 198 lines per 10 s.
+
 ## [1.1.19] - 2026-11-12
 
 ### Fixed

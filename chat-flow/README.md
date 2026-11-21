@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chat-flow` |
-| **Version** | 1.1.19 |
-| **Released** | 2026-11-12 |
+| **Version** | 1.1.20 |
+| **Released** | 2026-11-21 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.30.0) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.31.0) |
 | **Keywords** | menu, flow, interactive, auto-reply, chatbot, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/chat-flow](https://github.com/rmyndharis/OpenWA-plugins/tree/main/chat-flow) |
 <!-- END DETAILS -->
@@ -31,7 +31,7 @@
   reply selects an option; selections traverse a menu tree of arbitrary depth. Leaf nodes end the flow.
 - **Stateful per conversation** — each `(session, chat)` remembers its position; state expires after 15
   minutes of inactivity, and re-sending the trigger word restarts an active flow. An unmatched reply is
-  answered with the menu again, up to three times in a row; after that the flow ends quietly rather than
+  answered with the menu again twice in a row; the third miss in a row ends the flow quietly and is not claimed, rather than
   answering every message from someone who has stopped following it. Any valid choice resets that budget.
 - **Redelivery protection:** consumed message IDs persist for three days, including after a leaf ends
   the flow or a trigger restarts it. A repeated message does not advance the menu or send another reply.
@@ -109,7 +109,7 @@ plugin's **Flow editor**.
 
 ## Compatibility
 
-Checked against the OpenWA v0.30.0 worker runtime with isolated services. State changes are persisted before replies are queued. Delivery remains ordered per chat while the hook returns its claim without waiting for the send. A failed send is logged and does not block later queued replies. Pending replies are best-effort and may be interrupted when the worker stops.
+Checked against the OpenWA v0.31.0 worker runtime with isolated services. State changes are persisted before replies are queued. Delivery remains ordered per chat while the hook returns its claim without waiting for the send. A failed send is logged and does not block later queued replies. Pending replies are best-effort and may be interrupted when the worker stops.
 
 Targets OpenWA **≥ 0.7.0** — relies on per-session config resolution (`sessionScoped`), live
 `onConfigChange`, and the `configUi` sandboxed config editor. Uses only `ctx.messages.reply`,
@@ -119,7 +119,8 @@ Shared contact cards and polls are ignored: from OpenWA 0.23.2 both carry text i
 (a card its vCard, a poll its question), which would otherwise start the flow or draw an "Invalid
 option". Catalog orders and product cards are ignored the same way: from OpenWA 0.23.5 they arrive as
 `order` and `product`, on Baileys carrying the order note or product title as the body. Tapped business
-buttons and list replies still drive the menu, and a captioned image still reaches it.
+buttons and list replies still drive the menu, and a captioned image still reaches it. Forwarded messages and
+shared locations are ignored too: a forwarded text must not start the flow or draw an "Invalid option".
 
 ### Per-session config
 

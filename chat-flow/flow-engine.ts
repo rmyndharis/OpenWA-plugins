@@ -169,10 +169,9 @@ export class FlowEngine {
     messageId: string,
     sentAt: number | undefined,
   ): Promise<boolean> {
-    // Not the message body: this line runs for every inbound message, and the dashboard renders plugin
-    // logs. The length is what a diagnostic actually uses — "did the engine see anything at all".
-    context.logger.debug('[FlowEngine] Processing message', { sessionId, chatId, bodyLength: messageBody.length });
-
+    // No log line on the path of a message that is not the trigger, the commonest event here: since OpenWA
+    // 0.31.0 the worker admits 198 lines per 10 s whatever their level, so a backlog of ignored messages would
+    // crowd out the error line of a reply that really failed.
     const input = messageBody.trim();
     const stored = await context.storage.get<UserState>(stateKey);
     const now = Date.now();
@@ -194,10 +193,6 @@ export class FlowEngine {
         consumed: { ...consumed, [messageId]: { t: now, handled } },
       });
     };
-    // Never the state itself: `path` is the trail of options this contact picked, which is message
-    // content by another name. A stored row can be malformed, so read its depth defensively.
-    context.logger.debug('[FlowEngine] Loaded state', { stateKey, hasState: !!state, pathDepth: state?.path?.length ?? 0 });
-
     // A message written more than LATE_AFTER_MS before the menu on screen, and delivered that late, was
     // never typed at that menu: a backlog from a disconnect. Matched here it would walk into sub-menus
     // the contact never saw or spend the miss budget. Claim it without a reply so no sibling answers it.
@@ -211,7 +206,6 @@ export class FlowEngine {
 
     const trigger = flow.trigger.trim();
     const isTriggerWord = trigger !== '' && input.toLowerCase() === trigger.toLowerCase();
-    context.logger.debug('[FlowEngine] Trigger check', { trigger, isTriggerWord });
 
     let currentNode: FlowNode = { text: flow.greeting, options: flow.options };
     if (state && !isTriggerWord) {
@@ -227,7 +221,6 @@ export class FlowEngine {
     // If no active flow state, check if we should start one
     if (!state) {
       if (trigger !== '' && !isTriggerWord) {
-        context.logger.debug('[FlowEngine] No active state and input does not match trigger. Ignoring.');
         if (stored) {
           if (Object.keys(consumed).length) {
             const alreadyCompacted =

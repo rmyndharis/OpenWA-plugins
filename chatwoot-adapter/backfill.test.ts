@@ -353,3 +353,24 @@ test('id-less history never posts an id-less live message twice and never marks 
   assert.deepEqual(bulk.posts.map(p => p.body), ['older no-id', 'older with id', 'live no-id']);
   assert.equal(bulk.seen.has(''), false);
 });
+
+// OpenWA 0.31.0: a Baileys chat held under a privacy id (@lid) with no name of its own lists name '' and,
+// when the session can map the id, its phone digits. Core says to title such a chat by phone, else by id.
+test('bulk sweep titles an unnamed privacy-id chat by its phone and gives the contact that number', async () => {
+  const chats = [{ id: '118367890123478@lid', name: '', phone: '5491154759191', isGroup: false, unreadCount: 0, timestamp: 1 }];
+  const created: Array<{ name: string; phone?: string }> = [];
+  const { deps } = makeDeps({
+    engine: {
+      getChats: async () => chats,
+      getChatHistory: async (_s: string, chatId: string) => [{ ...hist(`${chatId}-1`, 10, false, 'hello'), chatId }],
+    },
+    client: {
+      createContact: async (_identifier: string, name: string, phone?: string) => {
+        created.push({ name, phone });
+        return { id: 9, sourceId: 'src' };
+      },
+    },
+  });
+  await backfillAllChats(deps, 'sessLid');
+  assert.deepEqual(created, [{ name: '5491154759191', phone: '+5491154759191' }]);
+});

@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `typebot-connector` |
-| **Version** | 0.3.10 |
-| **Released** | 2026-11-12 |
+| **Version** | 0.3.11 |
+| **Released** | 2026-11-21 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.2 (tested 0.30.0) |
+| **Requires OpenWA** | ≥ 0.8.2 (tested 0.31.0) |
 | **Keywords** | typebot, chatbot, flow, bot, no-code, two-way, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/typebot-connector](https://github.com/rmyndharis/OpenWA-plugins/tree/main/typebot-connector) |
 <!-- END DETAILS -->
@@ -109,7 +109,7 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 
 ## Compatibility
 
-Checked against the OpenWA v0.30.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
+Checked against the OpenWA v0.31.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
 
 - Targets OpenWA **≥ 0.8.2** — uses the live Typebot Chat API over `ctx.net.fetch`
   (`allowConfigHosts` resolves `apiHost`/`mediaHost` from config) and `ctx.conversations.send` for
@@ -142,8 +142,8 @@ Checked against the OpenWA v0.30.0 worker runtime with isolated services. This c
   only generates that card when the sender asks for it, and this connector does not, so these
   bubbles arrive as plain links. Nothing is lost and every link still works; if the card matters, put
   the context in the bubble's own text. The whatsapp-web.js engine is unaffected. (A plugin CAN ask,
-  via the send envelope's `linkPreview` flag, from host 0.14.1; it is left unset here so a flow renders
-  the same way on both engines.)
+  via the send envelope's `linkPreview` flag, from host 0.14.1; it is left unset here, so from host 0.30.3 an
+  unquoted text part follows the session's `linkPreview` config default and can differ between sessions.)
 
 ### Per-session config
 

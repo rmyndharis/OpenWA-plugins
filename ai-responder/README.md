@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `ai-responder` |
-| **Version** | 0.1.6 |
-| **Released** | 2026-11-10 |
+| **Version** | 0.1.7 |
+| **Released** | 2026-11-21 |
 | **Status** | beta |
 | **Author** | Abhinav Raj |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.0 (tested 0.30.0) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.31.0) |
 | **Keywords** | ai, openai, llm, auto-reply, chatbot, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/ai-responder](https://github.com/rmyndharis/OpenWA-plugins/tree/main/ai-responder) |
 <!-- END DETAILS -->
@@ -130,11 +130,13 @@ calls are already open.
 
 ## Compatibility
 
-Checked against the OpenWA v0.30.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
+Checked against the OpenWA v0.31.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
 
 Targets OpenWA **≥ 0.8.0**, which admits the configured `apiBaseUrl` host through
 `net.allowConfigHosts`. Status is beta: it has not yet been smoke-tested on a live gateway.
 
+- Forwarded messages and shared locations are never answered: a forwarded text is not a question put to this
+  bot, and on whatsapp-web.js a shared location's body is its base64 map thumbnail.
 - The request always carries `max_tokens`. Models that accept only `max_completion_tokens`, such as
   OpenAI's reasoning models, reject it; use a chat model such as the default `gpt-4o-mini`.
 - A message is answered only within five minutes of when it was sent. From OpenWA 0.23.6 a Baileys

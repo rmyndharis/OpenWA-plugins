@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { IncomingMessage } from '../types/openwa';
-import { inboundText, parseAgentEvent } from './protocol.ts';
+import { inboundText, parseAgentEvent, withReadableId } from './protocol.ts';
 import { readConfig, stateKey } from './config.ts';
 
 const message = {
@@ -94,4 +94,20 @@ test('maintenance requires a fresh syntactically valid action id', () => {
   assert.throws(() => readConfig({ ...base, deadLetterAction: 'clear' }));
   assert.throws(() => readConfig({ ...base, deadLetterAction: 'other' }));
   assert.doesNotThrow(() => readConfig({ ...base, deadLetterAction: 'replay', deadLetterActionId: 'retry-1' }));
+});
+
+// An engine that cannot read a message id reports the empty sentinel. The relay keys its queue, de-duplication
+// and Rocket.Chat message id on the id, so such a message gets a stable one derived from what identifies it.
+test('a message with no readable id gets a stable id from its chat, send time and text', () => {
+  const idless = { ...message, id: '', timestamp: 1700000000 } as IncomingMessage;
+  const named = withReadableId(idless);
+  assert.match(named.id, /^noid:[0-9a-f]{32}$/);
+  assert.equal(withReadableId({ ...idless }).id, named.id, 'a redelivery maps to the same id');
+  assert.notEqual(withReadableId({ ...idless, body: 'something else' } as IncomingMessage).id, named.id);
+  assert.notEqual(withReadableId({ ...idless, chatId: '15550002222@c.us' } as IncomingMessage).id, named.id);
+  assert.equal(inboundText(named), true);
+});
+
+test('a message that has an id is left exactly as it is', () => {
+  assert.equal(withReadableId(message), message);
 });
