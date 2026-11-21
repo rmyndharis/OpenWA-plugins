@@ -474,3 +474,39 @@ test('shared locations and forwarded messages are never answered or claimed, and
   live = { rules: '{ not json' };
   assert.equal((await plugin.healthCheck()).healthy, false);
 });
+
+// An error that says the message may or may not have been sent (OpenWA 0.31.0: a send cut short by a page reload
+// or a lost connection) proves nothing about delivery. The failure backoff still applies, but the fallback's
+// cooldown slot is not released for it, so a reply that was perhaps delivered is not sent again once it ends.
+test('a fallback send of unknown outcome keeps its cooldown after the failure backoff ends', async () => {
+  const { default: FaqBot } = await import('./index.ts');
+  let attempts = 0;
+  let handler: ((h: unknown) => Promise<{ continue: boolean }>) | undefined;
+  const ctx = makeCtx({
+    config: { rules, fallbackReply: 'tidak paham', fallbackCooldownSec: 600 },
+    registerHook: (_e, h) => { handler = h as (h2: unknown) => Promise<{ continue: boolean }>; },
+    reply: async () => {
+      attempts++;
+      throw new Error(
+        'WhatsApp Web reloaded its page while the message was being sent, and it may or may not have been sent. ' +
+          'Check the chat before sending it again.',
+      );
+    },
+  });
+  await new FaqBot().onEnable(ctx as never);
+  const fire = (id: string) => handler!({
+    source: 'Engine', sessionId: 's1', timestamp: new Date(),
+    data: { id, chatId: 'c@x', body: 'apa kabar', fromMe: false, isGroup: false },
+  });
+
+  mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  try {
+    await fire('m1');
+    assert.equal(attempts, 1);
+    mock.timers.tick(61_000); // past the 60 s failure backoff, far inside the 600 s cooldown
+    await fire('m2');
+    assert.equal(attempts, 1, 'the first fallback may have been delivered: it is not sent again inside the cooldown');
+  } finally {
+    mock.timers.reset();
+  }
+});

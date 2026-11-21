@@ -1,6 +1,6 @@
 import type { IPlugin, PluginContext, IncomingMessage } from '../types/openwa';
 import { readConfig, stateKey, type Config } from './config.ts';
-import { inboundText } from './protocol.ts';
+import { inboundText, withReadableId } from './protocol.ts';
 import { Bridge } from './bridge.ts';
 
 export const HOOK_PRIORITY = 20;
@@ -23,7 +23,7 @@ export default class RocketChatAdapter implements IPlugin {
     ctx.registerHook(
       'message:received',
       async (hook) => {
-        const message = hook.data as IncomingMessage;
+        const message = withReadableId(hook.data as IncomingMessage);
         if (hook.source !== 'Engine' || !inboundText(message)) return { continue: true };
         const generation = this.generation;
         try {

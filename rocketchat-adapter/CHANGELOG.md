@@ -7,6 +7,17 @@ and this plugin adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-21
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.31.0.
+- Document delivery after an ambiguous send, the inline webhook budget with the host queue off, and the 503 preflight.
+
+### Fixed
+
+- Relay a text message whose id the engine could not read, under a stable id derived from its chat, send time and text.
+
 ## [0.1.0] - 2026-11-12
 
 ### Added

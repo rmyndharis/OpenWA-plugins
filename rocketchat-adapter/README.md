@@ -13,13 +13,13 @@ Development preview of a text-only bridge between direct WhatsApp conversations 
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `rocketchat-adapter` |
-| **Version** | 0.1.0 |
-| **Released** | 2026-11-12 |
+| **Version** | 0.1.1 |
+| **Released** | 2026-11-21 |
 | **Status** | development |
 | **Author** | yederlv |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.30.0 (tested 0.30.0) |
+| **Requires OpenWA** | ≥ 0.30.0 (tested 0.31.0) |
 | **Keywords** | rocketchat, omnichannel, whatsapp, helpdesk |
 | **Repository** | [OpenWA-plugins/rocketchat-adapter](https://github.com/rmyndharis/OpenWA-plugins/tree/main/rocketchat-adapter) |
 <!-- END DETAILS -->
@@ -123,6 +123,8 @@ The plugin settings expose `deadLetterAction` (`none`, `replay`, `clear`) and `d
 
 Targets OpenWA **≥ 0.30.0**. The plugin is marked **development**, not stable. Unit/contract tests and local verification are summarized below; `testedOpenWAVersion` is a host verification baseline, not a live WhatsApp guarantee.
 
+Checked against the OpenWA v0.31.0 worker runtime with isolated services. This covers plugin lifecycle, hooks and ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, Rocket.Chat and dashboard rendering require separate deployment checks.
+
 Rocket.Chat reference environment: 8.0.1 with Omnichannel visitor, room, message and message-history REST endpoints. A workspace without available agents may refuse room creation; the plugin retains the message for retry rather than claiming delivery. Confirm your edition's Omnichannel availability before deployment.
 
 ### Per-session config
@@ -134,10 +136,12 @@ Supported by re-reading `ctx.config` for each hook/webhook. This first version e
 - One-to-one `text` messages only, at most 4096 characters. No media, captions, groups, calls, contacts, polls, edits, deletions, quoted replies, own-phone message mirroring or automated handover. Unsupported inputs are ignored.
 - Disable overlapping bot responders for the test session. This plugin is an observer at priority 20; it does not silence bots when an agent takes a room.
 - At most 500 active/recent chat mappings per destination/session. Least recently used mappings without pending/in-flight work are evicted when a new contact arrives; this is not a lifetime contact ceiling. Old room replies after eviction are ignored. Dead letters keep a token snapshot for replay. If every mapping is pinned, enqueue fails explicitly until work completes. Live pending capacity is 100, separate from dead-letter retention. A rejected enqueue/storage failure is not guaranteed recoverable.
+- A message whose id the engine could not read (whatsapp-web.js after WhatsApp Web renames the field) is relayed under a stable id derived from its chat, send time and text, so a re-delivery of the same message is still de-duplicated.
+- With the host queue off (`QUEUE_ENABLED` unset, the default) an agent webhook runs inline within 5 s, and the typing pause before a WhatsApp send (`SIMULATE_TYPING`, up to `SIMULATE_TYPING_MAX_MS`, about 500 ms plus 45 ms per character) can use most of that for a reply of around 100 characters or more. The reply is still delivered once: the host then files a dead letter and the reconciler replays the delivery after about a minute, where the per-room lock and the remembered reply IDs prevent a second send. Run with `QUEUE_ENABLED=true` to give the handler the longer queued budget.
 - Inbound work runs off the hook path; a crash before durable enqueue can lose that event. Four workers drain up to 100 due items per pump, preserving FIFO within each chat. A retrying chat does not block other customers. Provider I/O runs outside the short storage lock, so slow Rocket.Chat calls do not hold up agent replies. Five attempts use increasing delays before dead-letter retention.
 - Pending queues survive restarts, but draining resumes only after that resolved destination/session dispatches a hook or webhook. In-memory destination caches are cleared on disable or config changes.
 - An ambiguous Rocket.Chat send is reconciled against the last 100 messages in its pinned room using the deterministic message ID. It is never automatically moved to a new room. A closed/unreadable room or an old message outside that window can leave work dead-lettered for manual resolution.
-- Outbound delivery is **at least once**. Successful sends are marked afterward: a crash, storage failure or ambiguous WhatsApp timeout can produce a duplicate on retry. At most 500 recent reply IDs and 500 successful inbound IDs are remembered per namespace. Host ingress also deduplicates byte-identical webhook bodies.
+- Outbound delivery is **at least once**. Successful sends are marked afterward: a crash, storage failure or ambiguous WhatsApp timeout can produce a duplicate on retry. From OpenWA 0.31.0 a send cut short by a page reload or a lost connection answers that it "may or may not have been sent"; the delivery then fails and the host's retry sends the reply again, so that case can duplicate it too. At most 500 recent reply IDs and 500 successful inbound IDs are remembered per namespace. Host ingress also deduplicates byte-identical webhook bodies.
 - Relay exceptions deliberately omit provider response bodies, URLs containing visitor tokens, message text and contact identities. Health retains a failure indication until re-enable or a valid config/maintenance save; inspect and resolve retained work first. “Healthy” means no failures observed since enable, not verified provider connectivity.
 
 ## Verification and troubleshooting
@@ -151,7 +155,7 @@ Supported by re-reading `ctx.config` for each hook/webhook. This first version e
 | --- | --- |
 | OpenWA login says Invalid API key | Use the key for the running OpenWA installation. A separate Docker data volume has a different bootstrap key from a previous npm installation. |
 | Webhook returns 401 | The Rocket.Chat Secret Token must match the ingress instance secret; do not use the OpenWA admin key here. |
-| Authenticated webhook returns 503 | The bound WhatsApp session must be connected and the plugin restored/enabled; the route has a session-alive preflight. |
+| Authenticated webhook returns 503 | The bound WhatsApp session has no live engine or is in the FAILED state, or the plugin is still being restored after a restart (the route has a session-alive preflight; a session that is merely disconnected or starting passes it and the delivery is retried by the host). |
 | No Omnichannel room appears | Check the origin, exact session UUID, plugin activation, agent availability and department. A provider/room failure is retained for retry. |
 | Network request refused | For public deployments use a reachable HTTPS origin. For a Docker lab check the HTTPS proxy, CA trust and exact internal-host SSRF exception. |
 | Agent reply is not delivered | Match plugin and instance origin/department/session settings, select Agent Messages, confirm plain text and inspect plugin health/host logs. Unknown rooms or mismatched visitor tokens are acknowledged and ignored, without sending to WhatsApp or degrading health. |

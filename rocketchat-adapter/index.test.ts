@@ -267,3 +267,18 @@ test('a slow successful WhatsApp send does not trip a premature worker deadline 
     await plugin.onDisable();
   }
 });
+
+// A message whose id the engine could not read arrives with id ''. It used to be dropped without a trace.
+test('a text message with no readable id is relayed', async () => {
+  const h = harness();
+  const plugin = new Adapter();
+  await plugin.onEnable(h.ctx);
+  try {
+    const noId = (body: string) => ({ data: { id: '', chatId: '15550001111@c.us', fromMe: false, isGroup: false, type: 'text', body, timestamp: 1700000000 } });
+    await h.fire(noId('hello'));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(h.requests(), 1);
+  } finally {
+    await plugin.onDisable();
+  }
+});

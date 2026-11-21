@@ -15,13 +15,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `chatwoot-adapter` |
-| **Version** | 0.9.21 |
-| **Released** | 2026-11-14 |
+| **Version** | 0.9.22 |
+| **Released** | 2026-11-21 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.7 (tested 0.30.0) |
+| **Requires OpenWA** | ≥ 0.8.7 (tested 0.31.0) |
 | **Keywords** | chatwoot, helpdesk, inbox, handover, two-way, agent, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/chatwoot-adapter](https://github.com/rmyndharis/OpenWA-plugins/tree/main/chatwoot-adapter) |
 <!-- END DETAILS -->
@@ -163,7 +163,7 @@ instance id or route — so re-copy the ingress URL from the mint response.
 
 ## Compatibility
 
-Checked against the OpenWA v0.30.0 worker runtime with isolated services. A webhook carrying a session scope can resolve only mappings owned by that session, including legacy mappings. An unknown scoped conversation cannot send a reply or change handover through another session's mapping.
+Checked against the OpenWA v0.31.0 worker runtime with isolated services. A webhook carrying a session scope can resolve only mappings owned by that session, including legacy mappings. An unknown scoped conversation cannot send a reply or change handover through another session's mapping.
 
 - **OpenWA** ≥ 0.8.7 — needs Integration SDK v1 (webhook ingress, `ctx.mappings`, the session+chat handover
   gate, `net.allowConfigHosts`), the `conversation.send` media/voice types for outbound attachments, the
@@ -186,9 +186,18 @@ Checked against the OpenWA v0.30.0 worker runtime with isolated services. A webh
   carries no text. In a group these messages now also carry the `*Sender:*` prefix.
 - **Agent replies containing a link look plainer from OpenWA 0.14.0 on the Baileys engine.** WhatsApp used
   to draw a preview card for a URL in an agent's reply. From 0.14.0 Baileys only generates that card when
-  the sender asks for it. A plugin can ask, via the send envelope's `linkPreview` flag (host 0.14.1+),
-  and this adapter deliberately leaves it unset so an agent's reply renders the same way on both
-  engines. Delivery is unaffected; the whatsapp-web.js engine is unaffected.
+  the sender asks for it. A plugin can ask, via the send envelope's `linkPreview` flag (host 0.14.1+), and
+  this adapter deliberately leaves it unset. From host 0.30.3 an unquoted, plain-text agent reply therefore
+  follows the `linkPreview` config default of that WhatsApp session, so it can look different from one
+  session to the next. Delivery is unaffected; the whatsapp-web.js engine is unaffected.
+- **A quoted agent reply that may have been delivered is not repeated.** When Chatwoot's "Reply to" cannot be
+  quoted because the message is no longer available, the reply is sent again without the quote. Any other
+  failure, including OpenWA 0.31.0's "may or may not have been sent" for a send cut short by a page reload or
+  a lost connection, fails the delivery instead and the host's retry decides, which keeps this adapter's
+  duplicate-over-loss posture for agent replies (a retry can deliver a reply twice, a lost one is never silent).
+- **A message whose id the engine could not read is relayed.** When the WhatsApp engine cannot read a message
+  id (whatsapp-web.js after WhatsApp Web renames the field) the message arrives with an empty id. It is posted
+  without a de-duplication marker, so a re-delivery can show twice in Chatwoot, which beats dropping it.
 - **`@lid` migration** — when a contact migrates to WhatsApp's `@lid` addressing, their conversation is kept
   from splitting as long as the lid→phone mapping is known (after any reply to them). To resolve it on
   every inbound too — closing the gap for a contact you've only ever received from — set

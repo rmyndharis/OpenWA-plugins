@@ -8,6 +8,16 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.16] - 2026-11-21
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.31.0.
+
+### Fixed
+
+- Keep the cooldown after a send the host reports as possibly delivered, so the away message is not sent twice.
+
 ## [0.2.15] - 2026-11-10
 
 ### Fixed

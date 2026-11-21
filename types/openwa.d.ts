@@ -1,18 +1,58 @@
 // Vendored OpenWA plugin contract. There is no published @openwa SDK package; keep this in sync
 // with the OpenWA version you target. All imports of this module must be `import type`.
 //
-// Last aligned against OpenWA core v0.30.0 (tag 452aa46), verified field-by-field against
-// src/core/plugins/plugin.interfaces.ts, src/core/hooks/{hook.interfaces,hook-results}.ts, plugin-net.ts,
-// sandbox/{protocol,worker-bootstrap,worker-capability,worker-hooks,worker-webhooks}.ts and
-// src/engine/interfaces/whatsapp-engine.interface.ts, with behavior the interfaces do not show read from
-// hook-manager.service.ts, plugin-sandbox-bridge.ts, both engines' message mappers and media paths, and
-// src/modules/integration/ingress{.controller,.service,-ack,-preflight}.ts. Where this file narrows the
+// Last aligned against OpenWA core v0.31.0 (release commit 7ebfd12, tree-identical to the v0.31.0 tag), verified
+// field-by-field against src/core/plugins/plugin.interfaces.ts, src/core/hooks/{hook.interfaces,hook-results}.ts,
+// plugin-net.ts, sandbox/{protocol,worker-bootstrap,worker-capability,worker-hooks,worker-log-limiter,
+// worker-webhooks}.ts and src/engine/interfaces/whatsapp-engine.interface.ts, with behavior the interfaces do not
+// show read from hook-manager.service.ts, plugin-sandbox-bridge.ts, plugin-capability-context.ts,
+// plugin-storage.service.ts, src/modules/plugins/plugin-installer.ts, both engines' message mappers and media
+// paths, and src/modules/integration/ingress{.controller,.service,-ack,-preflight}.ts. Where this file narrows the
 // host on purpose it says so; where the host is stricter than this file, the comment names the runtime
 // consequence.
 // Since 0.24.0: minOpenWAVersion is enforced at install and load, and config-derived network grants pin
 // the HTTPS origin including its port. Since 0.25.0: IncomingMessage includes poll details and
 // ChatSummary includes lastMessageType. Hook names and capability signatures used by these plugins
 // remain compatible.
+// 0.30.0 -> 0.31.0 (spanning 0.30.1, 0.30.2, 0.30.3 and 0.31.0):
+//   1. ChatSummary (ctx.engine.getChats): `name` is '' for a Baileys chat held under a privacy id (@lid) that has
+//      no saved, verified or push name (0.31.0; it was the id's own digits before), every Baileys chat name is
+//      trimmed, and a new optional `phone` carries the number's digits when the session can map the id (Baileys
+//      only). Title such a chat by `phone`, else by `id`. A Baileys contact whose only name is its privacy id's
+//      digits no longer reports them as pushName or name either, so those can now be absent where they were digits.
+//   2. ctx.mappings.get / getByProvider return the handover the plugin instance holds for the chat across its @lid
+//      and phone rows (0.30.2): 'human' outranks 'closed', which outranks 'bot'. providerConversationId, sessionId
+//      and chatId are those of the row that was asked for.
+//   3. ctx.engine.getChatHistory reports a message deleted for everyone ('revoked') under the id of its stored row,
+//      the id the plugin was handed live (0.30.3), where it carried the id of the delete notice.
+//   4. ConversationSendEnvelope.linkPreview: left out, or anything but a boolean, takes the session's `linkPreview`
+//      config default when one is set (0.30.3).
+//   5. ctx.storage refuses a key that holds a lone UTF-16 surrogate (half an emoji left by `slice`): `set` and
+//      `delete` reject it as an unsafe key and `get` answers null (0.31.0). A plugin's own manifest.json and
+//      package.json are no longer reachable through the keys './manifest', './package' or a spelling the
+//      filesystem folds to them.
+//   6. Install and update run the ingress manifest checks (0.31.0): `ingress` must be a list, an hmac-sha256
+//      `contentTemplate` a string, and `header`, `timestampHeader` (hmac-sha256 and shared-secret routes),
+//      `dedupHeader` and `conversationId.header` strings. The boot scan refuses the same manifests, and an update
+//      the host refuses is answered 400 before the running plugin is stopped.
+//   7. Worker bounds (0.31.0): `ctx.logger` lines are limited to 198 per 10 s (the rest are dropped inside the
+//      worker), at most 64 capability calls are unanswered at once (a call past that is held in the worker, and
+//      refused only when 10000 are held), and a send (`ctx.messages.sendText`, `ctx.messages.reply`,
+//      `ctx.conversations.send`) still held after the hook handler that made it has returned is refused. The host's
+//      own bound of 32 concurrent calls is unchanged.
+//   8. Sends (0.31.0): a send whose first attempt had already run can answer a 409 without a code that says the
+//      message "may or may not have been sent", where every such 409 used to read as safe to retry. A
+//      whatsapp-web.js page reload answers 409 with code ENGINE_PAGE_RELOADING and retryAfterSeconds, and its text
+//      changed to "Retry every few seconds: this can last a few minutes.". A plugin sees only the message text of
+//      either, never the code.
+//   9. Messages: a whatsapp-web.js message that shares several contacts carries their vCards, newline-joined, in
+//      `body` where it arrived empty (the type stays 'contact'). Entries WhatsApp Web keeps in a chat that nobody
+//      sent (group notices, album headers) are no longer announced as empty 'unknown' messages on whatsapp-web.js,
+//      nor a partly decrypted message with no content on Baileys. With STORE_EPHEMERAL_MESSAGES=false (default
+//      true) a message of a disappearing-messages chat is never persisted and never reaches message:received.
+//  10. Host-internal, not on the sandbox capability router or plugin hooks: the SSRF guard also refuses the
+//      documentation and benchmarking address ranges for ctx.net.fetch, a media, plugin or webhook url that carries
+//      credentials is refused, and Baileys reports `poll.vote` (a webhook event, not a hook).
 // 0.29.1 -> 0.30.0:
 //   1. Baileys inbound media stream fix (#2034): `scripts/patch-baileys-media-stream.js` wraps Axios's
 //      response stream in `getHttpStream` so Baileys v7 decrypts inbound media instead of failing every
@@ -154,18 +194,20 @@
 // select, array/items, object/properties, min/max/pattern — see PluginConfigField) is plain manifest
 // JSON — the plugin still reads `ctx.config` as `Record<string, unknown>` and validates defensively.
 //
-// Host bounds a plugin cannot see from the types (all host-side, re-checked at v0.30.0):
+// Host bounds a plugin cannot see from the types (host-side, re-checked at v0.31.0; the log and pending-call
+// bounds are applied inside the worker first):
 //   30 s per lifecycle phase (onLoad/onEnable/onDisable/onUnload) and per capability call, except
 //   the send verbs (ctx.messages.sendText / ctx.messages.reply / ctx.conversations.send) at 120 s;
 //   5 s per hook dispatch (overrun → the host fails OPEN with {continue:true} and drops your result);
 //   5 s per inline ingress webhook dispatch, or Math.min(25000, simulateTypingMaxMs + 5000) (default
 //   10 s, max 25 s) for queued ingress webhook dispatch (0.28.0+); 5 s for healthCheck (an overrun is
 //   reported unhealthy, not hung);
-//   32 concurrent capability calls per plugin (the 33rd throws);
+//   32 concurrent capability calls per plugin (the 33rd throws), and at most 64 unanswered ones per worker (the
+//   worker holds the rest, up to 10000, and refuses a send still held after its hook handler returned);
 //   16 concurrent net.fetch calls GLOBALLY — shared across ALL plugins and workers, not per plugin;
 //   50 MiB total ctx.storage per plugin, and 184 UTF-8 bytes max per storage key on set() (0.28.0+);
 //   10 MiB net.fetch response body; 256 MB worker heap;
-//   200 log lines / 10 s, 8 KiB per line.
+//   198 log lines / 10 s (the worker drops the rest), 8 KiB per line.
 
 export type HookEvent =
   | 'session:created' | 'session:starting' | 'session:ready' | 'session:qr'
@@ -249,6 +291,9 @@ export interface PluginLogger {
  *   0.26.0 keeps a running total (one scan to seed it, one stat per write). Hosts below 0.26.0 stay
  *   supported, so prefer bucketed keys (one key per session per hour holding a map) over one key per message, and
  *   always handle a rejected `set` — dropping it silently turns a full quota into lost data.
+ * - A key that holds a lone UTF-16 surrogate (half an emoji, left by cutting text with `slice`) is refused as an
+ *   unsafe key from host 0.31.0: `set` and `delete` reject it and `get` answers null. Cut by UTF-8 bytes, and
+ *   drop a trailing high surrogate, as the key helpers in this repo do.
  * - `list()` with no prefix returns every key in the directory, which in a layout where package files
  *   and state share a directory can include `manifest`/`package`; pass a prefix (the host filters for
  *   you) or re-filter. On a read error `list` resolves `[]` rather than rejecting.
@@ -272,7 +317,19 @@ export interface PluginMessagingCapability {
 
 export interface ChatSummary {
   id: string;
+  /**
+   * `''` for a Baileys chat held under a privacy id (`@lid`) that has no saved, verified or push name (0.31.0;
+   * it was the id's own digits before, and every Baileys chat name is now trimmed). Title such a chat by `phone`,
+   * else by `id`.
+   */
   name: string;
+  /**
+   * Baileys only, host 0.31.0+: the phone digits of a 1:1 chat WhatsApp holds under a privacy id (`@lid`), when
+   * this session can map the id. Absent for a phone-keyed chat (the number is the id), when the mapping is unknown
+   * and always on whatsapp-web.js, which lists a chat its page gives no title under its own id as `name`. The digits
+   * are not a display name: an unnamed chat is titled from them, and a saved name still wins.
+   */
+  phone?: string;
   isGroup: boolean;
   /** User-facing chat kind. `isGroup` is retained for back-compat; `kind` is the full discriminator. */
   kind: ChatKind;
@@ -310,9 +367,13 @@ export interface PluginEngineReadCapability {
   getContacts(sessionId: string): Promise<unknown>;
   getContactById(sessionId: string, contactId: string): Promise<unknown>;
   checkNumberExists(sessionId: string, phone: string): Promise<unknown>;
+  /** Each entry is a {@link ChatSummary}: from host 0.31.0 a Baileys privacy-id chat with no name lists `name`
+   *  '' and, when the session can map it, `phone`; title it by `phone`, else by `id`. */
   getChats(sessionId: string): Promise<unknown>;
   /** Recent messages for a chat, both directions. The host clamps `limit` (max 100). Available to a
-   *  SANDBOXED plugin from v0.8.6: 0.8.5 added the capability in-process, 0.8.6 bridged it to the worker. */
+   *  SANDBOXED plugin from v0.8.6: 0.8.5 added the capability in-process, 0.8.6 bridged it to the worker.
+   *  From host 0.31.0 a message deleted for everyone ('revoked') is reported under the id of its stored row,
+   *  the id the plugin was handed live, not the id of the delete notice. */
   getChatHistory(sessionId: string, chatId: string, limit?: number, includeMedia?: boolean): Promise<IncomingMessage[]>;
   /**
    * Canonical (neutral) form of a chat id: resolves a `@lid` privacy id to its stable `<phone>@c.us` when
@@ -400,7 +461,11 @@ export interface PluginManifest {
    *  and not '.' or '..'), toleranceSec a finite number > 0 (a numeric string such as "300" still
    *  loads), dedupOn 'header' or 'body', ack status 200..599 (a 1xx is refused), ack body a string, and
    *  every ack header value a string Node can write (tab, printable ASCII and 0x80-0xFF only).
-   *  Host 0.25.0 also rejects unknown signature schemes and HMAC encodings other than hex/base64. */
+   *  Host 0.25.0 also rejects unknown signature schemes and HMAC encodings other than hex/base64.
+   *  Host 0.31.0 runs these checks at install and update too (before anything is written, and before an update
+   *  stops the running plugin), and adds: `ingress` must be a list, an hmac-sha256 `contentTemplate` a string,
+   *  and `header`, `timestampHeader` (hmac-sha256 and shared-secret routes), `dedupHeader` and
+   *  `conversationId.header` strings. */
   ingress?: PluginIngressRoute[];
   /** v0.7: per-session activation (default true). The platform owns which sessions a plugin runs for. */
   sessionScoped?: boolean;
@@ -647,8 +712,9 @@ export interface ConversationSendEnvelope {
   /**
    * Ask the engine for a link preview on a plain text send. Baileys generates one only when this is
    * `true`, so a plugin relaying a URL gets a bare link without it; whatsapp-web.js previews by
-   * default and takes `false` to suppress. Ignored on media, location and quoted sends, which route
-   * through engine paths that take no preview option.
+   * default and takes `false` to suppress. Left out, or given as anything but a boolean, the send takes the
+   * session's `linkPreview` config default when one is set (host 0.30.3+). Ignored on media, location and quoted
+   * sends, which route through engine paths that take no preview option.
    */
   linkPreview?: boolean;
   /** WGS84, required for `type: 'location'` (-90..90 / -180..180), ignored otherwise. */
@@ -664,6 +730,8 @@ export interface PluginHandoverCapability {
 }
 export interface PluginMappingsCapability {
   upsert(key: { sessionId: string; chatId: string; instanceId: string }, providerConversationId: string): Promise<unknown>;
+  // From host 0.30.2 `handoverState` of both reads is the handover this instance holds for the chat across its
+  // @lid and phone rows in the session ('human' outranks 'closed', which outranks 'bot'), not only the asked row's.
   get(
     key: { sessionId: string; chatId: string; instanceId: string },
   ): Promise<{ providerConversationId: string; handoverState: HandoverState } | null>;
@@ -700,7 +768,8 @@ export interface IncomingMessage {
    * Empty for sticker, voice, image/video/document without a caption, call, revoked and masked.
    * NOT empty for every other non-text type: a poll carries its question, a shared event its name, a
    * tapped business button its label, and a shared contact card its vCard (several cards arrive
-   * newline-joined). whatsapp-web.js has always populated these; Baileys matched it in host 0.23.2.
+   * newline-joined). whatsapp-web.js has always populated these, except that a multi-contact share arrived with an
+   * empty body until host 0.31.0; Baileys matched it in host 0.23.2.
    * On Baileys since 0.23.5 an 'order' carries its note (else its title) and a 'product' card its text
    * (else the product title); before that both arrived there as 'unknown' with an empty body.
    * whatsapp-web.js passes its own `msg.body` for both.

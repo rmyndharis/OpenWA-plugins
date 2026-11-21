@@ -13,6 +13,7 @@ const GROUPS = [
   ['http-action/jid.ts', 'typebot-connector/jid.ts', 'after-hours/jid.ts', 'faq-bot/jid.ts', 'chat-flow/jid.ts', 'ai-responder/jid.ts'],
   ['after-hours/cooldown.ts', 'faq-bot/cooldown.ts', 'http-action/cooldown.ts'],
   ['typebot-connector/md-to-wa.ts', 'ai-responder/md-to-wa.ts'],
+  ['after-hours/send-outcome.ts', 'faq-bot/send-outcome.ts'],
 ];
 
 for (const group of GROUPS) {

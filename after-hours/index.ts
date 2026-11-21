@@ -2,6 +2,7 @@ import type { IPlugin, PluginContext, HookContext, IncomingMessage } from '../ty
 import { parseSchedule, assertValidTimezone, isAfterHours, Schedule } from './schedule.ts';
 import { allowCooldown } from './cooldown.ts';
 import { isBroadcastJid } from './jid.ts';
+import { sendOutcomeUnknown } from './send-outcome.ts';
 
 export interface AfterHoursConfig {
   timezone: string;
@@ -155,8 +156,10 @@ export default class AfterHours implements IPlugin {
     }, err => {
       if (this.replyAttempts.get(key) === attempt) {
         this.replyAttempts.delete(key);
-        // Release this attempt's cooldown, then back off to avoid a send failure loop.
-        this.repliedAt.delete(key);
+        // Release this attempt's cooldown, then back off to avoid a send failure loop. The cooldown stays when
+        // the send may have gone out (OpenWA 0.31.0 says so in the error): a repeated away message is worse
+        // than a missed one.
+        if (!sendOutcomeUnknown(err)) this.repliedAt.delete(key);
         this.retryNotBefore.set(key, Date.now() + RETRY_BACKOFF_MS);
         // Drop elapsed entries first, then the oldest if the cap is still exceeded.
         if (this.retryNotBefore.size > MAX_RETRY_ENTRIES) {

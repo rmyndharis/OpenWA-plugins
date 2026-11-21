@@ -6,6 +6,14 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.22] - 2026-11-21
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.31.0.
+- Title a bulk-backfilled contact by the chat phone when the engine lists no name for it.
+- Document the link preview default of the session and the behavior of a quoted reply after an ambiguous send.
+
 ## [0.9.21] - 2026-11-14
 
 ### Fixed

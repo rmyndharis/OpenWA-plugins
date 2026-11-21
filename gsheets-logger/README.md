@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `gsheets-logger` |
-| **Version** | 0.3.19 |
-| **Released** | 2026-11-12 |
+| **Version** | 0.3.20 |
+| **Released** | 2026-11-21 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.30.0) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.31.0) |
 | **Keywords** | google-sheets, logging, audit, crm, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/gsheets-logger](https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger) |
 <!-- END DETAILS -->
@@ -212,7 +212,7 @@ The target tab must exist, **with a header row of your choosing** — the plugin
 
 ## Compatibility
 
-Checked against the OpenWA v0.30.0 worker runtime with isolated services. On a spreadsheet or credential change, undelivered rows are parked before switching clients. If parking fails, the plugin logs the error, retains the rows and keeps the previous client so a later retry can deliver to the original destination.
+Checked against the OpenWA v0.31.0 worker runtime with isolated services. On a spreadsheet or credential change, undelivered rows are parked before switching clients. If parking fails, the plugin logs the error, retains the rows and keeps the previous client so a later retry can deliver to the original destination.
 
 External plugins run **sandboxed in a worker thread** (since OpenWA **v0.6.0**). Requires OpenWA
 **≥ 0.7.0** — all outbound HTTP (OAuth token + Sheets append) goes through the host-proxied,
@@ -221,8 +221,9 @@ capabilities are version-dependent:
 
 - **Richer `body` values from OpenWA ≥ 0.23.2 on the Baileys engine.** Poll questions, shared contact
   vCards, event names and tapped button labels now fill the `body` column where they previously logged
-  an empty string, matching what the whatsapp-web.js engine has always logged. A poll logs `type` as
-  `poll` and a contact card as `contact`; shared events log as `unknown`.
+  an empty string, matching what the whatsapp-web.js engine has always logged, except that a message sharing
+  several contacts logged an empty `body` there until OpenWA 0.31.0 and now logs their vCards, newline-joined.
+  A poll logs `type` as `poll` and a contact card as `contact`; shared events log as `unknown`.
 - **Business replies log as `text` from OpenWA ≥ 0.23.6 on the Baileys engine.** A button, template or
   list reply logs `type` `text` with the tapped label (for a list, the row title) in `body`. Older hosts
   log all three as `unknown` (a list reply with an empty `body`).
@@ -245,7 +246,9 @@ capabilities are version-dependent:
 - **Live config updates** (a `PUT …/config` reaching the running plugin) and **graceful-shutdown buffer
   flush** arrived with the sandbox lifecycle follow-ups (#430) in OpenWA **v0.6.2**, below this plugin's
   declared floor, so every supported host has them. A non-graceful exit (SIGKILL, OOM) still bypasses
-  `onDisable`, so rows buffered since the last flush (at most `flushIntervalSec` worth) are lost.
+  `onDisable`, so rows buffered since the last **successful** flush are lost: at most `flushIntervalSec` worth
+  while flushes succeed, but every row held back while the Sheets API refuses appends (the 403 of a missing
+  share, for one), because the buffer is persisted only after an append lands, on disable and when parking.
 
 ### Chats under human handover
 

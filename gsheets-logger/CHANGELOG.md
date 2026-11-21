@@ -8,6 +8,13 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.3.20] - 2026-11-21
+
+### Changed
+
+- Align plugin metadata with OpenWA v0.31.0.
+- Correct the README on which buffered rows a non-graceful exit loses, and on multi-contact shares.
+
 ## [0.3.19] - 2026-11-12
 
 ### Fixed

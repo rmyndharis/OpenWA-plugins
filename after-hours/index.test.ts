@@ -229,6 +229,45 @@ test('a failed away reply is throttled, not retried on every message', async () 
   }
 });
 
+// An error that says the message may or may not have been sent (OpenWA 0.31.0: a send cut short by a page
+// reload or a lost connection) proves nothing about delivery. Releasing the cooldown for it would tell the
+// contact the same thing twice once the backoff ends, so the away message is at-most-once on that error.
+test('a send of unknown outcome keeps its cooldown, so the away message is not repeated', async () => {
+  const AfterHours = (await import('./index.ts')).default;
+  const attempts: string[] = [];
+  let handler: ((h: unknown) => Promise<unknown>) | undefined;
+  const ctx = {
+    config: { schedule: JSON.stringify({ thu: '09:00-17:00' }), timezone: 'UTC', awayMessage: 'tutup', cooldownSec: 3600 },
+    logger: { log() {}, debug() {}, warn() {}, error() {} },
+    messages: {
+      sendText: async () => ({ messageId: 'x', timestamp: 0 }),
+      reply: async () => {
+        attempts.push('try');
+        throw new Error(
+          'WhatsApp Web reloaded its page while the message was being sent, and it may or may not have been sent. ' +
+            'Check the chat before sending it again.',
+        );
+      },
+    },
+    registerHook: (_e: string, h: (x: unknown) => Promise<unknown>) => { handler = h; },
+  } as never;
+
+  await new AfterHours().onEnable(ctx);
+  const fire = (id: string) =>
+    handler!({ source: 'Engine', sessionId: 's1', data: { id, chatId: 'c@wa', body: 'halo', fromMe: false } });
+
+  mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  try {
+    await fire('m1');
+    assert.equal(attempts.length, 1, 'first message attempts a reply');
+    mock.timers.tick(61_000); // past the 60 s failure backoff, far inside cooldownSec
+    await fire('m2');
+    assert.equal(attempts.length, 1, 'the first reply may have been delivered: it is not sent again inside the cooldown');
+  } finally {
+    mock.timers.reset();
+  }
+});
+
 // Regression: the backoff must not be expressible in terms of the CURRENT cooldown. Encoding it as a
 // rewound cooldown timestamp meant an operator lowering cooldownSec in the dashboard — config is re-read
 // per message — turned the stored value into "long past" and handed back the un-throttled retry storm.

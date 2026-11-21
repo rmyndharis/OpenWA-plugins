@@ -15,13 +15,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `supabase-otp-hook` |
-| **Version** | 0.3.16 |
-| **Released** | 2026-11-10 |
+| **Version** | 0.3.17 |
+| **Released** | 2026-11-21 |
 | **Status** | beta |
 | **Author** | maplerichie |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.16 (tested 0.30.0) |
+| **Requires OpenWA** | ≥ 0.8.16 (tested 0.31.0) |
 | **Keywords** | supabase, auth, otp, sms, whatsapp, verification, standard-webhooks, openwa |
 | **Repository** | [OpenWA-plugins/supabase-otp-hook](https://github.com/rmyndharis/OpenWA-plugins/tree/main/supabase-otp-hook) |
 <!-- END DETAILS -->
@@ -53,7 +53,8 @@
   On an older host it is keyed on `webhook-id`, which catches a replay of one delivery only, not a
   retry: Auth mints a fresh `webhook-id` per attempt. Ordering and the retry/DLQ path need
   `QUEUE_ENABLED=true` on the host; with the queue off, ingress runs inline, takes no ordering lock,
-  and makes a single attempt.
+  and makes one inline attempt. If that throws, the delivery is dead-lettered and the host's reconciler
+  replays it after about a minute (up to five attempts by default), so a code can arrive late.
 
 ## What it does
 
@@ -163,10 +164,15 @@ Session scope (which session sends) is also set at instance mint time, not in th
 
 ## Compatibility
 
-Checked against the OpenWA v0.30.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
+Checked against the OpenWA v0.31.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
 
 - **OpenWA** ≥ 0.8.16 — Integration SDK v1 with the `standard-webhooks` ingress signature scheme and
   the `response`/preflight contract (`ctx.registerWebhook`, `webhook:ingress` permission).
+- **A whatsapp-web.js page reload can dead-letter a code.** While WhatsApp Web reloads its page (OpenWA 0.31.0
+  answers every send with a 409, "Retry every few seconds: this can last a few minutes.") the send fails at
+  once. With `QUEUE_ENABLED=true` the host then makes three attempts about 15 seconds apart
+  (`INGRESS_MAX_ATTEMPTS`, `INGRESS_RETRY_DELAY_MS`) before it dead-letters the delivery for an operator
+  redrive. For OTP traffic on a whatsapp-web.js session raise those two settings, or use a Baileys session.
 - **Body-keyed ingress dedup** (`dedupOn: "body"`) takes effect from OpenWA 0.23.6. An older host
   ignores the key and keys dedup on `webhook-id`, so a Supabase retry of one hook invocation still
   sends a second code.

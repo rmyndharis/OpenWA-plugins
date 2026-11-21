@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `group-translate` |
-| **Version** | 1.3.18 |
-| **Released** | 2026-11-12 |
+| **Version** | 1.3.19 |
+| **Released** | 2026-11-21 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.0 (tested 0.30.0) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.31.0) |
 | **Keywords** | translation, libretranslate, i18n, groups, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/group-translate](https://github.com/rmyndharis/OpenWA-plugins/tree/main/group-translate) |
 <!-- END DETAILS -->
@@ -110,13 +110,16 @@ Then, in the group, an admin runs `/tr on`. Or install the packaged `.zip` from
 
 ## Compatibility
 
-Checked against the OpenWA v0.30.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
+Checked against the OpenWA v0.31.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
 
 Targets OpenWA **≥ 0.8.0**, the release that introduced `net.allowConfigHosts`. Outbound HTTP itself
 uses the v0.7 `ctx.net.fetch` capability, but on a 0.7.x host only the shipped loopback entries are
 reachable, so any other `libretranslateUrl` is refused and nothing is translated. Declares
 `messages:send`, `engine:read` (for admin checks), `net:fetch`, and `storage:use` (each group's
 settings and learned participant languages).
+
+A message whose id the engine could not read (whatsapp-web.js after WhatsApp Web renames the field) is
+translated and posted unquoted, since there is nothing to quote.
 
 Shared contact cards are never translated: from OpenWA 0.23.2 a card carries its vCard in the message
 body, which would otherwise send a third party's name and number to your translation backend, post a
