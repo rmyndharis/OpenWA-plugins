@@ -49,7 +49,7 @@ export function parseConfig(raw: Record<string, unknown>): { config: LoggerConfi
   } catch {
     throw new Error('gsheets-logger: serviceAccountJson is not valid JSON');
   }
-  if (!sa || !sa.client_email || !sa.private_key) {
+  if (!sa || typeof sa.client_email !== 'string' || !sa.client_email || typeof sa.private_key !== 'string' || !sa.private_key) {
     throw new Error('gsheets-logger: serviceAccountJson missing client_email/private_key');
   }
 

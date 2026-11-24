@@ -8,6 +8,16 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.17] - 2026-11-24
+
+### Changed
+
+- Verify compatibility with OpenWA `0.32.1` and bump `testedOpenWAVersion`.
+
+### Fixed
+
+- Clear a day window when a lowercase `null` entry overrides an earlier capitalized key in `parseSchedule`.
+
 ## [0.2.16] - 2026-11-21
 
 ### Changed

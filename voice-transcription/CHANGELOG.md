@@ -6,6 +6,17 @@ All notable changes to the Voice Note Transcription plugin are documented here. 
 
 ## [Unreleased]
 
+## [1.3.10] - 2026-11-24
+
+### Changed
+
+- Extract shared `storage-key.ts` helper and verify compatibility with OpenWA `0.32.1`.
+
+### Fixed
+
+- Cache coordinator and STT client slots in a bounded LRU map by resolved config signature so alternating per-session overrides preserve circuit breakers.
+- Report unhealthy from `healthCheck()` when any cached slot has an open STT circuit breaker, and sanitize multipart field names.
+
 ## [1.3.9] - 2026-11-21
 
 ### Changed

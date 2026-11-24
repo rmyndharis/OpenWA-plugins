@@ -5,7 +5,7 @@ management/automation stays easy. Verified against OpenWA's plugin runtime (sand
 the same baseline as [`types/openwa.d.ts`](./types/openwa.d.ts) — re-check both together, since this
 document describes host behaviour that has moved repeatedly (per-session config in 0.7, boot re-enable
 in 0.10.5, the storage quota and `message:deleted` in 0.11.0, the `storage:use` gate in 0.17.0, hook
-result checks and sandboxed hook ordering in 0.23.6). The current baseline is OpenWA v0.31.0, including host-version floor enforcement and HTTPS origin grants for configured outbound endpoints (both 0.24.0), the secret rule for host overrides, `null` secret removal and the capped boot restore (0.26.0), outbound-only `message:ack`, edit-triggered `message:persisted`, query-aware empty-body ingress dedup and config push after `onEnable` (0.27.0), the 184 UTF-8 byte storage key limit, queued ingress dispatch timeout budget, `dedupBodyMismatchAsNew`, query-borne ingress `verified: false`, Baileys group `message:ack` progression and whatsapp-web.js system notice filtering (0.28.0/0.29.0), `isForwarded` / `forwardingScore` on `IncomingMessage` (0.29.1), the Baileys inbound media stream fix (0.30.0), and, from 0.30.1 to 0.31.0, `ChatSummary.phone` with an empty name for an unnamed privacy-id chat, effective handover on `ctx.mappings` reads, the session `linkPreview` default, the lone-surrogate storage key refusal, the ingress manifest checks at install and update, the worker bounds on log lines and unanswered capability calls, and the code-less 409 that says a send may or may not have gone out.
+result checks and sandboxed hook ordering in 0.23.6). The current baseline is OpenWA v0.32.1, including host-version floor enforcement and HTTPS origin grants for configured outbound endpoints (both 0.24.0), the secret rule for host overrides, `null` secret removal and the capped boot restore (0.26.0), outbound-only `message:ack`, edit-triggered `message:persisted`, query-aware empty-body ingress dedup and config push after `onEnable` (0.27.0), the 184 UTF-8 byte storage key limit, queued ingress dispatch timeout budget, `dedupBodyMismatchAsNew`, query-borne ingress `verified: false`, Baileys group `message:ack` progression and whatsapp-web.js system notice filtering (0.28.0/0.29.0), `isForwarded` / `forwardingScore` on `IncomingMessage` (0.29.1), the Baileys inbound media stream fix (0.30.0), `ChatSummary.phone` with an empty name for an unnamed privacy-id chat, effective handover on `ctx.mappings` reads, the session `linkPreview` default, the lone-surrogate storage key refusal, ingress manifest checks at install and update, worker bounds on log lines and unanswered capability calls, the code-less 409 that says a send may or may not have gone out (0.30.1 to 0.31.0), and, from 0.32.0 to 0.32.1, fail-closed pre-egress hooks, pinned egress routing, async `message:sent` echo suppression, webhook capability deadline clamping with retry send dedup, `AbortSignal` cancellation, 30 s idle worker ping/pong, single-part ZIP install uploads, strict `configUi` inline-only CSP, pre-result worker `dispatchId` clearing, and `PluginNetRequestInit.sessionId` plus host `netScopeId` scoping for off-dispatch fetches.
 
 ## Principles
 
@@ -69,7 +69,7 @@ OpenWA-plugins/
   "keywords": ["…"],
   "status": "stable",           // "stable" | "beta" | "development"
   "minOpenWAVersion": "0.7.0",  // enforced at install and boot load since OpenWA v0.24.0
-  "testedOpenWAVersion": "0.31.0" // newest host checked; describe the verification scope in the README
+  "testedOpenWAVersion": "0.32.1" // newest host checked; describe the verification scope in the README
 }
 ```
 
@@ -84,7 +84,7 @@ plugin:
 `catalog.mjs` only *warns* about i18n — a missing block, or a missing locale — but the test suite does
 not: `npm test` fails when a `stable` plugin is missing any supported locale, and when any plugin ships
 a locale that translates its name and description without translating every `configSchema` field. Treat
-i18n as gated; the warning is where you notice a gap, not where it is stopped. The shared locale list in `scripts/locales.mjs` matches OpenWA v0.31.0, including `id`; stable plugins must cover every non-English locale.
+i18n as gated; the warning is where you notice a gap, not where it is stopped. The shared locale list in `scripts/locales.mjs` matches OpenWA v0.32.1, including `id`; stable plugins must cover every non-English locale.
 
 ### `configSchema` field vocabulary (v0.7)
 
@@ -294,6 +294,8 @@ correct plugins and were each learned the hard way. Re-verify against OpenWA cor
    - `onDisable` now runs on graceful shutdown (SIGTERM), and `onUnload` on uninstall/in-place update.
 5. **Cross-host redirects cannot be blocked plugin-side** (`PluginNetRequestInit` exposes no redirect
    option) — redirect-based SSRF defense is the host's job; do not treat it as a plugin release gate.
+   Background timers and retry pumps outside an active dispatch should pass `sessionId` on
+   `PluginNetRequestInit` (`0.32.1+`) so host `allowConfigHosts` resolves for that concrete session.
 6. **`ctx.storage` charges per KEY, not just per byte, and bounds key length.** Each key is one JSON
    file. From 0.28.0 `set` rejects any key longer than 184 UTF-8 bytes ("Plugin storage key exceeds 184
    UTF-8 bytes") so the base64url-encoded `key-*.json` filename fits within 255 bytes; bound composite

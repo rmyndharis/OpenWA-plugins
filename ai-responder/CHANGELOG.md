@@ -8,6 +8,16 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-11-24
+
+### Changed
+
+- Remove redundant `en` block from `manifest.json` and align metadata with OpenWA `0.32.1`.
+
+### Fixed
+
+- Preserve fenced triple-backtick code blocks while stripping single-backtick inline markers in WhatsApp formatting.
+
 ## [0.1.7] - 2026-11-21
 
 ### Changed

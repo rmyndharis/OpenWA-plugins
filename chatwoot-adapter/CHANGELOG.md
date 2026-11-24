@@ -6,6 +6,19 @@ All notable changes to the Chatwoot Adapter plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.9.23] - 2026-11-24
+
+### Changed
+
+- Extract shared `storage-key.ts` helper and verify compatibility with OpenWA `0.32.1`.
+
+### Fixed
+
+- Pass `sessionId` to `ctx.net.fetch` so off-dispatch retry drains resolve `allowConfigHosts` for their session.
+- Allow captured per-session config slices to drain retries even when the base config is partial.
+- Fall back to `msg.chatId` when `engine.canonicalChatId` rejects in `handleSent`.
+- Skip legacy storage key deletes that exceed the 184-byte limit, sanitize multipart field names, and remove unused `toggleStatusOpen`.
+
 ## [0.9.22] - 2026-11-21
 
 ### Changed

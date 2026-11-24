@@ -71,7 +71,7 @@ export class Bridge {
     this.key = stateKey(config);
     this.client = new RocketClient((url, init) => {
       this.assertCurrent();
-      return ctx.net.fetch(url, init);
+      return ctx.net.fetch(url, { ...init, sessionId: this.config.sessionId });
     }, config);
   }
 
@@ -161,7 +161,9 @@ export class Bridge {
         id: message.id,
         chatId: message.chatId,
         text: message.body,
-        name: String(message.contact?.pushName || message.contact?.name || 'WhatsApp visitor').slice(0, 100),
+        name: String(message.contact?.pushName || message.contact?.name || 'WhatsApp visitor')
+          .slice(0, 100)
+          .replace(/[\ud800-\udbff]$/, ''),
         attempts: 0,
         nextAt: 0,
       });

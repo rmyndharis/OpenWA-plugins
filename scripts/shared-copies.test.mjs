@@ -14,6 +14,13 @@ const GROUPS = [
   ['after-hours/cooldown.ts', 'faq-bot/cooldown.ts', 'http-action/cooldown.ts'],
   ['typebot-connector/md-to-wa.ts', 'ai-responder/md-to-wa.ts'],
   ['after-hours/send-outcome.ts', 'faq-bot/send-outcome.ts'],
+  [
+    'chat-flow/storage-key.ts',
+    'chatwoot-adapter/storage-key.ts',
+    'group-translate/storage-key.ts',
+    'typebot-connector/storage-key.ts',
+    'voice-transcription/storage-key.ts',
+  ],
 ];
 
 for (const group of GROUPS) {

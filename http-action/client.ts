@@ -45,6 +45,15 @@ export class HttpResponseBodyError extends Error {
   }
 }
 
+/** Replace any existing header matching `name` case-insensitively before setting the canonical key. */
+function setHeaderCaseInsensitive(headers: Record<string, string>, name: string, value: string): void {
+  const lower = name.toLowerCase();
+  for (const existing of Object.keys(headers)) {
+    if (existing.toLowerCase() === lower) delete headers[existing];
+  }
+  headers[name] = value;
+}
+
 export class HttpActionClient {
   constructor(private readonly fetch: FetchLike, private readonly cfg: HttpActionConfig) {}
 
@@ -88,13 +97,13 @@ export class HttpActionClient {
     }
 
     // Auth — authToken is a configSchema secret; never logged by the caller.
-    if (this.cfg.authType === 'bearer') headers['Authorization'] = `Bearer ${this.cfg.authToken}`;
-    else if (this.cfg.authType === 'apikey') headers[this.cfg.apiKeyHeader] = this.cfg.authToken ?? '';
+    if (this.cfg.authType === 'bearer') setHeaderCaseInsensitive(headers, 'Authorization', `Bearer ${this.cfg.authToken}`);
+    else if (this.cfg.authType === 'apikey') setHeaderCaseInsensitive(headers, this.cfg.apiKeyHeader, this.cfg.authToken ?? '');
 
     const init: FetchInit = { method: action.request.method, headers, timeoutMs: this.cfg.timeoutMs };
 
     if (action.request.method === 'POST') {
-      headers['Content-Type'] = 'application/json';
+      setHeaderCaseInsensitive(headers, 'Content-Type', 'application/json');
       if (action.request.bodyTemplate) {
         const rendered = renderJson(action.request.bodyTemplate, ctx);
         try {

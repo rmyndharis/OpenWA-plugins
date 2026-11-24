@@ -184,3 +184,15 @@ test('two markers sharing a bucket do not erase each other', async () => {
   assert.equal(await hasSeen(storage, 's1', 'a'), true);
   assert.equal(await hasSeen(storage, 's1', partner), true);
 });
+
+test('hasSeen skips legacy single-key lookup when the legacy key exceeds 184 UTF-8 bytes', async () => {
+  const lookedUp: string[] = [];
+  const storage = fakeStore();
+  const origGet = storage.get.bind(storage);
+  storage.get = async <T>(k: string) => {
+    lookedUp.push(k);
+    return origGet<T>(k);
+  };
+  await hasSeen(storage, 's'.repeat(120), 'm'.repeat(120));
+  assert.ok(lookedUp.every((k) => Buffer.byteLength(k, 'utf8') <= 184));
+});

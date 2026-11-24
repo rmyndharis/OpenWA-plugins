@@ -128,3 +128,18 @@ test('a password containing @ is redacted whole, not just up to its first @', as
   assert.ok(!/ssw0rd/.test(err.message), `password tail leaked: ${err.message}`);
   assert.match(err.message, /\/\/\*\*\*:\*\*\*@lt\.example\.com/);
 });
+
+test('detect and languages reject malformed non-array payloads and filter invalid entries', async () => {
+  const { net: badDetect } = fakeNet([async () => ({ ok: true, status: 200, statusText: 'OK', headers: {}, body: '{"language":"en"}' })]);
+  await assert.rejects(
+    () => new LibreTranslateClient({ url: 'https://lt.example.com', timeoutMs: 1000, net: badDetect }).detect('hi'),
+    /unexpected payload/,
+  );
+  const { net: mixedLangs } = fakeNet([
+    async () => ({ ok: true, status: 200, statusText: 'OK', headers: {}, body: JSON.stringify([{ code: 'en' }, { code: 42 }, null]) }),
+  ]);
+  assert.deepEqual(
+    await new LibreTranslateClient({ url: 'https://lt.example.com', timeoutMs: 1000, net: mixedLangs }).languages(),
+    ['en'],
+  );
+});

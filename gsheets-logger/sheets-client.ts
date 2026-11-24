@@ -64,7 +64,8 @@ export class SheetsClient {
   async appendRows(rows: string[][]): Promise<void> {
     if (rows.length === 0) return;
     const token = await this.getToken();
-    const range = encodeURIComponent(`${this.sheetTab}!A1`);
+    const quotedTab = `'${this.sheetTab.replace(/'/g, "''")}'`;
+    const range = encodeURIComponent(`${quotedTab}!A1`);
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(this.spreadsheetId)}/values/${range}:append`
       + `?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
     const res = await this.fetch(url, {

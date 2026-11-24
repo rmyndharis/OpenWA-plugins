@@ -167,8 +167,15 @@ export function readConfig(raw: Record<string, unknown>): HttpActionConfig {
   if (isDangerousHeader(apiKeyHeader)) fail('apiKeyHeader', 'must not be a reserved/dangerous header (host/connection/x-forwarded-*/…)');
 
   const timeoutNum = Number(raw.timeoutMs);
-  const timeoutMs = Number.isFinite(timeoutNum) && timeoutNum >= 500 ? timeoutNum : 3000;
-  const cooldownNum = Number(raw.cooldownSeconds);
+  const timeoutMs = Number.isFinite(timeoutNum) && timeoutNum >= 500 ? Math.min(25_000, Math.trunc(timeoutNum)) : 3000;
+  const rawCooldown = raw.cooldownSeconds;
+  const cooldownNum =
+    rawCooldown === null ||
+    rawCooldown === undefined ||
+    typeof rawCooldown === 'boolean' ||
+    (typeof rawCooldown === 'string' && rawCooldown.trim() === '')
+      ? NaN
+      : Number(rawCooldown);
   const cooldownSeconds = Number.isFinite(cooldownNum) && cooldownNum >= 0 ? cooldownNum : 3;
 
   // actions arrives as a JSON string (configSchema type:textarea) or a pre-parsed array.

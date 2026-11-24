@@ -363,7 +363,6 @@
 
   function hideFeedback() {
     feedback.className = '';
-    feedback.style.display = 'none';
   }
 
   // The host resolves 'system' for us, so this is only ever 'light' or 'dark'. Anything else (including
@@ -411,99 +410,6 @@
   // Request config on load
   parent.postMessage({ type: 'config:get' }, '*');
 })();
-</script>
-
-<!-- Self-test: load with ?selftest to run round-trip assertions in the console -->
-<script>
-if (new URLSearchParams(location.search).has('selftest')) {
-  (function selftest() {
-    // Minimal stubs so assembleNodes/assembleConfig can be called
-    // We test the logic inline by replicating it here (same source of truth)
-
-    function assembleNodesFromArray(arr) {
-      // arr = [{key, text, options?}]
-      var result = [];
-      arr.forEach(function(node) {
-        var key = (node.key || '').trim();
-        if (!key) return;
-        var out = { key: key, text: node.text || '' };
-        var kids = node.options ? assembleNodesFromArray(node.options) : [];
-        if (kids.length) out.options = kids;
-        result.push(out);
-      });
-      return result;
-    }
-
-    function roundTrip(cfg) {
-      // Mirror populateConfig coercion: guard against null/non-object
-      var c = cfg && typeof cfg === 'object' ? cfg : {};
-      return {
-        trigger: typeof c.trigger === 'string' ? c.trigger : '',
-        greeting: typeof c.greeting === 'string' ? c.greeting : '',
-        respondInGroups: !!c.respondInGroups,
-        options: assembleNodesFromArray(Array.isArray(c.options) ? c.options : [])
-      };
-    }
-
-    // ── Test 1: basic round-trip with nesting ──
-    var sample = {
-      trigger: 'menu',
-      greeting: 'Hi! Choose an option:',
-      respondInGroups: false,
-      options: [
-        { key: '1', text: 'Hosting', options: [
-          { key: '1', text: 'Shared hosting info' },
-          { key: '2', text: 'VPS info' }
-        ]},
-        { key: '2', text: 'Support' }
-      ]
-    };
-    var result = roundTrip(sample);
-    console.assert(result.trigger === 'menu', 'trigger preserved');
-    console.assert(result.greeting === 'Hi! Choose an option:', 'greeting preserved');
-    console.assert(result.respondInGroups === false, 'respondInGroups preserved');
-    console.assert(result.options.length === 2, 'two root options');
-    console.assert(result.options[0].key === '1', 'root[0] key');
-    console.assert(result.options[0].text === 'Hosting', 'root[0] text');
-    console.assert(Array.isArray(result.options[0].options), 'root[0] has sub-options');
-    console.assert(result.options[0].options.length === 2, 'root[0] has 2 sub-options');
-    console.assert(result.options[0].options[0].key === '1', 'sub[0] key');
-    console.assert(result.options[0].options[1].key === '2', 'sub[1] key');
-    console.assert(!result.options[1].options, 'leaf has no options property');
-
-    // ── Test 2: empty-key nodes are dropped ──
-    var withEmpties = {
-      trigger: '',
-      greeting: 'Hi',
-      respondInGroups: true,
-      options: [
-        { key: '', text: 'should be dropped' },
-        { key: '  ', text: 'also dropped (whitespace)' },
-        { key: '1', text: 'kept' }
-      ]
-    };
-    var r2 = roundTrip(withEmpties);
-    console.assert(r2.options.length === 1, 'empty-key nodes dropped');
-    console.assert(r2.options[0].key === '1', 'kept node key');
-    console.assert(r2.respondInGroups === true, 'respondInGroups true preserved');
-
-    // ── Test 3: partial / bad config coerced without throwing ──
-    var r3 = roundTrip({});
-    console.assert(r3.trigger === '', 'missing trigger defaults to empty string');
-    console.assert(r3.greeting === '', 'missing greeting defaults to empty string');
-    console.assert(r3.respondInGroups === false, 'missing respondInGroups defaults false');
-    console.assert(r3.options.length === 0, 'missing options defaults to []');
-
-    var r4 = roundTrip(null);
-    console.assert(r4.trigger === '', 'null config: trigger defaults');
-
-    // ── Test 4: keys are trimmed ──
-    var r5 = roundTrip({ options: [{ key: '  2  ', text: 'trimmed' }] });
-    console.assert(r5.options[0].key === '2', 'key is trimmed');
-
-    console.log('[selftest] All assertions passed.');
-  })();
-}
 </script>
 </body>
 </html>

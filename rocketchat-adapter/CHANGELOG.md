@@ -7,6 +7,19 @@ and this plugin adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-24
+
+### Changed
+
+- Verify compatibility with OpenWA `0.32.1` and bump `testedOpenWAVersion`.
+
+### Fixed
+
+- Pass `sessionId` to `ctx.net.fetch` so background pump retries resolve `allowConfigHosts` against the configured session.
+- Register the bridge on enable and config change even when `deadLetterAction` is `"none"`.
+- Strip trailing lone UTF-16 high surrogates when truncating visitor display names.
+- Ignore malformed omnichannel webhook payloads without triggering ingress retries or failure counts.
+
 ## [0.1.1] - 2026-11-21
 
 ### Changed

@@ -25,7 +25,10 @@ if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITH
 async function fetchAllReleases() {
   const releases = [];
   for (let page = 1; ; page++) {
-    const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=100&page=${page}`, { headers });
+    const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=100&page=${page}`, {
+      headers,
+      signal: AbortSignal.timeout(15_000),
+    });
     if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
     const batch = await res.json();
     releases.push(...batch);

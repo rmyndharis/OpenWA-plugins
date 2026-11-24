@@ -63,7 +63,7 @@ test('appendRows fetches a token once, caches it, and posts rows as a string bod
   const appends = calls.filter((c) => c.url.startsWith('https://sheets.googleapis.com'));
   assert.equal(appends.length, 2);
   assert.equal(appends[0].init?.headers?.authorization, 'Bearer tok-1');
-  assert.match(appends[0].url, /spreadsheets\/SHEET1\/values\/Logs!A1:append/);
+  assert.match(appends[0].url, /spreadsheets\/SHEET1\/values\/'Logs'!A1:append/);
   assert.deepEqual(JSON.parse(appends[1].init?.body as string), { values: [['c']] });
 });
 
@@ -99,4 +99,15 @@ test('appendRows URL-encodes spreadsheetId so special characters never alter the
   await client.appendRows([['a']]);
   const appendUrl = calls.find((c) => c.url.startsWith('https://sheets.googleapis.com'))?.url ?? '';
   assert.match(appendUrl, /spreadsheets\/id%2Fwith%3Fchars%231\/values\//);
+});
+
+test('appendRows A1-quotes sheetTab names with spaces and single quotes', async () => {
+  const { calls, fn } = fakeFetch({
+    'https://oauth2.googleapis.com/token': TOKEN_OK,
+    'https://sheets.googleapis.com/': { body: '{}' },
+  });
+  const client = new SheetsClient(fn, testSa, 'SHEET1', "Ops '26 Sheet");
+  await client.appendRows([['a']]);
+  const appendUrl = calls.find((c) => c.url.startsWith('https://sheets.googleapis.com'))?.url ?? '';
+  assert.match(appendUrl, new RegExp(encodeURIComponent("'Ops ''26 Sheet'!A1")));
 });

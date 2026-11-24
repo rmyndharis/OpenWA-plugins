@@ -120,6 +120,40 @@ export function validateManifest(id, manifest) {
         `the host refuses to load such a plugin`,
     );
   }
+  if (manifest.ingress !== undefined && manifest.ingress !== null) {
+    if (!Array.isArray(manifest.ingress)) {
+      throw new Error(`${id}: manifest "ingress" must be an array`);
+    }
+    for (let i = 0; i < manifest.ingress.length; i++) {
+      const route = manifest.ingress[i];
+      if (!route || typeof route !== 'object' || Array.isArray(route)) {
+        throw new Error(`${id}: manifest.ingress[${i}] must be an object`);
+      }
+      if (route.dedupHeader !== undefined && route.dedupHeader !== null && typeof route.dedupHeader !== 'string') {
+        throw new Error(`${id}: manifest.ingress[${i}].dedupHeader must be a string`);
+      }
+      const convHeader = route.conversationId?.header;
+      if (convHeader !== undefined && convHeader !== null && typeof convHeader !== 'string') {
+        throw new Error(`${id}: manifest.ingress[${i}].conversationId.header must be a string`);
+      }
+      const sig = route.signature;
+      if (sig && typeof sig === 'object' && !Array.isArray(sig)) {
+        const readsHeaders = sig.scheme === 'hmac-sha256' || sig.scheme === 'shared-secret';
+        if (readsHeaders && sig.header !== undefined && sig.header !== null && typeof sig.header !== 'string') {
+          throw new Error(`${id}: manifest.ingress[${i}].signature.header must be a string`);
+        }
+        if (readsHeaders && sig.timestampHeader !== undefined && sig.timestampHeader !== null && typeof sig.timestampHeader !== 'string') {
+          throw new Error(`${id}: manifest.ingress[${i}].signature.timestampHeader must be a string`);
+        }
+        if (sig.dedupHeader !== undefined && sig.dedupHeader !== null && typeof sig.dedupHeader !== 'string') {
+          throw new Error(`${id}: manifest.ingress[${i}].signature.dedupHeader must be a string`);
+        }
+        if (sig.scheme === 'hmac-sha256' && sig.contentTemplate !== undefined && sig.contentTemplate !== null && typeof sig.contentTemplate !== 'string') {
+          throw new Error(`${id}: manifest.ingress[${i}].signature.contentTemplate must be a string`);
+        }
+      }
+    }
+  }
   // The host reads sdkVersion as a STRING: its ingress validation runs sdkVersion.split('.'), so a JSON
   // number throws at load and the whole plugin comes up ERROR. JSON makes string-vs-number invisible and
   // the host's validator only runs on the gateway, after the release is published — catch it here.
@@ -228,7 +262,7 @@ function detailsBlock(e) {
     `| **Author** | ${authorName(e.author)} |`,
     `| **License** | ${e.license} |`,
     `| **Type** | \`${e.type}\` |`,
-    `| **Requires OpenWA** | ≥ ${e.minOpenWAVersion} ${e.testedOpenWAVersion ? `(tested ${e.testedOpenWAVersion})` : '(not yet smoke-tested)'} |`,
+    `| **Requires OpenWA** | ${e.minOpenWAVersion ? `≥ ${e.minOpenWAVersion}` : 'any'} ${e.testedOpenWAVersion ? `(tested ${e.testedOpenWAVersion})` : '(not yet smoke-tested)'} |`,
     `| **Keywords** | ${e.keywords.join(', ')} |`,
     `| **Repository** | [OpenWA-plugins/${e.id}](${e.homepage ?? e.repoUrl}) |`,
     '<!-- END DETAILS -->',

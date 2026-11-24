@@ -1,7 +1,7 @@
 {
   "id": "rocketchat-adapter",
   "name": "Rocket.Chat Adapter",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Development preview: relay direct WhatsApp text messages to Rocket.Chat Omnichannel and agent text replies back to WhatsApp.",
@@ -17,7 +17,7 @@
   ],
   "status": "development",
   "minOpenWAVersion": "0.30.0",
-  "testedOpenWAVersion": "0.31.0",
+  "testedOpenWAVersion": "0.32.1",
   "sdkVersion": "1",
   "permissions": [
     "net:fetch",

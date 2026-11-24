@@ -7,6 +7,12 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.18] - 2026-11-24
+
+### Changed
+
+- Document OpenWA `0.32.0+` ingress capability deadline clamping and retry send dedup, and verify compatibility with OpenWA `0.32.1`.
+
 ## [0.3.17] - 2026-11-21
 
 ### Changed

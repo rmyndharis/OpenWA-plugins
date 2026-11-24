@@ -206,6 +206,17 @@ test("does NOT claim a translated conversational message — a co-installed resp
           delegatedControllers: [],
           announced: true,
         },
+        "group:s2:group@g.us": {
+          sessionId: "s2",
+          chatId: "group@g.us",
+          active: true,
+          participants: {
+            [AUTHOR]: { lang: "en", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+            "z@s.whatsapp.net": { lang: "id", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+          },
+          delegatedControllers: [],
+          announced: true,
+        },
       },
       net: {
         fetch: async (url: string) =>
@@ -401,6 +412,17 @@ async function translatingHook() {
       seed: {
         [GROUP_KEY]: {
           sessionId: "s1",
+          chatId: "group@g.us",
+          active: true,
+          participants: {
+            [AUTHOR]: { lang: "en", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+            "z@s.whatsapp.net": { lang: "id", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+          },
+          delegatedControllers: [],
+          announced: true,
+        },
+        "group:s2:group@g.us": {
+          sessionId: "s2",
           chatId: "group@g.us",
           active: true,
           participants: {
@@ -639,6 +661,17 @@ test("non-command group translation runs off-dispatch so a slow backend never st
           delegatedControllers: [],
           announced: true,
         },
+        "group:s2:group@g.us": {
+          sessionId: "s2",
+          chatId: "group@g.us",
+          active: true,
+          participants: {
+            [AUTHOR]: { lang: "en", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+            "z@s.whatsapp.net": { lang: "id", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+          },
+          delegatedControllers: [],
+          announced: true,
+        },
       },
       net: {
         fetch: () => {
@@ -659,4 +692,65 @@ test("non-command group translation runs off-dispatch so a slow backend never st
   assert.deepEqual(outcome, { continue: true });
   await settle();
   assert.equal(fetchCalled, true);
+});
+
+test("alternating per-session configs keep separate coordinator circuit breakers cleanly without thrashing", async () => {
+  let activeUrl = "https://lt-a.example.com";
+  const seenUrls: string[] = [];
+  const { ctx, getHook } = fakeContext(
+    {},
+    {
+      seed: {
+        [GROUP_KEY]: {
+          sessionId: "s1",
+          chatId: "group@g.us",
+          active: true,
+          participants: {
+            [AUTHOR]: { lang: "en", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+            "z@s.whatsapp.net": { lang: "id", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+          },
+          delegatedControllers: [],
+          announced: true,
+        },
+        "group:s2:group@g.us": {
+          sessionId: "s2",
+          chatId: "group@g.us",
+          active: true,
+          participants: {
+            [AUTHOR]: { lang: "en", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+            "z@s.whatsapp.net": { lang: "id", source: "pinned", enabled: true, samples: 0, updatedAt: "" },
+          },
+          delegatedControllers: [],
+          announced: true,
+        },
+      },
+      net: {
+        fetch: async (url) => {
+          seenUrls.push(url);
+          return { ok: true, status: 200, statusText: "OK", headers: {}, body: JSON.stringify([{ language: "en", confidence: 0.9 }]) };
+        },
+      },
+    },
+  );
+  Object.defineProperty(ctx, "config", { get: () => ({ libretranslateUrl: activeUrl }) });
+  const plugin = new TranslationPlugin();
+  await plugin.onEnable(ctx);
+
+  await getHook()!(engineCtx({ body: "hello" }));
+  activeUrl = "https://lt-b.example.com";
+  await getHook()!({ ...engineCtx({ body: "hola" }), sessionId: "s2" });
+  activeUrl = "https://lt-c.example.com";
+  await getHook()!({ ...engineCtx({ body: "bonjour" }), sessionId: "s2" });
+  await settle();
+  assert.equal((plugin as unknown as { sessionSlots: Map<string, unknown> }).sessionSlots.size, 1);
+  assert.ok(seenUrls.some((u) => u.startsWith("https://lt-a.example.com")));
+  assert.ok(seenUrls.some((u) => u.startsWith("https://lt-b.example.com")));
+  assert.ok(seenUrls.some((u) => u.startsWith("https://lt-c.example.com")));
+
+  // Location messages are ignored without touching LibreTranslate.
+  const before = seenUrls.length;
+  activeUrl = "https://lt-a.example.com";
+  await getHook()!(engineCtx({ body: "lat,lon", type: "location" }));
+  await settle();
+  assert.equal(seenUrls.length, before);
 });

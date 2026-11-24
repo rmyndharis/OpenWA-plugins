@@ -1,26 +1,20 @@
 import type { PluginStorage } from '../types/openwa';
 import type { SessionState } from './typebot-types.ts';
-
-function boundStorageKey(key: string): string {
-  if (Buffer.byteLength(key, 'utf8') <= 184) return key;
-  let h1 = 0x811c9dc5, h2 = 0xdeadbeef;
-  for (let i = 0; i < key.length; i++) {
-    const c = key.charCodeAt(i);
-    h1 = Math.imul(h1 ^ c, 0x01000193);
-    h2 = Math.imul(h2 ^ c, 0x85ebca6b);
-  }
-  const suffix = `:${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}`;
-  let prefix = key.slice(0, 184 - suffix.length).replace(/[\ud800-\udbff]$/, '');
-  while (Buffer.byteLength(prefix, 'utf8') > 184 - suffix.length) prefix = prefix.slice(0, -1).replace(/[\ud800-\udbff]$/, '');
-  return `${prefix}${suffix}`;
-}
+import type { KeyedAsyncLock } from './chat-lock.ts';
+import { boundStorageKey } from './storage-key.ts';
 
 // Thin per-key wrapper over ctx.storage. One document per session key; the idle-timeout and start-vs-continue
 // decisions live in turn.ts (they need the config clock).
 export class SessionStore {
-  constructor(private readonly storage: PluginStorage) {}
-  private k(key: string): string {
+  constructor(
+    private readonly storage: PluginStorage,
+    private readonly lock?: KeyedAsyncLock,
+  ) {}
+  keyFor(key: string): string {
     return boundStorageKey(`sess:${key}`);
+  }
+  private k(key: string): string {
+    return this.keyFor(key);
   }
   get(key: string): Promise<SessionState | null> {
     return this.storage.get<SessionState>(this.k(key));
@@ -45,12 +39,16 @@ export class SessionStore {
     const prefix = this.k('');
     const keys = (await this.storage.list(prefix)).filter(k => k.startsWith(prefix));
     for (const key of keys) {
-      try {
+      const checkAndDelete = async (): Promise<boolean> => {
         const state = await this.storage.get<SessionState>(key);
         if (state && nowMs - state.lastActivity > idleMs) {
           await this.storage.delete(key);
-          pruned++;
+          return true;
         }
+        return false;
+      };
+      try {
+        if (await (this.lock ? this.lock.run(key, checkAndDelete) : checkAndDelete())) pruned++;
       } catch {
         /* skip this row; the next sweep tries again */
       }
@@ -77,12 +75,16 @@ export class SessionStore {
     for (const key of keys) {
       // Per-key isolation: one unreadable row must not abandon the rest of the sweep, because the
       // caller has already advanced its throttle and would not retry for another hour.
-      try {
+      const checkAndDelete = async (): Promise<boolean> => {
         const state = await this.storage.get<SessionState>(key);
         if (state && nowMs - state.lastActivity > idleMs) {
           await this.storage.delete(key);
-          pruned++;
+          return true;
         }
+        return false;
+      };
+      try {
+        if (await (this.lock ? this.lock.run(key, checkAndDelete) : checkAndDelete())) pruned++;
       } catch {
         /* skip this row; the next sweep tries again */
       }

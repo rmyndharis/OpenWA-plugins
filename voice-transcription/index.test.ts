@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type {
   PluginContext,
   HookContext,
+  HookHandler,
   HookResult,
   IncomingMessage,
   PluginNetResponse,
@@ -274,4 +275,67 @@ test("deliveryTimeoutMs is clamped to the range the manifest advertises", async 
   assert.equal(await read(-1), 1000, "negative likewise");
   assert.equal(await read(30000), 25000, "the advertised maximum is clamped below the host budget");
   assert.equal(await read(5000), 5000, "a sane value is untouched");
+});
+
+test("alternating per-session configs keep separate cached coordinator slots and recover cleanly on override fix", async () => {
+  let baseUrl = "https://stt-a.example.com";
+  let hookCb: HookHandler | undefined;
+  let failOverride = false;
+  const ctx = {
+    get config() {
+      return { sttBaseUrl: baseUrl, chatDelivery: "reply", enabledMessageTypes: ["text", "voice"] };
+    },
+    logger: { log() {}, warn() {}, error() {}, debug() {} },
+    storage: { get: async () => null, set: async () => {}, delete: async () => {}, list: async () => [] },
+    net: {
+      fetch: async (url: string) => {
+        if (failOverride && url.startsWith("https://stt-bad.example.com")) {
+          return { ok: false, status: 503, statusText: "Down", headers: {}, body: "err" };
+        }
+        return { ok: true, status: 200, statusText: "OK", headers: {}, body: JSON.stringify({ text: "ok" }) };
+      },
+    },
+    messages: { sendText: async () => {}, reply: async () => {} },
+    registerHook: (_e: string, cb: HookHandler) => {
+      hookCb = cb;
+    },
+  } as unknown as PluginContext;
+  const plugin = new VoiceTranscriptionPlugin();
+  await plugin.onEnable(ctx);
+
+  // s2 uses an override that trips its STT breaker.
+  failOverride = true;
+  baseUrl = "https://stt-bad.example.com";
+  for (let i = 0; i < 5; i++) {
+    await hookCb!({
+      event: "message:received",
+      source: "Engine",
+      sessionId: "s2",
+      timestamp: new Date(),
+      data: {
+        id: `m-${i}`,
+        chatId: "c@c.us",
+        fromMe: false,
+        isGroup: false,
+        type: "voice",
+        body: "",
+        media: { mimetype: "audio/ogg", data: "T2dnUw==" },
+      } as never,
+    });
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  assert.equal((plugin as unknown as { sessionSlots: Map<string, unknown> }).sessionSlots.size, 1);
+  baseUrl = "https://stt-a.example.com";
+  assert.equal((await plugin.healthCheck()).healthy, false, "open per-session override breaker must surface in healthCheck");
+
+  // Fixing s2 (reverting to base config or updating override) clears/replaces the broken slot at once.
+  await hookCb!({
+    event: "message:received",
+    source: "Engine",
+    sessionId: "s2",
+    timestamp: new Date(),
+    data: { id: "m-fixed", chatId: "c@c.us", fromMe: false, isGroup: false, type: "text", body: "hi" } as never,
+  });
+  assert.equal((plugin as unknown as { sessionSlots: Map<string, unknown> }).sessionSlots.size, 0);
+  assert.equal((await plugin.healthCheck()).healthy, true, "health recovers once session override reverts to base");
 });

@@ -44,6 +44,7 @@ export interface SessionState {
   awaiting: Awaiting;
   lastActivity: number;       // epoch ms
   botKey?: string;
+  seenIds?: string[];
 }
 
 // ── render output (turn.ts fills in sessionId/chatId/replyTo) ──────────────────────────

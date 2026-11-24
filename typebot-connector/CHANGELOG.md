@@ -6,6 +6,18 @@ All notable changes to the Typebot Connector plugin are documented here. The for
 
 ## [Unreleased]
 
+## [0.3.12] - 2026-11-24
+
+### Changed
+
+- Extract shared `storage-key.ts` helper and verify compatibility with OpenWA `0.32.1`.
+
+### Fixed
+
+- Synchronize idle and orphan session pruning with per-conversation turn locks.
+- Deduplicate non-empty message IDs within active Typebot sessions and guard empty `replyTo` on group sends.
+- Omit whitespace-only text bubbles, preserve fenced code blocks in Markdown formatting, and sanitize multipart field names.
+
 ## [0.3.11] - 2026-11-21
 
 ### Changed

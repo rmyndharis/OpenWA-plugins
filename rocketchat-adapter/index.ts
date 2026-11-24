@@ -1,6 +1,6 @@
 import type { IPlugin, PluginContext, IncomingMessage } from '../types/openwa';
 import { readConfig, stateKey, type Config } from './config.ts';
-import { inboundText, withReadableId } from './protocol.ts';
+import { inboundText, MalformedWebhookError, withReadableId } from './protocol.ts';
 import { Bridge } from './bridge.ts';
 
 export const HOOK_PRIORITY = 20;
@@ -17,8 +17,9 @@ export default class RocketChatAdapter implements IPlugin {
     const initialConfig = readConfig(ctx.config);
     this.active = true;
     this.failures = 0;
+    const bridge = this.bridge(ctx);
     if (initialConfig.deadLetterAction !== 'none' && initialConfig.deadLetterAction) {
-      await this.maintain(ctx, this.bridge(ctx), initialConfig);
+      await this.maintain(ctx, bridge, initialConfig);
     }
     ctx.registerHook(
       'message:received',
@@ -46,7 +47,11 @@ export default class RocketChatAdapter implements IPlugin {
       const generation = this.generation;
       try {
         await this.bridge(ctx).webhook(req);
-      } catch {
+      } catch (err) {
+        if (err instanceof MalformedWebhookError) {
+          ctx.logger.warn?.(`Rocket.Chat webhook ignored malformed payload: ${err.message}`);
+          return;
+        }
         this.failure(ctx, generation);
         throw new Error('Rocket.Chat agent relay failed; ingress may retry');
       }
@@ -102,8 +107,9 @@ export default class RocketChatAdapter implements IPlugin {
     const config = readConfig(ctx.config);
     this.active = true;
     this.failures = 0;
+    const bridge = this.bridge(ctx);
     if (config.deadLetterAction && config.deadLetterAction !== 'none')
-      await this.maintain(ctx, this.bridge(ctx), config);
+      await this.maintain(ctx, bridge, config);
   }
   async onDisable(): Promise<void> {
     this.stop();

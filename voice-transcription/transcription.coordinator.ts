@@ -1,23 +1,7 @@
 import type { IncomingMessage } from '../types/openwa';
 import { redactUrlSecrets, type SttProvider, type SttResult } from './openai-stt.client.ts';
 import type { TranscriptDelivery, TranscriptionPayload } from './webhook.delivery.ts';
-
-function boundStorageKey(raw: string): string {
-  if (Buffer.byteLength(raw, 'utf8') <= 184) return raw;
-  let h1 = 0x811c9dc5;
-  let h2 = 0xdeadbeef;
-  for (let i = 0; i < raw.length; i++) {
-    const c = raw.charCodeAt(i);
-    h1 = Math.imul(h1 ^ c, 0x01000193);
-    h2 = Math.imul(h2 ^ c, 0x85ebca6b);
-  }
-  const suffix = `:${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}`;
-  let prefix = raw.slice(0, 184 - suffix.length).replace(/[\ud800-\udbff]$/, '');
-  while (Buffer.byteLength(prefix, 'utf8') > 184 - suffix.length) {
-    prefix = prefix.slice(0, -1).replace(/[\ud800-\udbff]$/, '');
-  }
-  return `${prefix}${suffix}`;
-}
+import { boundStorageKey } from './storage-key.ts';
 
 /** Minimal KV surface the coordinator needs (adapted from `ctx.storage` by the plugin). */
 export interface KvStore {

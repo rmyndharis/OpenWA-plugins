@@ -56,3 +56,10 @@ test("a file step prompts with the author's placeholder and names the skip word 
     { type: 'text', text: 'Send a file or photo to continue.\n\n(Or reply "Skip" to skip this step.)' },
   ]);
 });
+
+test('empty or whitespace-only text bubbles are omitted', () => {
+  assert.deepEqual(
+    renderResponse({ bubbles: [{ kind: 'text', markdown: '   \n\t ' }, { kind: 'text', markdown: 'Hello' }] }),
+    [{ type: 'text', text: 'Hello' }],
+  );
+});

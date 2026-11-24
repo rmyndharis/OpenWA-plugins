@@ -211,8 +211,8 @@ async function handleLocked(deps: HandleDeps, sessionId: string, msg: IncomingMe
   // error template and say so: an empty render is a template bug the operator has to see.
   let reply = truncate(sanitize(text));
   if (!reply.trim()) {
-    deps.logger.warn(`${PLUGIN}: action '${action.id}' rendered an empty reply; sent the error template instead`);
-    reply = renderErrorFallback();
+    deps.logger.warn(`${PLUGIN}: action '${action.id}' rendered an empty reply; sent fallback instead`);
+    reply = out !== undefined ? completedPostFallback(out.status) : renderErrorFallback();
   }
 
   if (post && !uncertain) {
@@ -246,6 +246,7 @@ export default class HttpActionPlugin implements IPlugin {
       const sessionId = h.sessionId;
       const msg = h.data as IncomingMessage | undefined;
       if (!sessionId || !msg) return { continue: true };
+      if (h.source !== 'Engine') return { continue: true };
       if (msg.fromMe) return { continue: true };
       if (typeof msg.body !== 'string' || !msg.body.trim()) return { continue: true };
       if (!msg.chatId || !msg.id) return { continue: true };

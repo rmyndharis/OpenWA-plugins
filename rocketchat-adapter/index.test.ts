@@ -282,3 +282,29 @@ test('a text message with no readable id is relayed', async () => {
     await plugin.onDisable();
   }
 });
+
+test('malformed omnichannel webhook payload is ignored without triggering retry or unhealthy state', async () => {
+  const h = harness();
+  const plugin = new Adapter();
+  await plugin.onEnable(h.ctx);
+  try {
+    await assert.doesNotReject(
+      Promise.resolve(
+        h.routes.get('omnichannel')!({
+          verified: true,
+          sessionId: 'session-a',
+          instanceId: 'support',
+          method: 'POST',
+          headers: {},
+          query: {},
+          deliveryId: 'bad-json',
+          rawBody: '{not json',
+          body: '{not json',
+        }),
+      ),
+    );
+    assert.equal((await plugin.healthCheck()).healthy, true);
+  } finally {
+    await plugin.onDisable();
+  }
+});

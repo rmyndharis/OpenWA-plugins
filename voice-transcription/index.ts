@@ -111,24 +111,26 @@ function readChatDelivery(cfg: Record<string, unknown>): ChatDeliveryMode {
   return v === "self" || v === "reply" ? v : "off";
 }
 
+const MAX_SLOTS = 64;
+
+interface CoordinatorSlot {
+  sig: string;
+  coordinator: TranscriptionCoordinator;
+  provider: OpenAiSttClient;
+}
+
 export class VoiceTranscriptionPlugin implements IPlugin {
+  private baseSlot: CoordinatorSlot | null = null;
+  private readonly sessionSlots = new Map<string, CoordinatorSlot>();
   private coordinator: TranscriptionCoordinator | null = null;
   private ctxRef: PluginContext | null = null;
-  // Held for healthCheck. The client already tracks whether its circuit breaker is open; nothing was
-  // asking it outside a test, so an open breaker, a missing backend and an unusable URL were all a
-  // single warn line while the dashboard reported the plugin healthy.
-  private provider: OpenAiSttClient | null = null;
-  // Signature of the coordinator-affecting config last used to build `this.coordinator`. The hook
-  // recomputes this per event and rebuilds the coordinator only when it changes — so a per-session
-  // override (resolved by the host for the firing session) takes effect, WITHOUT resetting the STT
-  // provider's circuit breaker on every message (a per-event rebuild would open/close the backend anew
-  // on each call and defeat the breaker's purpose).
-  private coordinatorSignature = "";
 
   onEnable(context: PluginContext): Promise<void> {
     this.ctxRef = context;
-    this.coordinator = this.build(context);
-    this.coordinatorSignature = this.configSignature(context.config);
+    this.sessionSlots.clear();
+    const base = this.buildSlot(context);
+    this.baseSlot = base;
+    this.coordinator = base.coordinator;
     context.registerHook(
       "message:received",
       (ctx) => Promise.resolve(this.onMessage(ctx as HookContext<IncomingMessage>)),
@@ -179,13 +181,44 @@ export class VoiceTranscriptionPlugin implements IPlugin {
 
   onConfigChange(context: PluginContext): Promise<void> {
     this.ctxRef = context;
-    // Rebuild so an edited config (new STT URL/key, delivery URL) applies without a disable/enable cycle.
-    this.coordinator = this.build(context);
-    this.coordinatorSignature = this.configSignature(context.config);
+    // Rebuild base slot and drop cached per-session overrides so edited config applies immediately.
+    this.sessionSlots.clear();
+    const base = this.buildSlot(context);
+    this.baseSlot = base;
+    this.coordinator = base.coordinator;
     context.logger.log("Voice transcription config updated", {
       action: "transcription_config_changed",
     });
     return Promise.resolve();
+  }
+
+  private buildSlot(context: PluginContext): CoordinatorSlot {
+    return { sig: this.configSignature(context.config), ...this.build(context) };
+  }
+
+  private getOrCreateSlot(context: PluginContext, sessionId: string): CoordinatorSlot {
+    const sig = this.configSignature(context.config);
+    if (this.baseSlot && sig === this.baseSlot.sig) {
+      this.sessionSlots.delete(sessionId);
+      this.coordinator = this.baseSlot.coordinator;
+      return this.baseSlot;
+    }
+    const existing = this.sessionSlots.get(sessionId);
+    if (existing && existing.sig === sig) {
+      this.sessionSlots.delete(sessionId);
+      this.sessionSlots.set(sessionId, existing);
+      this.coordinator = existing.coordinator;
+      return existing;
+    }
+    const created: CoordinatorSlot = { sig, ...this.build(context) };
+    if (!existing && this.sessionSlots.size >= MAX_SLOTS) {
+      const oldest = this.sessionSlots.keys().next().value;
+      if (oldest !== undefined) this.sessionSlots.delete(oldest);
+    }
+    this.sessionSlots.delete(sessionId);
+    this.sessionSlots.set(sessionId, created);
+    this.coordinator = created.coordinator;
+    return created;
   }
 
   /** Stable signature of only the config fields that affect the coordinator's behavior. Two configs
@@ -216,7 +249,7 @@ export class VoiceTranscriptionPlugin implements IPlugin {
    * Reports on the BASE config, since outside a hook the host resolves no per-session slice.
    */
   healthCheck(): Promise<{ healthy: boolean; message?: string }> {
-    if (!this.ctxRef || !this.coordinator) {
+    if (!this.ctxRef || !this.baseSlot) {
       return Promise.resolve({ healthy: false, message: "voice-transcription: not enabled" });
     }
     const cfg = this.ctxRef.config;
@@ -242,34 +275,50 @@ export class VoiceTranscriptionPlugin implements IPlugin {
         message: "voice-transcription: no delivery configured, transcripts have nowhere to go",
       });
     }
-    if (this.provider && !this.provider.isHealthy()) {
+    if (!this.baseSlot.provider.isHealthy()) {
       return Promise.resolve({
         healthy: false,
         message: "voice-transcription: STT circuit breaker is open, the backend is failing",
       });
     }
+    for (const slot of this.sessionSlots.values()) {
+      if (!slot.provider.isHealthy()) {
+        return Promise.resolve({
+          healthy: false,
+          message: "voice-transcription: STT circuit breaker is open, the backend is failing",
+        });
+      }
+    }
     return Promise.resolve({ healthy: true, message: `voice-transcription: ${readString(cfg, "model", "small")}` });
   }
 
   onDisable(context: PluginContext): Promise<void> {
+    this.sessionSlots.clear();
+    this.baseSlot = null;
     this.coordinator = null;
-    this.provider = null;
     context.logger.log("Voice transcription plugin disabled", {
       action: "transcription_disabled",
     });
     return Promise.resolve();
   }
 
-  private build(context: PluginContext): TranscriptionCoordinator {
+  onUnload(): Promise<void> {
+    this.sessionSlots.clear();
+    this.baseSlot = null;
+    this.coordinator = null;
+    return Promise.resolve();
+  }
+
+  private build(context: PluginContext): { coordinator: TranscriptionCoordinator; provider: OpenAiSttClient } {
     const cfg = context.config;
-    const provider = (this.provider = new OpenAiSttClient({
+    const provider = new OpenAiSttClient({
       baseUrl: readString(cfg, "sttBaseUrl", ""),
       apiKey: readOptionalString(cfg, "sttApiKey"),
       model: readString(cfg, "model", "small"),
       language: readOptionalString(cfg, "language"),
       timeoutMs: readTimeoutMs(cfg),
       net: context.net,
-    }));
+    });
     const deliveryUrl = readString(cfg, "deliveryWebhookUrl", "");
     const delivery = deliveryUrl
       ? new WebhookDelivery({
@@ -285,23 +334,26 @@ export class VoiceTranscriptionPlugin implements IPlugin {
       delete: (key) => context.storage.delete(key),
       list: (prefix) => context.storage.list(prefix),
     };
-    return new TranscriptionCoordinator({
+    return {
+      coordinator: new TranscriptionCoordinator({
+        provider,
+        delivery,
+        chat: context.messages, // ChatSink — only used when chatDelivery !== 'off'
+        chatDelivery: readChatDelivery(cfg),
+        store,
+        config: {
+          enabledMessageTypes: readStringArray(cfg, "enabledMessageTypes", [
+            "voice",
+          ]),
+          maxSizeBytes: readNumber(cfg, "maxSizeBytes", 16 * 1024 * 1024),
+          maxPerHour: readNumber(cfg, "maxPerHour", 60),
+        },
+        providerLabel: readString(cfg, "provider", "faster-whisper"),
+        model: readString(cfg, "model", "small"),
+        logger: { warn: (m, meta) => context.logger.warn(m, meta) },
+      }),
       provider,
-      delivery,
-      chat: context.messages, // ChatSink — only used when chatDelivery !== 'off'
-      chatDelivery: readChatDelivery(cfg),
-      store,
-      config: {
-        enabledMessageTypes: readStringArray(cfg, "enabledMessageTypes", [
-          "voice",
-        ]),
-        maxSizeBytes: readNumber(cfg, "maxSizeBytes", 16 * 1024 * 1024),
-        maxPerHour: readNumber(cfg, "maxPerHour", 60),
-      },
-      providerLabel: readString(cfg, "provider", "faster-whisper"),
-      model: readString(cfg, "model", "small"),
-      logger: { warn: (m, meta) => context.logger.warn(m, meta) },
-    });
+    };
   }
 
   /**
@@ -310,21 +362,12 @@ export class VoiceTranscriptionPlugin implements IPlugin {
    */
   private onMessage(ctx: HookContext<IncomingMessage>): HookResult {
     if (ctx.source === "Engine" && ctx.sessionId && ctx.data) {
-      // Re-check the config signature against the firing session's resolved config — if a per-session
-      // override changed a coordinator-affecting field, rebuild now. Cheap (a JSON.stringify of a handful
-      // of primitives) and the rebuild is rare. The swap is not locked, but a transcription call runs
-      // off the critical path as an un-awaited promise, so an in-flight call on the old coordinator
-      // resolves independently; the new one serves subsequent messages.
+      // Cache coordinator + breaker per resolved session config signature (bounded LRU) so alternating
+      // per-session overrides do not reset each session's STT circuit breaker.
       const context = this.ctxRef;
       if (context) {
-        const sig = this.configSignature(context.config);
-        if (sig !== this.coordinatorSignature || !this.coordinator) {
-          this.coordinator = this.build(context);
-          this.coordinatorSignature = sig;
-        }
-      }
-      if (this.coordinator) {
-        void this.coordinator.handle(ctx.sessionId, ctx.data);
+        const slot = this.getOrCreateSlot(context, ctx.sessionId);
+        void slot.coordinator.handle(ctx.sessionId, ctx.data);
       }
     }
     return { continue: true };

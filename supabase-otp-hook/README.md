@@ -15,13 +15,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `supabase-otp-hook` |
-| **Version** | 0.3.17 |
-| **Released** | 2026-11-21 |
+| **Version** | 0.3.18 |
+| **Released** | 2026-11-24 |
 | **Status** | beta |
 | **Author** | maplerichie |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.16 (tested 0.31.0) |
+| **Requires OpenWA** | ≥ 0.8.16 (tested 0.32.1) |
 | **Keywords** | supabase, auth, otp, sms, whatsapp, verification, standard-webhooks, openwa |
 | **Repository** | [OpenWA-plugins/supabase-otp-hook](https://github.com/rmyndharis/OpenWA-plugins/tree/main/supabase-otp-hook) |
 <!-- END DETAILS -->
@@ -46,7 +46,8 @@
   dead-letters it for redrive instead of dropping the OTP, and
   `GET /api/plugins/supabase-otp-hook/health` reports the last failure. A send that is only slow
   finishes in the background: the ingress worker dispatch is bounded to 5 s, and an overrun would be
-  retried into a duplicate OTP.
+  retried into a duplicate OTP. On OpenWA 0.32.0+ the host also clamps in-dispatch capability calls to
+  that remaining ingress budget and deduplicates send calls per delivery across retries.
 - **Per-user ordering + dedup** — ordered per `user.id`. On a host that supports `dedupOn`, dedup is
   keyed on the signed body, so an Auth retry of one hook invocation collapses instead of sending a
   second code, while a new sign-in carries a freshly generated OTP in that body and is not collapsed.
@@ -164,7 +165,7 @@ Session scope (which session sends) is also set at instance mint time, not in th
 
 ## Compatibility
 
-Checked against the OpenWA v0.31.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
+Checked against the OpenWA v0.32.1 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
 
 - **OpenWA** ≥ 0.8.16 — Integration SDK v1 with the `standard-webhooks` ingress signature scheme and
   the `response`/preflight contract (`ctx.registerWebhook`, `webhook:ingress` permission).

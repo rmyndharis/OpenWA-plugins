@@ -364,3 +364,10 @@ test('strips multiple trailing slashes from apiBaseUrl and rejects replies that 
   assert.equal(errors.length, 1);
   assert.match(errors[0], /empty reply after formatting/);
 });
+
+test('preserves fenced triple-backtick code blocks in formatted replies', async () => {
+  const h = await enable(BASE);
+  h.state.respond = async () => okBody('```\nnpm test\n```');
+  assert.deepEqual(await h.fire(msg()), CLAIMED);
+  assert.equal(h.replies[0].text, '```\nnpm test\n```');
+});

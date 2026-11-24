@@ -8,6 +8,17 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.3.21] - 2026-11-24
+
+### Changed
+
+- Verify compatibility with OpenWA `0.32.1` and bump `testedOpenWAVersion`.
+
+### Fixed
+
+- A1-quote `sheetTab` names so sheet tabs containing spaces or apostrophes append safely.
+- Require `client_email` and `private_key` to be strings in `parseConfig`.
+
 ## [0.3.20] - 2026-11-21
 
 ### Changed

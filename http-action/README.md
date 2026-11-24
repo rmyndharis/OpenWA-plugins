@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `http-action` |
-| **Version** | 0.2.20 |
-| **Released** | 2026-11-21 |
+| **Version** | 0.2.21 |
+| **Released** | 2026-11-24 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.0 (tested 0.31.0) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.32.1) |
 | **Keywords** | api, rest, automation, connector, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/http-action](https://github.com/rmyndharis/OpenWA-plugins/tree/main/http-action) |
 <!-- END DETAILS -->
@@ -100,13 +100,13 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 | `authToken` | no | — | Bearer token or API key (required when `authType` is not `none`); masked `***`. |
 | `apiKeyHeader` | no | `X-API-Key` | Header name used when `authType=apikey`. |
 | `respondInGroups` | no | `false` | Whether to act on group chats. |
-| `timeoutMs` | no | `3000` | Upstream request timeout in ms (min 500). |
+| `timeoutMs` | no | `3000` | Upstream request timeout in ms (500 to 25000). |
 | `cooldownSeconds` | no | `3` | Min seconds between replies per chat; 0 = always. |
 | `actions` | yes | — | JSON array of actions (see **Actions**). |
 
 ## Compatibility
 
-Checked against the OpenWA v0.31.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
+Checked against the OpenWA v0.32.1 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
 
 Targets OpenWA **≥ 0.8.0**, the release that introduced both capabilities it relies on
 (`net.allowConfigHosts` and `conversation:send`). Live config edits apply on the next inbound message

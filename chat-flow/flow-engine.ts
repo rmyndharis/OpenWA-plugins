@@ -1,4 +1,5 @@
 import type { PluginContext } from '../types/openwa';
+import { boundStorageKey } from './storage-key.ts';
 
 export interface FlowNode {
   text: string;
@@ -42,6 +43,7 @@ export class FlowEngine {
    * a choice and then ignore it.
    */
   private static readonly MAX_MISSES = 3;
+  private static readonly MAX_CONSUMED = 200;
   /**
    * From OpenWA 0.23.6 a Baileys session delivers, after it reconnects, what WhatsApp queued while it
    * was disconnected, each message with its original send time. Five minutes is far above clock skew
@@ -51,20 +53,6 @@ export class FlowEngine {
   /** Per (session,chat) promise chain serializing the state read→write. Self-evicts when drained. */
   private static readonly locks = new Map<string, Promise<unknown>>();
   private static readonly replyTails = new Map<string, Promise<void>>();
-
-  private static boundStateKey(key: string): string {
-    if (Buffer.byteLength(key, 'utf8') <= 184) return key;
-    let h1 = 0x811c9dc5, h2 = 0xdeadbeef;
-    for (let i = 0; i < key.length; i++) {
-      const c = key.charCodeAt(i);
-      h1 = Math.imul(h1 ^ c, 0x01000193);
-      h2 = Math.imul(h2 ^ c, 0x85ebca6b);
-    }
-    const suffix = `_${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}`;
-    let prefix = key.slice(0, 184 - suffix.length).replace(/[\ud800-\udbff]$/, '');
-    while (Buffer.byteLength(prefix, 'utf8') > 184 - suffix.length) prefix = prefix.slice(0, -1).replace(/[\ud800-\udbff]$/, '');
-    return `${prefix}${suffix}`;
-  }
 
   /**
    * Process an incoming message and send auto-replies according to `flow` (the resolved per-session
@@ -89,7 +77,7 @@ export class FlowEngine {
     sentAt?: number,
   ): Promise<boolean> {
     const conversation = actor ? `${chatId}|${actor}` : chatId;
-    const stateKey = this.boundStateKey(`state__${sessionId}__${conversation}`.replace(/:/g, '_'));
+    const stateKey = boundStorageKey(`state__${sessionId}__${conversation}`.replace(/:/g, '_'), '_');
     return this.withLock(stateKey, () =>
       this.processLocked(context, flow, sessionId, chatId, stateKey, messageBody, messageId, sentAt),
     );
@@ -188,9 +176,18 @@ export class FlowEngine {
         ? { ...stored, path: [...stored.path] }
         : null;
     const save = async (next: UserState | null, handled: boolean): Promise<void> => {
+      const merged = Object.entries({ ...consumed, [messageId]: { t: now, handled } });
+      const cappedConsumed =
+        merged.length > this.MAX_CONSUMED
+          ? Object.fromEntries(
+              merged
+                .sort((a, b) => (a[0] === messageId ? 1 : b[0] === messageId ? -1 : a[1].t - b[1].t))
+                .slice(-this.MAX_CONSUMED),
+            )
+          : Object.fromEntries(merged);
       await context.storage.set(stateKey, {
         ...(next ?? { path: [], lastActive: now, completed: true }),
-        consumed: { ...consumed, [messageId]: { t: now, handled } },
+        consumed: cappedConsumed,
       });
     };
     // A message written more than LATE_AFTER_MS before the menu on screen, and delivered that late, was

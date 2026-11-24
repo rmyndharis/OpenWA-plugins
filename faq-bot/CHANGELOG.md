@@ -8,6 +8,12 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [0.2.23] - 2026-11-24
+
+### Changed
+
+- Verify compatibility with OpenWA `0.32.1` and bump `testedOpenWAVersion`.
+
 ## [0.2.22] - 2026-11-21
 
 ### Changed

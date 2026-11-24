@@ -8,6 +8,19 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.3.20] - 2026-11-24
+
+### Changed
+
+- Extract shared `storage-key.ts` helper and verify compatibility with OpenWA `0.32.1`.
+
+### Fixed
+
+- Cache coordinators in a bounded LRU map by resolved config signature so alternating per-session configs preserve LibreTranslate circuit breakers.
+- Skip `location` messages alongside `contact`, `order`, and `product` payloads.
+- Reject non-numeric target arguments without building an empty `@c.us` JID and validate LibreTranslate array responses.
+- Clamp `timeoutMs` ceiling to 25000 ms below the host capability budget.
+
 ## [1.3.19] - 2026-11-21
 
 ### Changed

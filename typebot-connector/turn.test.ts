@@ -301,9 +301,9 @@ function flowDeps() {
 test('a backlog replayed after a reconnect starts the flow once and answers none of it', async () => {
   const { d, sent, store, calls } = flowDeps();
   await Promise.all([
-    handleTurn(d, 'sess', 'Engine', msg({ body: 'hi', timestamp: ago(60) })),
-    handleTurn(d, 'sess', 'Engine', msg({ body: '2', timestamp: ago(59) })),
-    handleTurn(d, 'sess', 'Engine', msg({ body: 'John', timestamp: ago(58) })),
+    handleTurn(d, 'sess', 'Engine', msg({ id: 'm1', body: 'hi', timestamp: ago(60) })),
+    handleTurn(d, 'sess', 'Engine', msg({ id: 'm2', body: '2', timestamp: ago(59) })),
+    handleTurn(d, 'sess', 'Engine', msg({ id: 'm3', body: 'John', timestamp: ago(58) })),
   ]);
   assert.equal(calls.starts, 1);
   assert.deepEqual(calls.answers, []);
@@ -427,4 +427,20 @@ test('a stale stored row with no awaiting field is idle-reset instead of throwin
   await store.set('sess:c@c.us', { sessionId: 'OLD', lastActivity: -10_000_000 } as never);
   await handleTurn(d, 'sess', 'Engine', msg({ body: 'hello' }));
   assert.equal(starts, 1, 'the corrupt idle row is discarded and the flow starts from the top');
+});
+
+test('duplicate non-empty msg.id does not advance an active Typebot session twice', async () => {
+  let continues = 0;
+  const { d, store } = deps({
+    startChat: { sessionId: 'S1', bubbles: [{ kind: 'text', markdown: 'Ask' }], input: { kind: 'text', blockId: 'b1', attachmentsEnabled: false } },
+    continueChat: () => {
+      continues++;
+      return { bubbles: [{ kind: 'text', markdown: 'Next' }], input: { kind: 'text', blockId: 'b2', attachmentsEnabled: false } };
+    },
+  });
+  await handleTurn(d, 'sess', 'Engine', msg({ id: 'm1', body: 'hi' }));
+  await handleTurn(d, 'sess', 'Engine', msg({ id: 'm2', body: 'answer' }));
+  await handleTurn(d, 'sess', 'Engine', msg({ id: 'm2', body: 'answer' }));
+  assert.equal(continues, 1);
+  assert.equal((await store.get('sess:c@c.us'))?.awaiting.blockId, 'b2');
 });
