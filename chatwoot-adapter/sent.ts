@@ -31,7 +31,7 @@ export async function handleSent(
   // resolves to the @lid address, so this message:sent carries chatId=@lid while outbound.relay locked
   // (and marked the echo on) the mapping's @c.us key. Locking on the canonical form makes both paths
   // serialize on the SAME key (when resolvable), so the echo marker is observed before this handler checks.
-  const key = await deps.engine.canonicalChatId(sessionId, msg.chatId);
+  const key = await deps.engine.canonicalChatId(sessionId, msg.chatId).catch(() => msg.chatId);
   await deps.lock.run(`${sessionId}:${key}`, async () => {
     try {
       // An engine that cannot read an id back reports the empty sentinel (Baileys' `?? ''`; outbound.ts

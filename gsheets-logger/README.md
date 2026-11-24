@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `gsheets-logger` |
-| **Version** | 0.3.20 |
-| **Released** | 2026-11-21 |
+| **Version** | 0.3.21 |
+| **Released** | 2026-11-24 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.31.0) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.32.1) |
 | **Keywords** | google-sheets, logging, audit, crm, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/gsheets-logger](https://github.com/rmyndharis/OpenWA-plugins/tree/main/gsheets-logger) |
 <!-- END DETAILS -->
@@ -212,7 +212,7 @@ The target tab must exist, **with a header row of your choosing** — the plugin
 
 ## Compatibility
 
-Checked against the OpenWA v0.31.0 worker runtime with isolated services. On a spreadsheet or credential change, undelivered rows are parked before switching clients. If parking fails, the plugin logs the error, retains the rows and keeps the previous client so a later retry can deliver to the original destination.
+Checked against the OpenWA v0.32.1 worker runtime with isolated services. On a spreadsheet or credential change, undelivered rows are parked before switching clients. If parking fails, the plugin logs the error, retains the rows and keeps the previous client so a later retry can deliver to the original destination.
 
 External plugins run **sandboxed in a worker thread** (since OpenWA **v0.6.0**). Requires OpenWA
 **≥ 0.7.0** — all outbound HTTP (OAuth token + Sheets append) goes through the host-proxied,

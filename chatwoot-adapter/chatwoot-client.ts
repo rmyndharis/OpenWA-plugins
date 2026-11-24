@@ -215,11 +215,4 @@ export class ChatwootClient {
     }
     return JSON.parse(res.body || '{}') as { id: number };
   }
-
-  async toggleStatusOpen(conversationId: number): Promise<void> {
-    await this.json(`${this.base()}/conversations/${conversationId}/toggle_status`, {
-      method: 'POST',
-      body: JSON.stringify({ status: 'open' }),
-    });
-  }
 }

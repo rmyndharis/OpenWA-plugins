@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `ai-responder` |
-| **Version** | 0.1.7 |
-| **Released** | 2026-11-21 |
+| **Version** | 0.1.8 |
+| **Released** | 2026-11-24 |
 | **Status** | beta |
 | **Author** | Abhinav Raj |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.8.0 (tested 0.31.0) |
+| **Requires OpenWA** | ≥ 0.8.0 (tested 0.32.1) |
 | **Keywords** | ai, openai, llm, auto-reply, chatbot, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/ai-responder](https://github.com/rmyndharis/OpenWA-plugins/tree/main/ai-responder) |
 <!-- END DETAILS -->
@@ -130,7 +130,7 @@ calls are already open.
 
 ## Compatibility
 
-Checked against the OpenWA v0.31.0 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
+Checked against the OpenWA v0.32.1 worker runtime with isolated services. This covers plugin lifecycle, hooks or ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, provider authentication and dashboard rendering require separate deployment checks.
 
 Targets OpenWA **≥ 0.8.0**, which admits the configured `apiBaseUrl` host through
 `net.allowConfigHosts`. Status is beta: it has not yet been smoke-tested on a live gateway.

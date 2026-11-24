@@ -37,3 +37,14 @@ test('strips CR/LF (and a quote) from an attacker-controlled filename/contentTyp
   assert.ok(body.includes('filename="aContent-Disposition: form-data; name=evilinjected"'), 'filename flattened onto one line');
   assert.ok(body.includes('Content-Type: image/pngX-Injected: 1\r\n\r\n'), 'contentType flattened; only the framing CRLF remains');
 });
+
+test('field and file part names strip CR, LF, and quotes', () => {
+  const body = buildMultipartBody(
+    'b',
+    [{ name: 'bad"\r\nX: 1', value: 'v' }],
+    [{ name: 'file"\r\nY: 2', filename: 'f.txt', contentType: 'text/plain', data: Uint8Array.from([1]) }],
+  ).toString('latin1');
+  assert.ok(body.includes('name="badX: 1"'));
+  assert.ok(body.includes('name="fileY: 2"'));
+  assert.ok(!body.includes('X: 1\r\n\r\nv') || body.includes('name="badX: 1"'));
+});

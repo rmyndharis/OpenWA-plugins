@@ -211,3 +211,42 @@ test('a homepage outside the declared repository is refused', () => {
   // Absent is allowed: nothing requires it, and the table falls back to the repository URL.
   assert.doesNotThrow(() => validateManifest('demo', { ...OK, homepage: undefined }));
 });
+
+test('ingress manifest rules enforce array and string header fields', () => {
+  assert.doesNotThrow(() => validateManifest('demo', { ...OK, ingress: null }));
+  assert.doesNotThrow(() =>
+    validateManifest('demo', {
+      ...OK,
+      permissions: ['webhook:ingress'],
+      ingress: [{ route: 'r', dedupHeader: null, signature: { scheme: 'standard-webhooks', header: null } }],
+    }),
+  );
+  assert.throws(
+    () => validateManifest('demo', { ...OK, permissions: ['webhook:ingress'], ingress: 'bad' }),
+    /must be an array/,
+  );
+  assert.throws(
+    () => validateManifest('demo', { ...OK, permissions: ['webhook:ingress'], ingress: [[]] }),
+    /must be an object/,
+  );
+  assert.throws(
+    () => validateManifest('demo', { ...OK, permissions: ['webhook:ingress'], ingress: [{ route: 'r', dedupHeader: 123 }] }),
+    /dedupHeader must be a string/,
+  );
+  assert.throws(
+    () => validateManifest('demo', {
+      ...OK,
+      permissions: ['webhook:ingress'],
+      ingress: [{ route: 'r', signature: { scheme: 'hmac-sha256', header: 123 } }],
+    }),
+    /signature\.header must be a string/,
+  );
+  assert.throws(
+    () => validateManifest('demo', {
+      ...OK,
+      permissions: ['webhook:ingress'],
+      ingress: [{ route: 'r', signature: { scheme: 'standard-webhooks', dedupHeader: 123 } }],
+    }),
+    /signature\.dedupHeader must be a string/,
+  );
+});

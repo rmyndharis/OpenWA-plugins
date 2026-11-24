@@ -91,3 +91,9 @@ test('consecutive overnight windows cover the whole night, both days', () => {
   assert.equal(at(12, 3, 0), false, 'Wednesday 03:00 is covered by the Tuesday window');
   assert.equal(at(11, 12, 0), true, 'Tuesday midday sits between the two windows');
 });
+
+test('a lowercase null entry overrides an earlier capitalized day window as closed', () => {
+  const sch = parseSchedule(JSON.stringify({ Mon: '09:00-17:00', mon: null, tue: '09:00-17:00' }));
+  assert.equal(sch.mon, undefined);
+  assert.deepEqual(sch.tue, { openMin: 540, closeMin: 1020 });
+});

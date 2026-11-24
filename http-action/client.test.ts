@@ -140,3 +140,28 @@ test('timeoutMs from config is passed to fetch init', async () => {
   await new HttpActionClient(fakeFetch(cap, { body: '{}' }), config).run(action, { args: ['X'] });
   assert.equal(cap.init?.timeoutMs, 2500);
 });
+
+test('auth and POST content-type override lowercase action headers without duplicates', async () => {
+  const cfg = readConfig({
+    baseUrl: 'https://api.example.com',
+    authType: 'bearer',
+    authToken: 'secret',
+    actions: JSON.stringify([{
+      id: 'post',
+      match: { type: 'exact', value: 'go' },
+      request: {
+        method: 'POST',
+        path: '/go',
+        headers: { authorization: 'Bearer wrong', 'content-type': 'text/plain' },
+        bodyTemplate: '{"ok":true}',
+      },
+      replyTemplate: 'done',
+    }]),
+  });
+  const cap: Captured = {};
+  await new HttpActionClient(fakeFetch(cap, { body: '{}' }), cfg).run(cfg.actions[0], { args: [] });
+  assert.equal(cap.init?.headers?.Authorization, 'Bearer secret');
+  assert.equal(cap.init?.headers?.authorization, undefined);
+  assert.equal(cap.init?.headers?.['Content-Type'], 'application/json');
+  assert.equal(cap.init?.headers?.['content-type'], undefined);
+});

@@ -519,3 +519,33 @@ test('malformed stored state row with non-array path recovers cleanly without Ty
   await FlowEngine.processMessage(ctx, abc, 'abc-company', 'user1', 'invalid-choice', 'm-neg-miss');
   assert.equal((storage.get(key) as { misses: number }).misses, 1);
 });
+
+test('consumed dedup map is bounded to MAX_CONSUMED entries keeping newest records', async () => {
+  const { ctx, storage } = makeCtx();
+  const key = 'state__s__user1';
+  const now = Date.now();
+  const seed: Record<string, { t: number; handled: boolean }> = {};
+  for (let i = 0; i < 205; i++) seed[`old-${i}`] = { t: now - (300 - i) * 1000, handled: false };
+  storage.set(key, { path: [], lastActive: now, completed: true, consumed: seed });
+
+  await FlowEngine.processMessage(ctx, abc, 's', 'user1', 'hi', 'm-latest');
+  const saved = storage.get(key) as { consumed: Record<string, { t: number; handled: boolean }> };
+  const keys = Object.keys(saved.consumed);
+  assert.equal(keys.length, 200);
+  assert.ok('m-latest' in saved.consumed);
+  assert.ok(!('old-0' in saved.consumed));
+});
+
+test('consumed bounding retains numeric messageId even when all timestamps tie at now', async () => {
+  const { ctx, storage } = makeCtx();
+  const key = 'state__s__user1';
+  const now = Date.now();
+  const seed: Record<string, { t: number; handled: boolean }> = {};
+  for (let i = 1000; i < 1200; i++) seed[`${i}`] = { t: now + 60_000, handled: false };
+  storage.set(key, { path: [], lastActive: now, completed: true, consumed: seed });
+
+  await FlowEngine.processMessage(ctx, abc, 's', 'user1', 'hi', '1');
+  const saved = storage.get(key) as { consumed: Record<string, { t: number; handled: boolean }> };
+  assert.equal(Object.keys(saved.consumed).length, 200);
+  assert.ok('1' in saved.consumed, 'newly processed numeric messageId must survive cap');
+});

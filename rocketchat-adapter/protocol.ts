@@ -39,23 +39,30 @@ export interface AgentEvent {
   messages: AgentMessage[];
 }
 
+export class MalformedWebhookError extends Error {}
+
 export function parseAgentEvent(body: string): AgentEvent | null {
   let value: Record<string, unknown>;
   try {
     value = JSON.parse(body);
   } catch {
-    throw new Error('Invalid Rocket.Chat webhook JSON');
+    throw new MalformedWebhookError('Invalid Rocket.Chat webhook JSON');
   }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid Rocket.Chat webhook');
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new MalformedWebhookError('Invalid Rocket.Chat webhook');
+  }
   // Never relay transcripts, close notifications or a webhook test as a new agent message.
   if (value.type !== 'Message') return null;
-  if (typeof value._id !== 'string' || !value._id || value._id.length > 200)
-    throw new Error('Missing Rocket.Chat room id');
+  if (typeof value._id !== 'string' || !value._id || value._id.length > 200) {
+    throw new MalformedWebhookError('Missing Rocket.Chat room id');
+  }
   const visitor = value.visitor as { token?: unknown } | undefined;
-  if (!visitor || typeof visitor.token !== 'string' || !visitor.token)
-    throw new Error('Missing Rocket.Chat visitor token');
-  if (!Array.isArray(value.messages) || value.messages.length > MAX_WEBHOOK_MESSAGES)
-    throw new Error('Invalid Rocket.Chat message list');
+  if (!visitor || typeof visitor.token !== 'string' || !visitor.token) {
+    throw new MalformedWebhookError('Missing Rocket.Chat visitor token');
+  }
+  if (!Array.isArray(value.messages) || value.messages.length > MAX_WEBHOOK_MESSAGES) {
+    throw new MalformedWebhookError('Invalid Rocket.Chat message list');
+  }
   const messages: AgentMessage[] = [];
   for (const raw of value.messages) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;

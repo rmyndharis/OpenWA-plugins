@@ -1,7 +1,7 @@
 {
   "id": "ai-responder",
   "name": "AI Responder",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "type": "extension",
   "main": "dist/index.js",
   "description": "Auto-replies to inbound WhatsApp messages with an OpenAI-compatible Chat Completions API. Single-turn, rate-limited per chat and per session, and last in the responder chain.",
@@ -9,22 +9,42 @@
   "license": "MIT",
   "homepage": "https://github.com/rmyndharis/OpenWA-plugins/tree/main/ai-responder",
   "repository": "https://github.com/rmyndharis/OpenWA-plugins",
-  "keywords": ["ai", "openai", "llm", "auto-reply", "chatbot", "whatsapp", "openwa"],
+  "keywords": [
+    "ai",
+    "openai",
+    "llm",
+    "auto-reply",
+    "chatbot",
+    "whatsapp",
+    "openwa"
+  ],
   "status": "beta",
   "minOpenWAVersion": "0.8.0",
-  "testedOpenWAVersion": "0.31.0",
-  "provides": ["ai-auto-reply"],
+  "testedOpenWAVersion": "0.32.1",
+  "provides": [
+    "ai-auto-reply"
+  ],
   "permissions": [
     "net:fetch",
     "messages:send"
   ],
   "net": {
-    "allow": ["localhost", "127.0.0.1", "[::1]"],
-    "allowConfigHosts": ["apiBaseUrl"]
+    "allow": [
+      "localhost",
+      "127.0.0.1",
+      "[::1]"
+    ],
+    "allowConfigHosts": [
+      "apiBaseUrl"
+    ]
   },
   "sessionScoped": true,
-  "sessions": ["*"],
-  "hooks": ["message:received"],
+  "sessions": [
+    "*"
+  ],
+  "hooks": [
+    "message:received"
+  ],
   "configSchema": {
     "type": "object",
     "properties": {
@@ -99,52 +119,76 @@
     }
   },
   "i18n": {
-    "en": {
-      "name": "AI Responder",
-      "description": "Auto-replies to inbound WhatsApp messages with an OpenAI-compatible Chat Completions API. Single-turn, rate-limited per chat and per session, and last in the responder chain.",
-      "config": {
-        "apiBaseUrl": { "title": "API base URL" },
-        "apiKey": { "title": "API key" },
-        "model": { "title": "Model" },
-        "systemPrompt": { "title": "System prompt" },
-        "respondInGroups": { "title": "Also respond in group chats" },
-        "maxRepliesPerChatPerHour": { "title": "Max replies per chat per hour" },
-        "maxRepliesPerSessionPerHour": { "title": "Max replies per session per hour" },
-        "maxInputChars": { "title": "Max input characters" },
-        "maxOutputTokens": { "title": "Max output tokens" },
-        "timeoutMs": { "title": "Request timeout (ms)" }
-      }
-    },
     "es": {
       "name": "Respuestas con IA",
       "description": "Responde automáticamente a los mensajes entrantes de WhatsApp mediante una API de Chat Completions compatible con OpenAI. Una respuesta por mensaje, sin historial, con límites por chat y por sesión, y último en la cadena de respuestas.",
       "config": {
-        "apiBaseUrl": { "title": "URL base de la API" },
-        "apiKey": { "title": "Clave de API" },
-        "model": { "title": "Modelo" },
-        "systemPrompt": { "title": "Instrucciones del sistema" },
-        "respondInGroups": { "title": "Responder también en grupos" },
-        "maxRepliesPerChatPerHour": { "title": "Máximo de respuestas por chat y hora" },
-        "maxRepliesPerSessionPerHour": { "title": "Máximo de respuestas por sesión y hora" },
-        "maxInputChars": { "title": "Máximo de caracteres de entrada" },
-        "maxOutputTokens": { "title": "Máximo de tokens de salida" },
-        "timeoutMs": { "title": "Tiempo de espera de la solicitud (ms)" }
+        "apiBaseUrl": {
+          "title": "URL base de la API"
+        },
+        "apiKey": {
+          "title": "Clave de API"
+        },
+        "model": {
+          "title": "Modelo"
+        },
+        "systemPrompt": {
+          "title": "Instrucciones del sistema"
+        },
+        "respondInGroups": {
+          "title": "Responder también en grupos"
+        },
+        "maxRepliesPerChatPerHour": {
+          "title": "Máximo de respuestas por chat y hora"
+        },
+        "maxRepliesPerSessionPerHour": {
+          "title": "Máximo de respuestas por sesión y hora"
+        },
+        "maxInputChars": {
+          "title": "Máximo de caracteres de entrada"
+        },
+        "maxOutputTokens": {
+          "title": "Máximo de tokens de salida"
+        },
+        "timeoutMs": {
+          "title": "Tiempo de espera de la solicitud (ms)"
+        }
       }
     },
     "zh-CN": {
       "name": "AI 自动回复",
       "description": "通过兼容 OpenAI 的 Chat Completions API 自动回复入站的 WhatsApp 消息。单轮回复，按聊天和会话限速，并在回复链中最后执行。",
       "config": {
-        "apiBaseUrl": { "title": "API 基础 URL" },
-        "apiKey": { "title": "API 密钥" },
-        "model": { "title": "模型" },
-        "systemPrompt": { "title": "系统提示词" },
-        "respondInGroups": { "title": "也在群组中回复" },
-        "maxRepliesPerChatPerHour": { "title": "每个聊天每小时最多回复数" },
-        "maxRepliesPerSessionPerHour": { "title": "每个会话每小时最多回复数" },
-        "maxInputChars": { "title": "最大输入字符数" },
-        "maxOutputTokens": { "title": "最大输出 Token 数" },
-        "timeoutMs": { "title": "请求超时（毫秒）" }
+        "apiBaseUrl": {
+          "title": "API 基础 URL"
+        },
+        "apiKey": {
+          "title": "API 密钥"
+        },
+        "model": {
+          "title": "模型"
+        },
+        "systemPrompt": {
+          "title": "系统提示词"
+        },
+        "respondInGroups": {
+          "title": "也在群组中回复"
+        },
+        "maxRepliesPerChatPerHour": {
+          "title": "每个聊天每小时最多回复数"
+        },
+        "maxRepliesPerSessionPerHour": {
+          "title": "每个会话每小时最多回复数"
+        },
+        "maxInputChars": {
+          "title": "最大输入字符数"
+        },
+        "maxOutputTokens": {
+          "title": "最大输出 Token 数"
+        },
+        "timeoutMs": {
+          "title": "请求超时（毫秒）"
+        }
       }
     },
     "de": {

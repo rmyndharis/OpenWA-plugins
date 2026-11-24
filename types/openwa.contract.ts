@@ -1,4 +1,4 @@
-import type { ChatSummary, IncomingMessage, PluginIngressRoute, PluginManifest } from './openwa';
+import type { ChatSummary, IncomingMessage, PluginIngressRoute, PluginManifest, PluginNetRequestInit } from './openwa';
 
 type Assert<T extends true> = T;
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
@@ -14,3 +14,4 @@ type ChatPhone = Assert<Equal<ChatSummary['phone'], string | undefined>>;
 type DedupBodyMismatchAsNew = Assert<Equal<PluginIngressRoute['dedupBodyMismatchAsNew'], boolean | undefined>>;
 type IsForwarded = Assert<Equal<IncomingMessage['isForwarded'], boolean | undefined>>;
 type ForwardingScore = Assert<Equal<IncomingMessage['forwardingScore'], number | undefined>>;
+type NetRequestSessionId = Assert<Equal<PluginNetRequestInit['sessionId'], string | undefined>>;

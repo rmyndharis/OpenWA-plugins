@@ -165,6 +165,14 @@ test('replyTemplate: required', () => {
 test('timeoutMs: below the 500 floor falls back to default 3000', () => {
   assert.equal(readConfig(base({ timeoutMs: 100 })).timeoutMs, 3000);
   assert.equal(readConfig(base({ timeoutMs: 'oops' })).timeoutMs, 3000);
+  assert.equal(readConfig(base({ timeoutMs: 30_000 })).timeoutMs, 25_000);
+});
+
+test('cooldownSeconds: empty string or null uses default 3 instead of 0', () => {
+  assert.equal(readConfig(base({ cooldownSeconds: '' })).cooldownSeconds, 3);
+  assert.equal(readConfig(base({ cooldownSeconds: '   ' })).cooldownSeconds, 3);
+  assert.equal(readConfig(base({ cooldownSeconds: null })).cooldownSeconds, 3);
+  assert.equal(readConfig(base({ cooldownSeconds: 0 })).cooldownSeconds, 0);
 });
 
 test('request.bodyTemplate: optional, accepted as a JSON string', () => {

@@ -77,7 +77,7 @@ export default class TypebotConnector implements IPlugin {
     this.ctx = ctx;
     readConfig(ctx.config); // fail fast at enable time
     const lock = new KeyedAsyncLock();
-    const store = new SessionStore(ctx.storage);
+    const store = new SessionStore(ctx.storage, lock);
 
     ctx.registerHook('message:received', async (h: HookContext): Promise<HookResult> => {
       const sessionId = h.sessionId;

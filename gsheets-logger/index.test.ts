@@ -578,3 +578,14 @@ test('post-append storage checkpoint failure does not mark healthCheck unhealthy
   assert.equal((await logger.healthCheck()).healthy, true);
   assert.equal(warns.length, 1);
 });
+
+test('parseConfig rejects non-string client_email or private_key', () => {
+  assert.throws(
+    () => parseConfig({ spreadsheetId: 'sid', serviceAccountJson: JSON.stringify({ client_email: 123, private_key: 'k' }) }),
+    /missing client_email/,
+  );
+  assert.throws(
+    () => parseConfig({ spreadsheetId: 'sid', serviceAccountJson: JSON.stringify({ client_email: 'a@b', private_key: true }) }),
+    /missing client_email/,
+  );
+});

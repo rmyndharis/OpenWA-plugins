@@ -640,3 +640,16 @@ test('sent 404 recovery resets handover under the mapping key lock, not the cano
   await run;
   assert.deepEqual(handovers.map(h => h[1]), ['bot']);
 });
+
+test('falls back to msg.chatId when engine.canonicalChatId rejects', async () => {
+  const d = deps({
+    engine: {
+      canonicalChatId: async () => {
+        throw new Error('engine unavailable');
+      },
+    },
+  });
+  await d.deps.store.link('sess', '628@c.us', 'sess', { conversationId: 12, contactId: 1, sourceId: 's' });
+  await assert.doesNotReject(() => handleSent(d.deps, 'sess', 'Engine', { ...own, id: 'o-err', chatId: '628@c.us' }));
+  assert.equal(d.posted.length, 1);
+});

@@ -13,13 +13,13 @@ Development preview of a text-only bridge between direct WhatsApp conversations 
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `rocketchat-adapter` |
-| **Version** | 0.1.1 |
-| **Released** | 2026-11-21 |
+| **Version** | 0.1.2 |
+| **Released** | 2026-11-24 |
 | **Status** | development |
 | **Author** | yederlv |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.30.0 (tested 0.31.0) |
+| **Requires OpenWA** | ≥ 0.30.0 (tested 0.32.1) |
 | **Keywords** | rocketchat, omnichannel, whatsapp, helpdesk |
 | **Repository** | [OpenWA-plugins/rocketchat-adapter](https://github.com/rmyndharis/OpenWA-plugins/tree/main/rocketchat-adapter) |
 <!-- END DETAILS -->
@@ -123,7 +123,7 @@ The plugin settings expose `deadLetterAction` (`none`, `replay`, `clear`) and `d
 
 Targets OpenWA **≥ 0.30.0**. The plugin is marked **development**, not stable. Unit/contract tests and local verification are summarized below; `testedOpenWAVersion` is a host verification baseline, not a live WhatsApp guarantee.
 
-Checked against the OpenWA v0.31.0 worker runtime with isolated services. This covers plugin lifecycle, hooks and ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, Rocket.Chat and dashboard rendering require separate deployment checks.
+Checked against the OpenWA v0.32.1 worker runtime with isolated services. This covers plugin lifecycle, hooks and ingress dispatch, capability calls and per-session configuration. Live WhatsApp sessions, Rocket.Chat and dashboard rendering require separate deployment checks.
 
 Rocket.Chat reference environment: 8.0.1 with Omnichannel visitor, room, message and message-history REST endpoints. A workspace without available agents may refuse room creation; the plugin retains the message for retry rather than claiming delivery. Confirm your edition's Omnichannel availability before deployment.
 

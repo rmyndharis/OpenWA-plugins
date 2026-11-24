@@ -135,7 +135,7 @@ export default class ChatwootAdapter implements IPlugin {
       };
       return {
         lock,
-        client: new ChatwootClient((url, init) => { assertCurrent(); return ctx.net.fetch(url, init); }, cfg),
+        client: new ChatwootClient((url, init) => { assertCurrent(); return ctx.net.fetch(url, { ...init, sessionId }); }, cfg),
         store: store.forDestination(cfg, assertCurrent),
         handover,
         engine: ctx.engine,
@@ -249,13 +249,9 @@ export default class ChatwootAdapter implements IPlugin {
       // Single-flight: a slow drain (large backlog) must not overlap the next tick, or two runs would
       // snapshot the same entries and double-post. Skip the tick if a drain is still in progress.
       if (this.draining) return Promise.resolve();
-      // Skip entirely if the config is currently invalid (e.g. apiToken cleared): every relay would throw
-      // on readConfig and walk the whole queue to dead-letter within a few ticks. Wait for valid config.
-      try {
-        readConfig(ctx.config);
-      } catch {
-        return Promise.resolve();
-      }
+      // Skip until at least one session has had its per-session config slice captured in a dispatch
+      // (a multi-tenant install can leave base config partial and set credentials per session).
+      if (this.sessionConfigs.size === 0) return Promise.resolve();
       this.draining = true;
       return drainRetries(
         { store, lock, log: (m, e) => ctx.logger.error(m, e) },

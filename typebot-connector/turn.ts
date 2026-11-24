@@ -30,12 +30,13 @@ export async function handleTurn(deps: TurnDeps, sessionId: string, source: stri
   if (!inScope(msg, source, deps.cfg.respondInGroups)) return;
   const key = sessionKey(sessionId, msg);
 
-  await deps.lock.run(key, async () => {
+  await deps.lock.run(deps.store.keyFor(key), async () => {
     let state = await deps.store.get(key);
     const botKey = `${deps.cfg.apiHost}|${deps.cfg.publicId}`;
     if (state && ((state.botKey && state.botKey !== botKey) || state.awaiting?.kind === 'unsupported')) {
       state = null;
     }
+    if (state && msg.id && state.seenIds?.includes(msg.id)) return;
     // When the contact wrote. `timestamp` is unix seconds; a missing, zero, negative, unrepresentable or
     // future one counts as now.
     const now = deps.now();
@@ -101,9 +102,18 @@ export async function handleTurn(deps: TurnDeps, sessionId: string, source: stri
     // `awaiting` must track the server even if a WhatsApp send then fails — otherwise the next reply would be
     // mapped against a stale input.
     const sid = resp.sessionId ?? state?.sessionId;
+    const nextSeen = msg.id
+      ? [...(state?.seenIds ?? []).filter(id => id !== msg.id), msg.id].slice(-50)
+      : state?.seenIds;
     try {
       if (resp.input && resp.input.kind !== 'unsupported' && sid) {
-        await deps.store.set(key, { sessionId: sid, awaiting: resp.input, lastActivity: deps.now(), botKey });
+        await deps.store.set(key, {
+          sessionId: sid,
+          awaiting: resp.input,
+          lastActivity: deps.now(),
+          botKey,
+          seenIds: nextSeen,
+        });
       } else {
         await deps.store.clear(key); // flow ended or hit an unanswerable step
       }
@@ -149,6 +159,6 @@ async function send(deps: TurnDeps, sessionId: string, msg: IncomingMessage, par
   const env: ConversationSendEnvelope = { sessionId, chatId: msg.chatId, ...part };
   // Quote the sender in groups to disambiguate — but only for text parts: OpenWA rejects replyTo on a media
   // envelope (the engine media path can't quote a message).
-  if (msg.isGroup && part.type === 'text') env.replyTo = msg.id;
+  if (msg.isGroup && part.type === 'text' && msg.id) env.replyTo = msg.id;
   await deps.conversations.send(env);
 }

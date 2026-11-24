@@ -991,3 +991,18 @@ test('announceInGroups persists announced before sending and rolls back only whe
   assert.equal(sends.length, 1);
   assert.equal(persisted.announced, true);
 });
+
+test('non-numeric target returns help error instead of addressing phantom @c.us jid', async () => {
+  const sends: string[] = [];
+  const gateway = {
+    sendText: async (_s: string, _c: string, text: string) => void sends.push(text),
+    getGroupAdmins: async () => ['admin@c.us'],
+  };
+  let state = { sessionId: 's', chatId: 'g@g.us', active: true, participants: {}, delegatedControllers: [], announced: true };
+  const store = { load: async () => state, save: async (next: typeof state) => { state = next; } };
+  const translator = { detect: async () => ({ lang: 'en', confidence: 1 }), translate: async (t: string) => t, languages: async () => ['en', 'id'], isHealthy: () => true };
+  const c = new TranslationCoordinator(translator, store as never, gateway as never, OPTS);
+  await c.handleMessage('s', msg({ body: '/tr setlang en invalid', author: 'admin@c.us', isGroup: true }));
+  assert.equal(sends.length, 1);
+  assert.match(sends[0], /Usage: \/tr setlang/);
+});

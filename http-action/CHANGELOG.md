@@ -5,6 +5,19 @@ and the top entry's version must match `manifest.json`.
 
 ## [Unreleased]
 
+## [0.2.21] - 2026-11-24
+
+### Changed
+
+- Verify compatibility with OpenWA `0.32.1` and bump `testedOpenWAVersion`.
+
+### Fixed
+
+- Gate `message:received` handling on `h.source === "Engine"`.
+- Clamp `timeoutMs` ceiling to 25000 ms and treat empty or null `cooldownSeconds` as the default 3 s instead of 0 s.
+- Use completed-POST confirmation fallback when a 2xx POST template renders empty text.
+- Skip legacy dedup key reads above 184 UTF-8 bytes and set `Authorization`, API key, and `Content-Type` headers case-insensitively.
+
 ## [0.2.20] - 2026-11-21
 
 ### Changed

@@ -8,6 +8,18 @@ The version here always matches `manifest.json`'s `version`.
 
 ## [Unreleased]
 
+## [1.1.21] - 2026-11-24
+
+### Changed
+
+- Extract shared `storage-key.ts` helper and verify compatibility with OpenWA `0.32.1`.
+
+### Fixed
+
+- Avoid permanently hiding the `#feedback` banner in `configUi` after `hideFeedback()`.
+- Remove dead `?selftest` inline script from `config/index.html`.
+- Cap persisted `consumed` dedup records per conversation at 200 entries.
+
 ## [1.1.20] - 2026-11-21
 
 ### Changed

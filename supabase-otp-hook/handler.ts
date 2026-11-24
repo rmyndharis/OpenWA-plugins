@@ -175,7 +175,9 @@ export async function handleSendSms(deps: HandlerDeps, req: WebhookRequest): Pro
   //
   // Throwing inside the window hands the delivery back to the host, which retries it with backoff and
   // writes a dead-letter row for redrive once the attempts are spent. Nothing was delivered in that
-  // case, so a retry cannot duplicate anything.
+  // case, so a retry cannot duplicate anything. On OpenWA 0.32.0+ the host also clamps webhook
+  // capability deadlines to INGRESS_DISPATCH_TIMEOUT_MS and deduplicates send calls per delivery
+  // across retries; keeping failFastMs at 2000 ms still protects older (>=0.15.0) hosts.
   const settled = deps.messages.sendText(sessionId, targetChatId, text).then(
     () => {
       if (cfg.debug) deps.log('supabase-otp-hook: sendText ok', { debug: true, sessionId, chatId: maskChatId(targetChatId) });

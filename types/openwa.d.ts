@@ -1,19 +1,34 @@
 // Vendored OpenWA plugin contract. There is no published @openwa SDK package; keep this in sync
 // with the OpenWA version you target. All imports of this module must be `import type`.
 //
-// Last aligned against OpenWA core v0.31.0 (release commit 7ebfd12, tree-identical to the v0.31.0 tag), verified
+// Last aligned against OpenWA core v0.32.1 (v0.32.0 tag + fix/plugin-off-dispatch-net-and-context), verified
 // field-by-field against src/core/plugins/plugin.interfaces.ts, src/core/hooks/{hook.interfaces,hook-results}.ts,
-// plugin-net.ts, sandbox/{protocol,worker-bootstrap,worker-capability,worker-hooks,worker-log-limiter,
-// worker-webhooks}.ts and src/engine/interfaces/whatsapp-engine.interface.ts, with behavior the interfaces do not
-// show read from hook-manager.service.ts, plugin-sandbox-bridge.ts, plugin-capability-context.ts,
-// plugin-storage.service.ts, src/modules/plugins/plugin-installer.ts, both engines' message mappers and media
-// paths, and src/modules/integration/ingress{.controller,.service,-ack,-preflight}.ts. Where this file narrows the
+// plugin-net.ts, plugin-capability-context.ts, sandbox/{plugin-worker-host,protocol,worker-bootstrap,
+// worker-capability,worker-hooks,worker-log-limiter,worker-webhooks}.ts and
+// src/engine/interfaces/whatsapp-engine.interface.ts, with behavior the interfaces do not show read from
+// hook-manager.service.ts, plugin-sandbox-bridge.ts, sending-gate.ts, plugin-storage.service.ts,
+// src/modules/plugins/plugin-installer.ts, both engines' message mappers and media paths, and
+// src/modules/integration/ingress{.controller,.service,-ack,-preflight}.ts. Where this file narrows the
 // host on purpose it says so; where the host is stricter than this file, the comment names the runtime
 // consequence.
 // Since 0.24.0: minOpenWAVersion is enforced at install and load, and config-derived network grants pin
 // the HTTPS origin including its port. Since 0.25.0: IncomingMessage includes poll details and
 // ChatSummary includes lastMessageType. Hook names and capability signatures used by these plugins
 // remain compatible.
+// 0.31.0 -> 0.32.1 (spanning 0.32.0 and 0.32.1):
+//   1. Pre-egress hooks (HOOK_PRE_EGRESS_FAIL_CLOSED) can run fail-closed, `sending-gate.ts` pins egress
+//      routing to the session chosen before send, and HookManager suppresses message:sent echoes
+//      asynchronously across worker hops.
+//   2. Inbound webhook dispatches clamp capability deadlines to INGRESS_DISPATCH_TIMEOUT_MS (5 s) and
+//      deduplicate send calls per delivery across ingress retries.
+//   3. Capability calls support host-side AbortSignal cancellation, workers answer a 30 s idle liveness
+//      probe (ping/pong), plugin ZIP upload caps multipart parts at 1, and configUi CSP uses
+//      `script-src 'unsafe-inline'` (no external scripts).
+//   4. PluginNetRequestInit adds optional `sessionId` for off-dispatch background timers to resolve
+//      `allowConfigHosts` against an active concrete session (ignored during active hook/webhook
+//      dispatches). Floated promises started inside a concrete-session hook retain host-scoped
+//      `netScopeId` for `net.fetch`, while worker `dispatchId`/`inFlight` clear synchronously before
+//      `hook-result` / `webhook-result` is posted.
 // 0.30.0 -> 0.31.0 (spanning 0.30.1, 0.30.2, 0.30.3 and 0.31.0):
 //   1. ChatSummary (ctx.engine.getChats): `name` is '' for a Baileys chat held under a privacy id (@lid) that has
 //      no saved, verified or push name (0.31.0; it was the id's own digits before), every Baileys chat name is
@@ -396,6 +411,9 @@ export interface PluginNetRequestInit {
   // Host default 15 s, host maximum 30 s; a value <= 0 is clamped to 1 ms (every request then aborts).
   // Note this is the FETCH budget, which races the outer 30 s capability-call budget — keep it lower.
   timeoutMs?: number;
+  // Concrete active session id for background work (e.g. retry timers) outside an active dispatch.
+  // Ignored inside a hook or webhook dispatch, where the host pins scope from the dispatch context.
+  sessionId?: string;
 }
 
 /**
@@ -412,7 +430,9 @@ export interface PluginNetResponse {
 }
 
 export interface PluginNetCapability {
-  fetch(url: string, init?: PluginNetRequestInit): Promise<PluginNetResponse>;
+  // Optional 3rd `signal` parameter exists on the host-side interface (0.32.0+); AbortSignal is not
+  // cloneable across sandbox IPC, so worker plugins rely on `init.timeoutMs`.
+  fetch(url: string, init?: PluginNetRequestInit, signal?: AbortSignal): Promise<PluginNetResponse>;
 }
 
 export interface PluginManifest {

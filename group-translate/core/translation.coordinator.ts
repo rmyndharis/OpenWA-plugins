@@ -511,6 +511,7 @@ export class TranslationCoordinator {
     // WhatsApp's newer LID scheme participants may be keyed by an opaque `@lid` id instead,
     // so this constructed wid can fail to match the stored participant. The `@mention` and
     // `me` forms resolve to the actual wid and are robust to LID; prefer them. See spec §16.
+    if (!target.number) return null;
     return `${target.number}@c.us`;
   }
 

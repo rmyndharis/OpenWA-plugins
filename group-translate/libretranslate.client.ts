@@ -59,10 +59,14 @@ export class LibreTranslateClient implements Translator {
   }
 
   async detect(text: string): Promise<DetectResult> {
-    const data = (await this.post('/detect', { q: text })) as Array<{ language: string; confidence: number }>;
-    const top = data[0];
-    if (!top) throw new Error('LibreTranslate /detect returned no result');
-    return { lang: top.language, confidence: top.confidence };
+    const data = await this.post('/detect', { q: text });
+    if (!Array.isArray(data)) throw new Error('LibreTranslate /detect returned unexpected payload');
+    const top = data[0] as { language?: unknown; confidence?: unknown } | undefined;
+    if (!top || typeof top.language !== 'string' || !top.language) {
+      throw new Error('LibreTranslate /detect returned no result');
+    }
+    const confidence = typeof top.confidence === 'number' && Number.isFinite(top.confidence) ? top.confidence : 0;
+    return { lang: top.language, confidence };
   }
 
   async translate(text: string, source: string, target: string): Promise<string> {
@@ -78,8 +82,11 @@ export class LibreTranslateClient implements Translator {
   }
 
   async languages(): Promise<string[]> {
-    const data = (await this.post('/languages', {}, 'GET')) as Array<{ code: string }>;
-    return data.map(l => l.code);
+    const data = await this.post('/languages', {}, 'GET');
+    if (!Array.isArray(data)) throw new Error('LibreTranslate /languages returned unexpected payload');
+    return data
+      .filter((l): l is { code: string } => Boolean(l && typeof (l as { code?: unknown }).code === 'string' && (l as { code: string }).code))
+      .map(l => l.code);
   }
 
   private async post(

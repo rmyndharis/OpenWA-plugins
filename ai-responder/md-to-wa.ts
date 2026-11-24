@@ -9,7 +9,7 @@ export function mdToWhatsApp(md: string): string {
   s = s.replace(/\*\*([^*]+?)\*\*/g, '*$1*');                  // **bold** → *bold* (collapse the doubled marker)
   s = s.replace(/__([^_]+?)__/g, '*$1*');                      // __bold__ → *bold*
   s = s.replace(/~~(.+?)~~/g, '~$1~');                         // ~~strike~~ → ~strike~
-  s = s.replace(/`([^`]+)`/g, '$1');                           // `code` → code
+  s = s.replace(/(?<!`)`(?!`)([^`\n]+)`(?!`)/g, '$1');             // `code` → code (preserve ```fenced```)
   s = s.replace(/^#{1,6}\s+/gm, '');                           // headings → strip leading #
   return s;
 }

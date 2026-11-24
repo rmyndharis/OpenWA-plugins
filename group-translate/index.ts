@@ -52,7 +52,7 @@ function readOptionalString(
 // only discourages, never enforces — made every translate abort instantly, and the coordinator swallowed
 // the error with nothing logged. Clamp where it is actually enforceable: in code.
 function readTimeoutMs(cfg: Record<string, unknown>): number {
-  return Math.min(30_000, Math.max(500, readNumber(cfg, "timeoutMs", 4000)));
+  return Math.min(25_000, Math.max(500, readNumber(cfg, "timeoutMs", 4000)));
 }
 
 // The host resolves this plugin's outbound allowlist from the RAW config value, refuses the fetch at
@@ -101,20 +101,25 @@ function readBool(
   return typeof v === "boolean" ? v : fallback;
 }
 
+const MAX_COORDINATORS = 64;
+
+interface CoordinatorSlot {
+  sig: string;
+  coordinator: TranslationCoordinator;
+}
+
 export class TranslationPlugin implements IPlugin {
+  private baseSlot: CoordinatorSlot | null = null;
+  private readonly sessionSlots = new Map<string, CoordinatorSlot>();
   private coordinator: TranslationCoordinator | null = null;
   // State writes must stay ordered when configuration replaces the coordinator.
   private readonly groupLocks = new Map<string, Promise<unknown>>();
-  // Signature of the coordinator-affecting config last used to build `this.coordinator`. The hook
-  // recomputes this per event and rebuilds the coordinator only when it changes — so a per-session
-  // override (resolved by the host for the firing session) takes effect, WITHOUT resetting the
-  // LibreTranslate client's circuit breaker on every message (a per-event rebuild would open/close the
-  // backend anew on each call and defeat the breaker's purpose).
-  private coordinatorSignature = "";
 
   onEnable(context: PluginContext): Promise<void> {
-    this.coordinator = this.buildCoordinator(context);
-    this.coordinatorSignature = this.configSignature(context.config);
+    this.sessionSlots.clear();
+    const base = { sig: this.configSignature(context.config), coordinator: this.buildCoordinator(context) };
+    this.baseSlot = base;
+    this.coordinator = base.coordinator;
     context.registerHook(
       "message:received",
       (ctx) => this.onMessage(context, ctx as HookContext<IncomingMessage>),
@@ -127,14 +132,40 @@ export class TranslationPlugin implements IPlugin {
   }
 
   onConfigChange(context: PluginContext): Promise<void> {
-    // Rebuild the coordinator so a config edit (e.g. a new LibreTranslate URL/key saved from the
-    // dashboard) takes effect immediately, without a disable/enable cycle.
-    this.coordinator = this.buildCoordinator(context);
-    this.coordinatorSignature = this.configSignature(context.config);
+    // Rebuild base coordinator and clear cached per-session overrides so edited config applies at once.
+    this.sessionSlots.clear();
+    const base = { sig: this.configSignature(context.config), coordinator: this.buildCoordinator(context) };
+    this.baseSlot = base;
+    this.coordinator = base.coordinator;
     context.logger.log("Translation plugin config updated", {
       action: "translation_config_changed",
     });
     return Promise.resolve();
+  }
+
+  private getOrCreateCoordinator(context: PluginContext, sessionId: string): TranslationCoordinator {
+    const sig = this.configSignature(context.config);
+    if (this.baseSlot && sig === this.baseSlot.sig) {
+      this.sessionSlots.delete(sessionId);
+      this.coordinator = this.baseSlot.coordinator;
+      return this.baseSlot.coordinator;
+    }
+    const existing = this.sessionSlots.get(sessionId);
+    if (existing && existing.sig === sig) {
+      this.sessionSlots.delete(sessionId);
+      this.sessionSlots.set(sessionId, existing);
+      this.coordinator = existing.coordinator;
+      return existing.coordinator;
+    }
+    const created: CoordinatorSlot = { sig, coordinator: this.buildCoordinator(context) };
+    if (!existing && this.sessionSlots.size >= MAX_COORDINATORS) {
+      const oldest = this.sessionSlots.keys().next().value;
+      if (oldest !== undefined) this.sessionSlots.delete(oldest);
+    }
+    this.sessionSlots.delete(sessionId);
+    this.sessionSlots.set(sessionId, created);
+    this.coordinator = created.coordinator;
+    return created.coordinator;
   }
 
   /** Stable signature of only the config fields that affect the coordinator's behavior. Two configs
@@ -191,11 +222,20 @@ export class TranslationPlugin implements IPlugin {
   }
 
   onDisable(context: PluginContext): Promise<void> {
-    // The loader unregisters this plugin's hooks on disable; drop the coordinator too.
+    // The loader unregisters this plugin's hooks on disable; drop cached coordinators too.
+    this.sessionSlots.clear();
+    this.baseSlot = null;
     this.coordinator = null;
     context.logger.log("Translation plugin disabled", {
       action: "translation_disabled",
     });
+    return Promise.resolve();
+  }
+
+  onUnload(): Promise<void> {
+    this.sessionSlots.clear();
+    this.baseSlot = null;
+    this.coordinator = null;
     return Promise.resolve();
   }
 
@@ -216,19 +256,11 @@ export class TranslationPlugin implements IPlugin {
     // translating it posts a quote-reply into the group and lets detection learn the member's language
     // from the seller's wording. A poll is deliberately NOT denied here: its question is human-typed
     // prose and squarely inside what this plugin exists to translate.
-    if (msg.type === "contact" || msg.type === "order" || msg.type === "product") {
+    if (msg.type === "contact" || msg.type === "order" || msg.type === "product" || msg.type === "location") {
       return { continue: true };
     }
-    // Re-check the config signature against the firing session's resolved config — if a per-session
-    // override changed a coordinator-affecting field, rebuild now. Cheap (a JSON.stringify of a handful
-    // of primitives) and runs only the equality check on the hot path; the rebuild is rare. Both
-    // coordinators share the group locks, so an in-flight state write precedes newer commands.
-    const sig = this.configSignature(context.config);
-    if (sig !== this.coordinatorSignature || !this.coordinator) {
-      this.coordinator = this.buildCoordinator(context);
-      this.coordinatorSignature = sig;
-    }
-    if (!this.coordinator) return { continue: true };
+    // Resolve coordinator by per-session override (falling back to base slot when unmodified).
+    const coordinator = this.getOrCreateCoordinator(context, ctx.sessionId);
     // `timestamp` is unix seconds; a missing, zero, negative or unrepresentable one reads as sent now.
     // Judged here, at arrival, so a wait in the coordinator's per-group lock is never counted.
     const sent = new Date((msg.timestamp ?? 0) * 1000);
@@ -245,10 +277,10 @@ export class TranslationPlugin implements IPlugin {
         pushName: msg.contact?.pushName,
         late: sent.getTime() > 0 && Date.now() - sent.getTime() > LATE_AFTER_MS,
       };
-      const claimed = this.coordinator.isCommand(inbound);
+      const claimed = coordinator.isCommand(inbound);
       if (claimed || (inbound.isGroup && !inbound.fromMe && Boolean(inbound.author))) {
         const sessionId = ctx.sessionId;
-        void this.coordinator.handleMessage(sessionId, inbound).catch((error) =>
+        void coordinator.handleMessage(sessionId, inbound).catch((error) =>
           context.logger.error(
             claimed ? "Translation command failed" : "Translation hook failed",
             error,

@@ -787,4 +787,10 @@ test('a POST accepted with HTTP 2xx whose reply cannot be shown records completi
   refused.d.cfg.actions[0].errorTemplate = 'Upstream refused.';
   await handleMessage(refused.d, 's1', msg('buat X', 'm-500'));
   assert.equal((refused.sendCalls[0].env as { text: string }).text, 'Upstream refused.');
+
+  // Empty template render on a completed 2xx POST reports confirm-first notice rather than error fallback.
+  const empty201 = postDeps({ ok: true, status: 201, body: '{}' });
+  empty201.d.cfg.actions[0].replyTemplate = '{{response.missing}}';
+  await handleMessage(empty201.d, 's1', msg('buat X', 'm-empty-post'));
+  assert.match((empty201.sendCalls[0].env as { text: string }).text, notice);
 });

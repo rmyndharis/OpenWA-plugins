@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { PluginStorage, PluginMappingsCapability, IncomingMessage } from '../types/openwa';
 import { KeyedAsyncLock } from './chat-lock.ts';
+import { boundStorageKey } from './storage-key.ts';
 
 // A failed inbound relay held for retry. The full message (incl. media) is stored so the retry re-posts
 // it faithfully. `enqueuedAt` is a wall-clock ms used only to pick the oldest entry to drop on overflow.
@@ -83,21 +84,6 @@ export function shardOf(logicalId: string): number {
     h = Math.imul(h, 0x01000193);
   }
   return (h >>> 0) % SEEN_SHARDS;
-}
-
-// OpenWA 0.28.0+ rejects ctx.storage.set keys above 184 UTF-8 bytes (`key-<b64>.json` <= 255 bytes).
-function boundStorageKey(key: string): string {
-  if (Buffer.byteLength(key, 'utf8') <= 184) return key;
-  let h1 = 0x811c9dc5, h2 = 0xdeadbeef;
-  for (let i = 0; i < key.length; i++) {
-    const c = key.charCodeAt(i);
-    h1 = Math.imul(h1 ^ c, 0x01000193);
-    h2 = Math.imul(h2 ^ c, 0x85ebca6b);
-  }
-  const suffix = `:${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}`;
-  let prefix = key.slice(0, 184 - suffix.length).replace(/[\ud800-\udbff]$/, '');
-  while (Buffer.byteLength(prefix, 'utf8') > 184 - suffix.length) prefix = prefix.slice(0, -1).replace(/[\ud800-\udbff]$/, '');
-  return `${prefix}${suffix}`;
 }
 
 // One bucket: logical marker id -> first-seen wall-clock ms.
@@ -229,7 +215,7 @@ export class MappingStore {
       await this.storage.set(bucketKey, bucket);
       return true;
     });
-    if (dropped) await this.storage.delete(key);
+    if (dropped && Buffer.byteLength(key, 'utf8') <= 184) await this.storage.delete(key);
   }
 
   async getByChat(sessionId: string, chatId: string): Promise<ChatLink | null> {

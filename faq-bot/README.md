@@ -14,13 +14,13 @@
 | Field | Value |
 | ----- | ----- |
 | **Identifier** | `faq-bot` |
-| **Version** | 0.2.22 |
-| **Released** | 2026-11-21 |
+| **Version** | 0.2.23 |
+| **Released** | 2026-11-24 |
 | **Status** | stable |
 | **Author** | Yudhi Armyndharis |
 | **License** | MIT |
 | **Type** | `extension` |
-| **Requires OpenWA** | ≥ 0.7.0 (tested 0.31.0) |
+| **Requires OpenWA** | ≥ 0.7.0 (tested 0.32.1) |
 | **Keywords** | faq, auto-reply, chatbot, support, whatsapp, openwa |
 | **Repository** | [OpenWA-plugins/faq-bot](https://github.com/rmyndharis/OpenWA-plugins/tree/main/faq-bot) |
 <!-- END DETAILS -->
@@ -85,7 +85,7 @@ and upload it in the dashboard **Plugins → Install** (or the **Catalog** tab).
 
 ## Compatibility
 
-Checked against the OpenWA v0.31.0 worker runtime with isolated services. Rule and fallback replies claim their message before delivery completes, so a slow send cannot activate another responder. A failed send is logged, releases its cooldown slot behind a 60-second retry backoff, and retains the claim on that message. A send the host reports as possibly delivered ("may or may not have been sent", OpenWA 0.31.0) keeps its cooldown slot, so a fallback reply is not sent twice on a guess. Pending sends are best-effort and may be interrupted when the worker stops.
+Checked against the OpenWA v0.32.1 worker runtime with isolated services. Rule and fallback replies claim their message before delivery completes, so a slow send cannot activate another responder. A failed send is logged, releases its cooldown slot behind a 60-second retry backoff, and retains the claim on that message. A send the host reports as possibly delivered ("may or may not have been sent", OpenWA 0.31.0) keeps its cooldown slot, so a fallback reply is not sent twice on a guess. Pending sends are best-effort and may be interrupted when the worker stops.
 
 Targets OpenWA **≥ 0.7.0** (sandboxed plugin runtime with per-session config overrides). Live config edits (`PUT …/config`) apply immediately through `onConfigChange`.
 

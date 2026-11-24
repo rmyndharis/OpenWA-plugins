@@ -95,7 +95,8 @@ export async function hasSeen(
     // legacy keys left, stop looking" flag: the only way to decide that is a storage listing, and the
     // host's list() resolves [] on its own errors, which is indistinguishable from genuinely empty, so
     // such a flag would retire permanently on one transient failure.
-    const legacy = await storage.get<Marker>(legacyKey(sessionId, msgId));
+    const leg = legacyKey(sessionId, msgId);
+    const legacy = Buffer.byteLength(leg, 'utf8') <= 184 ? await storage.get<Marker>(leg) : null;
     return legacy !== null && legacy !== undefined;
   } catch (e) {
     onError?.(e);

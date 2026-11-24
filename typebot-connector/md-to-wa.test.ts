@@ -27,3 +27,8 @@ test('a star or plus bullet stays a bullet and is never read as italic', () => {
 test('italic never spans a line break', () => {
   assert.equal(mdToWhatsApp('a *b\nc* d'), 'a *b\nc* d');
 });
+
+test('fenced triple-backtick blocks survive while single-backtick inline code strips', () => {
+  assert.equal(mdToWhatsApp('run `npm test` now'), 'run npm test now');
+  assert.equal(mdToWhatsApp('```\nconst a = 1;\n```'), '```\nconst a = 1;\n```');
+});

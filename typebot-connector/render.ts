@@ -5,8 +5,10 @@ import { mdToWhatsApp } from './md-to-wa.ts';
 export function renderResponse(resp: NormalizedResponse): OutgoingPart[] {
   const parts: OutgoingPart[] = [];
   for (const b of resp.bubbles) {
-    if (b.kind === 'text') parts.push({ type: 'text', text: mdToWhatsApp(b.markdown) });
-    else if (b.kind === 'link') parts.push({ type: 'text', text: b.url });
+    if (b.kind === 'text') {
+      const text = mdToWhatsApp(b.markdown);
+      if (text.trim()) parts.push({ type: 'text', text });
+    } else if (b.kind === 'link') parts.push({ type: 'text', text: b.url });
     // image/video/audio → native media (OpenWA ≥0.8.2 wires conversation.send media by URL).
     else parts.push({ type: b.kind, mediaUrl: b.url });
   }

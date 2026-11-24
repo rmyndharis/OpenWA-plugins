@@ -35,7 +35,10 @@ export function parseSchedule(json: string): Schedule {
   for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
     const day = key.toLowerCase() as DayKey;
     if (!DAYS.includes(day)) throw new Error(`schedule: unknown day "${key}"`);
-    if (value === null) continue; // closed
+    if (value === null) {
+      delete schedule[day];
+      continue; // closed
+    }
     if (typeof value !== 'string') throw new Error(`schedule: ${day} must be "HH:MM-HH:MM" or null`);
     const m = /^(\d{2}:\d{2})-(\d{2}:\d{2})$/.exec(value);
     const openMin = m ? parseHHMM(m[1]) : null;
